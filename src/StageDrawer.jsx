@@ -130,25 +130,32 @@ export default function StageDrawer({ stageId, onClose, onUpdate }) {
   if (!stageId) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-end z-50">
-      <div className="w-96 h-full bg-white shadow-xl flex flex-col">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-end z-50 font-urbanist">
+      <div className="w-96 h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <h2 className="text-lg font-semibold">Stage Details</h2>
+        <div className="flex items-center justify-between p-6 border-b border-bgray-200 dark:border-darkblack-400">
+          <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Stage Details</h2>
           <button 
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg"
+            className="p-2 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-lg text-bgray-600 dark:text-bgray-300 transition-colors"
           >
-            ✕
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {loading && <div className="text-center py-4">Loading...</div>}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin">
+          {loading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="spinner h-6 w-6 mr-3"></div>
+              <span className="text-bgray-600 dark:text-bgray-300">Loading stage details...</span>
+            </div>
+          )}
           
           {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            <div className="p-4 bg-error-50 border border-error-200 rounded-lg text-error-300 text-sm">
               {error}
             </div>
           )}

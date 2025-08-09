@@ -104,45 +104,103 @@ export default function ProjectsPage() {
   }, [detail, busy]);
 
   return (
-    <div className="p-4">
+    <div className="p-6 font-urbanist">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-12 gap-4">
-          <aside className="col-span-3 space-y-2">
-            <div className="text-lg font-semibold mb-2">Projects</div>
-            {error && <div className="text-red-600 text-sm">{error}</div>}
-            {loading && <div>Loading…</div>}
-            {!loading && overview.map((t) => (
-              <button
-                key={t.track_id}
-                onClick={() => setActiveTrackId(t.track_id)}
-                className={`w-full text-left p-3 rounded-xl border bg-white hover:shadow-sm transition ${activeTrackId === t.track_id ? "border-blue-300" : "border-slate-200"}`}
-              >
-                <div className="text-sm opacity-70">{t.client_name}</div>
-                <div className="font-semibold">{t.track_name}</div>
-                <div className="text-xs mt-1">{t.workflow_kind} • {Number(t.progress_pct).toFixed(1)}%</div>
-                <div className="text-xs">Next due: {t.next_due_date ?? "—"}</div>
-              </button>
-            ))}
+        {/* Page Header */}
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">Projects</h1>
+          <p className="text-bgray-600 dark:text-bgray-300">Manage your client projects and track workflow progress</p>
+        </div>
+
+        <div className="grid grid-cols-12 gap-6">
+          <aside className="col-span-4 xl:col-span-3 space-y-4">
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Active Projects</h2>
+                <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
+                  {overview.length} total
+                </span>
+              </div>
+              
+              {error && (
+                <div className="bg-error-50 text-error-300 text-sm p-3 rounded-lg mb-4 border border-error-200">
+                  {error}
+                </div>
+              )}
+              
+              {loading && (
+                <div className="flex items-center justify-center py-8">
+                  <div className="spinner h-6 w-6 mr-3"></div>
+                  <span className="text-bgray-600 dark:text-bgray-300">Loading projects...</span>
+                </div>
+              )}
+              
+              <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
+                {!loading && overview.map((t) => (
+                  <button
+                    key={t.track_id}
+                    onClick={() => setActiveTrackId(t.track_id)}
+                    className={`w-full text-left p-4 rounded-lg border transition-all duration-200 hover:shadow-sm ${
+                      activeTrackId === t.track_id 
+                        ? "border-primary bg-success-50 dark:bg-darkblack-500 shadow-sm" 
+                        : "border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 hover:border-primary"
+                    }`}
+                  >
+                    <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
+                    <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs text-bgray-600 dark:text-bgray-300">
+                        {t.workflow_kind}
+                      </div>
+                      <div className={`text-xs px-2 py-1 rounded font-medium ${
+                        Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
+                        Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
+                        "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
+                      }`}>
+                        {Number(t.progress_pct).toFixed(0)}%
+                      </div>
+                    </div>
+                    <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
+                      Due: {t.next_due_date ?? "No due date"}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
           </aside>
 
-          <main className="col-span-9">
-            <div className="h-[520px] rounded-xl border bg-white overflow-hidden">
-              <ReactFlow nodes={nodes} edges={edges} fitView>
-                <MiniMap pannable zoomable />
-                <Controls />
-                <Background variant="dots" gap={16} size={1} />
-              </ReactFlow>
+          <main className="col-span-8 xl:col-span-9 space-y-6">
+            {/* Workflow Canvas */}
+            <div className="card">
+              <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
+                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Workflow Canvas</h2>
+                <p className="text-sm text-bgray-600 dark:text-bgray-300">Visual representation of project stages</p>
+              </div>
+              <div className="h-[520px] overflow-hidden">
+                <ReactFlow nodes={nodes} edges={edges} fitView>
+                  <MiniMap pannable zoomable />
+                  <Controls />
+                  <Background variant="dots" gap={16} size={1} />
+                </ReactFlow>
+              </div>
             </div>
 
+            {/* Quick Actions */}
             {detail && (
-              <div className="mt-4 p-3 rounded-xl border bg-white">
-                <div className="text-sm font-semibold mb-2">Quick comment on active stage</div>
-                <div className="flex gap-2">
+              <div className="card p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Quick Actions</h3>
+                  <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
+                    {detail.client?.company_name} • {detail.track.name}
+                  </div>
+                </div>
+                
+                <div className="flex gap-3">
                   <input
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
-                    placeholder="Write a short note…"
-                    className="flex-1 px-3 py-2 rounded-lg border"
+                    placeholder="Add a quick comment to the active stage..."
+                    className="input-field flex-1"
                   />
                   <button
                     onClick={async () => {
@@ -156,9 +214,18 @@ export default function ProjectsPage() {
                         setCommentDraft("");
                       } catch (e) { setError(e.message); } finally { setBusy(false); }
                     }}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50"
+                    className="btn-primary"
                     disabled={busy || !commentDraft.trim()}
-                  >Add comment</button>
+                  >
+                    {busy ? (
+                      <div className="flex items-center">
+                        <div className="spinner h-4 w-4 mr-2"></div>
+                        Adding...
+                      </div>
+                    ) : (
+                      "Add Comment"
+                    )}
+                  </button>
                 </div>
               </div>
             )}
