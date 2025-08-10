@@ -376,8 +376,61 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
   );
 }
 
+// Delete Project Confirmation Modal
+function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting }) {
+  if (!isOpen || !project) return null;
+
+  return (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+        <div className="mt-3">
+          <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+            <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          
+          <div className="mt-3 text-center">
+            <h3 className="text-lg font-medium text-gray-900">Cancel Project</h3>
+            <div className="mt-2 px-7 py-3">
+              <p className="text-sm text-gray-500">
+                Are you sure you want to cancel "<strong>{project.track_name}</strong>" for {project.client_name}?
+              </p>
+              <p className="text-sm text-orange-600 mt-2 font-medium">
+                This will mark the project as cancelled and hide it from your active projects list. The project data will be preserved but marked as cancelled.
+              </p>
+            </div>
+            
+            <div className="flex justify-center space-x-3 mt-4">
+              <button
+                onClick={onClose}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={onConfirm}
+                disabled={isDeleting}
+                className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 flex items-center"
+              >
+                {isDeleting && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                )}
+                {isDeleting ? "Cancelling..." : "Cancel Project"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const [overview, setOverview] = useState([]);
+  const [cancelledProjects, setCancelledProjects] = useState([]);
+  const [showCancelledProjects, setShowCancelledProjects] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTrackId, setActiveTrackId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -386,6 +439,11 @@ export default function ProjectsPage() {
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [projectToDelete, setProjectToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [viewMode, setViewMode] = useState("flow");
 
   // --- Data: tracks list (left panel) ---
@@ -401,8 +459,36 @@ export default function ProjectsPage() {
         ...r,
         progress_pct: typeof r.progress_pct === "string" ? parseFloat(r.progress_pct) : r.progress_pct,
       }));
-      setOverview(rows);
-      if (rows.length && !activeTrackId) setActiveTrackId(rows[0].track_id);
+      
+      // Debug: log the data to see what we're working with
+      console.log('All projects data:', rows);
+      if (rows.length > 0) {
+        console.log('First project fields:', Object.keys(rows[0]));
+        console.log('First project status field:', rows[0].status);
+      }
+      
+      // Separate active and cancelled projects
+      // Try different possible field names for status
+      const activeProjects = rows.filter(r => 
+        r.status !== 'cancelled' && 
+        r.track_status !== 'cancelled' &&
+        !r.track_name?.startsWith('[CANCELLED]')
+      );
+      const cancelledProjects = rows.filter(r => 
+        r.status === 'cancelled' || 
+        r.track_status === 'cancelled' ||
+        r.track_name?.startsWith('[CANCELLED]')
+      );
+      
+      console.log('Active projects:', activeProjects);
+      console.log('Cancelled projects:', cancelledProjects);
+      
+      setOverview(activeProjects);
+      setCancelledProjects(cancelledProjects);
+      
+      if (activeProjects.length && !activeTrackId) {
+        setActiveTrackId(activeProjects[0].track_id);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -427,6 +513,110 @@ export default function ProjectsPage() {
       loadTrackDetail();
     }
   }, [activeTrackId]);
+
+  // --- Project Deletion ---
+  const handleDeleteProject = async (project) => {
+    setProjectToDelete(project);
+    setShowDeleteModal(true);
+    setDeleteError("");
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!projectToDelete) return;
+
+    try {
+      setIsDeleting(true);
+      setDeleteError("");
+
+      // Cancel the project by updating its status
+      await cancelProject(projectToDelete.track_id);
+
+      // Update UI state
+      await fetchTracksOverview();
+      
+      // If deleted project was active, clear selection
+      if (activeTrackId === projectToDelete.track_id) {
+        setActiveTrackId(overview.length > 1 ? overview.find(t => t.track_id !== projectToDelete.track_id)?.track_id : null);
+        setDetail(null);
+      }
+
+      // Only show success message if it wasn't already set by the manual deletion function
+      if (!successMessage) {
+        setSuccessMessage(`Project "${projectToDelete.track_name}" has been deleted successfully.`);
+      }
+      
+      setShowDeleteModal(false);
+      setProjectToDelete(null);
+
+      // Clear success message after 5 seconds
+      setTimeout(() => setSuccessMessage(""), 5000);
+
+    } catch (err) {
+      console.error("Delete project error:", err);
+      setDeleteError(err.message || "Failed to delete project. Please try again.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // Cancel project by marking it as cancelled
+  const cancelProject = async (trackId) => {
+    try {
+      // Since we don't have delete permissions, mark the project as cancelled instead
+      // This is often what users actually want anyway for "cancelled projects"
+      const { error: updateError } = await supabase
+        .from('tracks')
+        .update({ 
+          status: 'cancelled',
+          name: `[CANCELLED] ${projectToDelete.track_name}`
+        })
+        .eq('id', trackId);
+      
+      if (updateError) {
+        console.error('Update error:', updateError);
+        throw updateError;
+      }
+      
+      // Show success message for cancellation
+      setSuccessMessage(`Project "${projectToDelete.track_name}" has been cancelled and will no longer appear in active projects.`);
+    } catch (err) {
+      console.error('Project cancellation error:', err);
+      throw err;
+    }
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteModal(false);
+    setProjectToDelete(null);
+    setDeleteError("");
+  };
+
+  // Reactivate a cancelled project
+  const reactivateProject = async (project) => {
+    try {
+      const originalName = project.track_name.replace('[CANCELLED] ', '');
+      
+      const { error } = await supabase
+        .from('tracks')
+        .update({
+          status: 'active',
+          name: originalName
+        })
+        .eq('id', project.track_id);
+
+      if (error) throw error;
+
+      // Refresh the project lists
+      await fetchTracksOverview();
+      
+      setSuccessMessage(`Project "${originalName}" has been reactivated successfully.`);
+      setTimeout(() => setSuccessMessage(""), 5000);
+      
+    } catch (err) {
+      console.error('Reactivate project error:', err);
+      setError(err.message || 'Failed to reactivate project.');
+    }
+  };
 
   // --- Build nodes/edges for React Flow ---
   const { nodes, edges } = useMemo(() => {
@@ -512,6 +702,12 @@ export default function ProjectsPage() {
                 </div>
               )}
               
+              {successMessage && (
+                <div className="bg-green-50 text-green-700 text-sm p-3 rounded-lg mb-4 border border-green-200">
+                  {successMessage}
+                </div>
+              )}
+              
               {loading && (
                 <div className="flex items-center justify-center py-8">
                   <div className="spinner h-6 w-6 mr-3"></div>
@@ -521,35 +717,99 @@ export default function ProjectsPage() {
               
               <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
                 {!loading && overview.map((t) => (
-                  <button
+                  <div
                     key={t.track_id}
-                    onClick={() => setActiveTrackId(t.track_id)}
-                    className={`w-full text-left p-4 rounded-lg border transition-all duration-200 hover:shadow-sm ${
+                    className={`w-full relative p-4 rounded-lg border transition-all duration-200 hover:shadow-sm group ${
                       activeTrackId === t.track_id 
                         ? "border-primary bg-success-50 dark:bg-darkblack-500 shadow-sm" 
                         : "border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 hover:border-primary"
                     }`}
                   >
-                    <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
-                    <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
-                    <div className="flex items-center justify-between">
-                      <div className="text-xs text-bgray-600 dark:text-bgray-300">
-                        {t.workflow_kind}
+                    <button
+                      onClick={() => setActiveTrackId(t.track_id)}
+                      className="w-full text-left"
+                    >
+                      <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
+                      <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
+                      <div className="flex items-center justify-between">
+                        <div className="text-xs text-bgray-600 dark:text-bgray-300">
+                          {t.workflow_kind}
+                        </div>
+                        <div className={`text-xs px-2 py-1 rounded font-medium ${
+                          Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
+                          Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
+                          "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
+                        }`}>
+                          {Number(t.progress_pct).toFixed(0)}%
+                        </div>
                       </div>
-                      <div className={`text-xs px-2 py-1 rounded font-medium ${
-                        Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
-                        Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
-                        "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
-                      }`}>
-                        {Number(t.progress_pct).toFixed(0)}%
+                      <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
+                        Due: {t.next_due_date ?? "No due date"}
                       </div>
-                    </div>
-                    <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
-                      Due: {t.next_due_date ?? "No due date"}
-                    </div>
-                  </button>
+                    </button>
+                    
+                    {/* Delete Button - Hidden by default, shown on hover */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteProject(t);
+                      }}
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 hover:text-red-700"
+                      title="Cancel project"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
                 ))}
               </div>
+
+              {/* Cancelled Projects Section */}
+              {cancelledProjects.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-bgray-200 dark:border-darkblack-400">
+                  <button
+                    onClick={() => setShowCancelledProjects(!showCancelledProjects)}
+                    className="flex items-center justify-between w-full text-left mb-3 text-sm font-medium text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white transition-colors"
+                  >
+                    <span>Cancelled Projects ({cancelledProjects.length})</span>
+                    <svg 
+                      className={`w-4 h-4 transform transition-transform ${showCancelledProjects ? 'rotate-180' : ''}`} 
+                      fill="none" 
+                      stroke="currentColor" 
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+                  
+                  {showCancelledProjects && (
+                    <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
+                      {cancelledProjects.map((t) => (
+                        <div
+                          key={t.track_id}
+                          className="w-full relative p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 group"
+                        >
+                          <div className="text-xs text-red-600 dark:text-red-400 mb-1">{t.client_name}</div>
+                          <div className="font-semibold text-red-700 dark:text-red-300 mb-2">{t.track_name}</div>
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs text-red-600 dark:text-red-400">
+                              {t.workflow_kind}
+                            </div>
+                            <button
+                              onClick={() => reactivateProject(t)}
+                              className="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
+                              title="Reactivate project"
+                            >
+                              Reactivate
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </aside>
 
@@ -695,6 +955,26 @@ export default function ProjectsPage() {
             }
           }}
         />
+
+        {/* Delete Project Modal */}
+        <DeleteProjectModal
+          isOpen={showDeleteModal}
+          onClose={cancelDelete}
+          project={projectToDelete}
+          onConfirm={confirmDeleteProject}
+          isDeleting={isDeleting}
+        />
+        
+        {deleteError && (
+          <div className="fixed bottom-4 right-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg shadow-lg z-50">
+            <div className="flex items-center">
+              <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              {deleteError}
+            </div>
+          </div>
+        )}
 
         {/* Stage Drawer */}
         <StageDrawer 

@@ -6,6 +6,7 @@ import ProtectedRoute from "./ProtectedRoute";
 import Layout from "./Layout";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
+import MapPage from "./pages/MapPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ClientsPage from "./pages/ClientsPage";
 import FilesPage from "./pages/FilesPage";
@@ -24,6 +25,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           </ProtectedRoute>
         }>
           <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/map" element={<MapPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/files" element={<FilesPage />} />
