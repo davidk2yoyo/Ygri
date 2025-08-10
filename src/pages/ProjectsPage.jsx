@@ -4,6 +4,129 @@ import "reactflow/dist/style.css";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
 
+// Vertical Stepper View Component
+function VerticalStepperView({ stages, onStageClick }) {
+  if (!stages?.length) {
+    return (
+      <div className="flex items-center justify-center py-12 text-bgray-500 h-full">
+        No stages available
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-full overflow-y-auto scrollbar-thin p-6">
+      <div className="relative">
+        {/* Vertical line */}
+        <div className="absolute left-6 top-0 bottom-0 w-0.5 bg-bgray-200 dark:bg-darkblack-400"></div>
+        
+        <div className="space-y-8 pb-6">
+          {stages.map((stage, index) => (
+            <div key={stage.track_stage_id} className="relative flex items-start">
+              {/* Step indicator */}
+              <div className={`relative z-10 flex items-center justify-center w-12 h-12 rounded-full border-4 ${
+                stage.status === "done" ? "bg-green-500 border-green-500" :
+                stage.status === "in_progress" ? "bg-blue-500 border-blue-500" :
+                stage.status === "blocked" ? "bg-red-500 border-red-500" : 
+                "bg-gray-300 border-gray-300"
+              }`}>
+                <span className="text-white font-semibold text-sm">{stage.order_index}</span>
+              </div>
+              
+              {/* Content */}
+              <div className="ml-6 flex-1">
+                <button
+                  onClick={() => onStageClick(stage.track_stage_id)}
+                  className="w-full text-left p-4 bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 hover:shadow-md transition-shadow"
+                >
+                  <h3 className="font-semibold text-darkblack-700 dark:text-white mb-2">
+                    {stage.name}
+                  </h3>
+                  <div className="flex items-center gap-4 text-sm text-bgray-600 dark:text-bgray-300">
+                    <span className="capitalize">{stage.status.replace("_", " ")}</span>
+                    {stage.due_date && <span>Due: {stage.due_date}</span>}
+                  </div>
+                  <div className="flex items-center gap-4 mt-2 text-xs text-bgray-500">
+                    <span>📎 {stage.files_count}</span>
+                    <span>✅ {stage.todos_count}</span>
+                    <span>💬 {stage.comments_count}</span>
+                  </div>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Kanban View Component
+function KanbanView({ stages, onStageClick }) {
+  const statusColumns = [
+    { key: "not_started", title: "Not Started", color: "gray" },
+    { key: "in_progress", title: "In Progress", color: "blue" },
+    { key: "blocked", title: "Blocked", color: "red" },
+    { key: "done", title: "Done", color: "green" }
+  ];
+
+  const stagesByStatus = statusColumns.reduce((acc, column) => {
+    acc[column.key] = stages?.filter(stage => stage.status === column.key) || [];
+    return acc;
+  }, {});
+
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex-1 p-6 min-h-0">
+        <div className="h-full grid grid-cols-4 gap-6">
+          {statusColumns.map((column) => (
+            <div key={column.key} className="flex flex-col h-full min-h-0">
+              {/* Column Header */}
+              <div className={`p-4 rounded-t-lg border-b-2 bg-${column.color}-50 dark:bg-darkblack-500 border-${column.color}-200 flex-shrink-0`}>
+                <h3 className="font-semibold text-darkblack-700 dark:text-white">
+                  {column.title}
+                </h3>
+                <span className="text-sm text-bgray-500">
+                  {stagesByStatus[column.key].length} stages
+                </span>
+              </div>
+              
+              {/* Column Content */}
+              <div className="flex-1 bg-bgray-50 dark:bg-darkblack-600 rounded-b-lg p-4 space-y-3 overflow-y-auto scrollbar-thin min-h-0">
+                {stagesByStatus[column.key].map((stage) => (
+                  <button
+                    key={stage.track_stage_id}
+                    onClick={() => onStageClick(stage.track_stage_id)}
+                    className="w-full p-4 bg-white dark:bg-darkblack-500 rounded-lg border border-bgray-200 dark:border-darkblack-400 hover:shadow-md transition-shadow text-left flex-shrink-0"
+                  >
+                    <h4 className="font-medium text-darkblack-700 dark:text-white mb-2">
+                      {stage.order_index}. {stage.name}
+                    </h4>
+                    {stage.due_date && (
+                      <p className="text-xs text-bgray-500 mb-2">Due: {stage.due_date}</p>
+                    )}
+                    <div className="flex items-center gap-3 text-xs text-bgray-500">
+                      <span>📎 {stage.files_count}</span>
+                      <span>✅ {stage.todos_count}</span>
+                      <span>💬 {stage.comments_count}</span>
+                    </div>
+                  </button>
+                ))}
+                
+                {stagesByStatus[column.key].length === 0 && (
+                  <div className="text-center py-8 text-bgray-400">
+                    No stages
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function NewProjectModal({ isOpen, onClose, onSuccess }) {
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
@@ -263,6 +386,7 @@ export default function ProjectsPage() {
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [viewMode, setViewMode] = useState("flow");
 
   // --- Data: tracks list (left panel) ---
   const fetchTracksOverview = async () => {
@@ -433,15 +557,71 @@ export default function ProjectsPage() {
             {/* Workflow Canvas */}
             <div className="card">
               <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
-                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Workflow Canvas</h2>
-                <p className="text-sm text-bgray-600 dark:text-bgray-300">Visual representation of project stages</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Workflow Canvas</h2>
+                    <p className="text-sm text-bgray-600 dark:text-bgray-300">Visual representation of project stages</p>
+                  </div>
+                  
+                  {/* View Mode Toggle */}
+                  <div className="flex bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-1">
+                    <button
+                      onClick={() => setViewMode("flow")}
+                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                        viewMode === "flow"
+                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                      }`}
+                    >
+                      Flow View
+                    </button>
+                    <button
+                      onClick={() => setViewMode("stepper")}
+                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                        viewMode === "stepper"
+                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                      }`}
+                    >
+                      Stepper
+                    </button>
+                    <button
+                      onClick={() => setViewMode("kanban")}
+                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                        viewMode === "kanban"
+                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                      }`}
+                    >
+                      Kanban
+                    </button>
+                  </div>
+                </div>
               </div>
+              
+              {/* Conditional View Rendering */}
               <div className="h-[520px] overflow-hidden">
-                <ReactFlow nodes={nodes} edges={edges} fitView>
-                  <MiniMap pannable zoomable />
-                  <Controls />
-                  <Background variant="dots" gap={16} size={1} />
-                </ReactFlow>
+                {viewMode === "flow" && (
+                  <ReactFlow nodes={nodes} edges={edges} fitView>
+                    <MiniMap pannable zoomable />
+                    <Controls />
+                    <Background variant="dots" gap={16} size={1} />
+                  </ReactFlow>
+                )}
+                
+                {viewMode === "stepper" && (
+                  <VerticalStepperView 
+                    stages={detail?.stages || []} 
+                    onStageClick={setSelectedStageId}
+                  />
+                )}
+                
+                {viewMode === "kanban" && (
+                  <KanbanView 
+                    stages={detail?.stages || []} 
+                    onStageClick={setSelectedStageId}
+                  />
+                )}
               </div>
             </div>
 
