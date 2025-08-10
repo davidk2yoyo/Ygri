@@ -4,6 +4,255 @@ import "reactflow/dist/style.css";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
 
+function NewProjectModal({ isOpen, onClose, onSuccess }) {
+  const [clients, setClients] = useState([]);
+  const [loadingClients, setLoadingClients] = useState(false);
+  const [formData, setFormData] = useState({
+    clientId: "",
+    projectName: "",
+    workflowKind: "Service",
+    remarks: ""
+  });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchClients();
+      setFormData({
+        clientId: "",
+        projectName: "",
+        workflowKind: "Service",
+        remarks: ""
+      });
+      setErrors({});
+      setSubmitError("");
+    }
+  }, [isOpen]);
+
+  const fetchClients = async () => {
+    try {
+      setLoadingClients(true);
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, company_name")
+        .order("company_name", { ascending: true });
+      
+      if (error) throw error;
+      setClients(data || []);
+    } catch (err) {
+      console.error("Error fetching clients:", err);
+    } finally {
+      setLoadingClients(false);
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    if (!formData.clientId) newErrors.clientId = "Client is required";
+    if (!formData.projectName.trim()) newErrors.projectName = "Project name is required";
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    try {
+      setSubmitting(true);
+      setSubmitError("");
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { data, error } = await supabase.rpc('create_track_rpc', {
+        p_client_id: formData.clientId,
+        p_name: formData.projectName.trim(),
+        p_remarks: formData.remarks.trim() || null,
+        p_workflow: formData.workflowKind,
+        p_owner_id: user.id
+      });
+
+      if (error) throw error;
+
+      onSuccess(data);
+      onClose();
+    } catch (err) {
+      setSubmitError(err.message || "Failed to create project");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    if (!submitting) {
+      onClose();
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Escape" && !submitting) {
+      onClose();
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50"
+      onClick={handleClose}
+      onKeyDown={handleKeyDown}
+      tabIndex={-1}
+    >
+      <div 
+        className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mt-3">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Project</h3>
+          
+          {submitError && (
+            <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
+              {submitError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <div className="space-y-4">
+              {/* Client Selection */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Client *
+                </label>
+                {loadingClients ? (
+                  <div className="flex items-center p-3 border border-gray-300 rounded-md bg-gray-50">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
+                    <span className="text-sm text-gray-600">Loading clients...</span>
+                  </div>
+                ) : clients.length === 0 ? (
+                  <div className="p-3 border border-yellow-300 rounded-md bg-yellow-50">
+                    <p className="text-sm text-yellow-800">
+                      You don't have clients yet.{" "}
+                      <a href="/clients" className="underline hover:text-yellow-900">
+                        Add one first
+                      </a>.
+                    </p>
+                  </div>
+                ) : (
+                  <select
+                    value={formData.clientId}
+                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                    disabled={submitting}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
+                  >
+                    <option value="">Select a client...</option>
+                    {clients.map((client) => (
+                      <option key={client.id} value={client.id}>
+                        {client.company_name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                {errors.clientId && (
+                  <p className="mt-1 text-xs text-red-600">{errors.clientId}</p>
+                )}
+              </div>
+
+              {/* Project Name */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Project Name *
+                </label>
+                <input
+                  type="text"
+                  value={formData.projectName}
+                  onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
+                  disabled={submitting}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
+                  placeholder="Enter project name"
+                />
+                {errors.projectName && (
+                  <p className="mt-1 text-xs text-red-600">{errors.projectName}</p>
+                )}
+              </div>
+
+              {/* Workflow Kind */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Workflow Kind
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="Service"
+                      checked={formData.workflowKind === "Service"}
+                      onChange={(e) => setFormData({ ...formData, workflowKind: e.target.value })}
+                      disabled={submitting}
+                      className="mr-2 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Service</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      value="Product"
+                      checked={formData.workflowKind === "Product"}
+                      onChange={(e) => setFormData({ ...formData, workflowKind: e.target.value })}
+                      disabled={submitting}
+                      className="mr-2 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm text-gray-700">Product</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Remarks */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Remarks
+                </label>
+                <textarea
+                  value={formData.remarks}
+                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
+                  disabled={submitting}
+                  rows="3"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
+                  placeholder="Optional remarks or notes"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end space-x-3">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={submitting}
+                className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={submitting || clients.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 flex items-center"
+              >
+                {submitting && (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                )}
+                {submitting ? "Creating..." : "Create Project"}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
   const [overview, setOverview] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,29 +262,32 @@ export default function ProjectsPage() {
   const [commentDraft, setCommentDraft] = useState("");
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
 
   // --- Data: tracks list (left panel) ---
+  const fetchTracksOverview = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from("v_tracks_overview")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      const rows = (data ?? []).map((r) => ({
+        ...r,
+        progress_pct: typeof r.progress_pct === "string" ? parseFloat(r.progress_pct) : r.progress_pct,
+      }));
+      setOverview(rows);
+      if (rows.length && !activeTrackId) setActiveTrackId(rows[0].track_id);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from("v_tracks_overview")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (error) throw error;
-        const rows = (data ?? []).map((r) => ({
-          ...r,
-          progress_pct: typeof r.progress_pct === "string" ? parseFloat(r.progress_pct) : r.progress_pct,
-        }));
-        setOverview(rows);
-        if (rows.length && !activeTrackId) setActiveTrackId(rows[0].track_id);
-      } catch (e) {
-        setError(e.message);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    fetchTracksOverview();
   }, []);
 
   // --- Data: track detail ---
@@ -107,9 +359,17 @@ export default function ProjectsPage() {
     <div className="p-6 font-urbanist">
       <div className="max-w-7xl mx-auto">
         {/* Page Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">Projects</h1>
-          <p className="text-bgray-600 dark:text-bgray-300">Manage your client projects and track workflow progress</p>
+        <div className="mb-8 flex items-start justify-between">
+          <div>
+            <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">Projects</h1>
+            <p className="text-bgray-600 dark:text-bgray-300">Manage your client projects and track workflow progress</p>
+          </div>
+          <button
+            onClick={() => setShowNewProjectModal(true)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
+          >
+            New Project
+          </button>
         </div>
 
         <div className="grid grid-cols-12 gap-6">
@@ -208,7 +468,15 @@ export default function ProjectsPage() {
                       if (!active || !commentDraft.trim()) return;
                       try {
                         setBusy(true);
-                        await supabase.rpc("add_stage_comment", { p_track_stage_id: active.track_stage_id, p_body: commentDraft });
+                        // Get current user
+                        const { data: { user } } = await supabase.auth.getUser();
+                        if (!user) throw new Error("User not authenticated");
+                        
+                        await supabase.rpc("add_stage_comment", { 
+                          p_track_stage_id: active.track_stage_id, 
+                          p_body: commentDraft,
+                          p_user: user.id
+                        });
                         const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
                         setDetail(data);
                         setCommentDraft("");
@@ -231,6 +499,22 @@ export default function ProjectsPage() {
             )}
           </main>
         </div>
+
+        {/* New Project Modal */}
+        <NewProjectModal
+          isOpen={showNewProjectModal}
+          onClose={() => setShowNewProjectModal(false)}
+          onSuccess={async (newTrackId) => {
+            // Refresh the sidebar list
+            await fetchTracksOverview();
+            // Auto-select the newly created project and load its detail
+            setActiveTrackId(newTrackId);
+            const { data, error } = await supabase.rpc("get_track_detail", { p_track_id: newTrackId });
+            if (!error) {
+              setDetail(data);
+            }
+          }}
+        />
 
         {/* Stage Drawer */}
         <StageDrawer 
