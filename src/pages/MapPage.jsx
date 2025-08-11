@@ -8,6 +8,7 @@ import ReactFlow, {
   ReactFlowProvider 
 } from "reactflow";
 import "reactflow/dist/style.css";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
 // Custom Node Components
@@ -60,6 +61,7 @@ export default function MapPage() {
 }
 
 function MapPageInner() {
+  const { t } = useTranslation();
   // State Management
   const [rawData, setRawData] = useState(null);
   const [processedData, setProcessedData] = useState(null);
@@ -549,7 +551,7 @@ function MapPageInner() {
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex items-center space-x-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="text-gray-600 dark:text-gray-300">Loading company map...</span>
+          <span className="text-gray-600 dark:text-gray-300">{t("loadingCompanyMap")}</span>
         </div>
       </div>
     );
@@ -560,13 +562,13 @@ function MapPageInner() {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <div className="text-red-600 text-xl mb-4">⚠️ Error Loading Map</div>
+          <div className="text-red-600 text-xl mb-4">⚠️ {t("errorLoadingMap")}</div>
           <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
           <button
             onClick={loadMapData}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Retry
+            {t("retry")}
           </button>
         </div>
       </div>
@@ -579,7 +581,7 @@ function MapPageInner() {
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="flex items-center space-x-4">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="text-gray-600 dark:text-gray-300">Loading company map...</span>
+          <span className="text-gray-600 dark:text-gray-300">{t("loadingCompanyMap")}</span>
         </div>
       </div>
     );
@@ -590,13 +592,13 @@ function MapPageInner() {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
         <div className="text-center">
-          <div className="text-red-600 text-xl mb-4">⚠️ Error Loading Map</div>
+          <div className="text-red-600 text-xl mb-4">⚠️ {t("errorLoadingMap")}</div>
           <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
           <button
             onClick={loadMapData}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Retry
+            {t("retry")}
           </button>
         </div>
       </div>
@@ -664,7 +666,7 @@ function MapPageInner() {
           <button
             onClick={() => setLegendCollapsed(!legendCollapsed)}
             className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
-            title={legendCollapsed ? "Show Legend" : "Hide Legend"}
+            title={legendCollapsed ? t("showLegend") : t("hideLegend")}
           >
             <svg className={`w-4 h-4 transition-transform duration-200 ${legendCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -694,7 +696,7 @@ function MapPageInner() {
       } w-64 z-10 shadow-lg`}>
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">Legend</h3>
+            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t("legend")}</h3>
             <button
               onClick={() => setLegendCollapsed(true)}
               className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors duration-200"

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 export default function MapControls({ 
   layoutMode, 
@@ -11,11 +12,13 @@ export default function MapControls({
   onFilterChange,
   onFocusMode
 }) {
+  const { t } = useTranslation();
+  
   const connectorModes = [
-    { value: "off", label: "Off", title: "Clean overview - no connectors" },
-    { value: "minimal", label: "Min", title: "Root → client spokes only" },
-    { value: "neighborhood", label: "Hood", title: "Show connections on hover/focus" },
-    { value: "all", label: "All", title: "Show all connections when zoomed in" }
+    { value: "off", label: t("off"), title: t("cleanOverview") },
+    { value: "minimal", label: t("minimal"), title: t("rootClientSpokes") },
+    { value: "neighborhood", label: t("neighborhood"), title: t("showConnectionsHover") },
+    { value: "all", label: t("all"), title: t("showAllConnections") }
   ];
 
   return (
@@ -25,7 +28,7 @@ export default function MapControls({
         onClick={onLayoutToggle}
         className="px-2 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 transition-all duration-200"
       >
-        {layoutMode === "tree" ? "Radial" : "Tree"}
+        {layoutMode === "tree" ? t("radial") : t("tree")}
       </button>
       
       {/* Density Toggle */}
@@ -33,7 +36,7 @@ export default function MapControls({
         onClick={onDensityToggle}
         className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-all duration-200"
       >
-        {densityMode === "overview" ? "Details" : "Overview"}
+        {densityMode === "overview" ? t("details") : t("overview")}
       </button>
 
       {/* Connector Mode Toggle */}
@@ -57,7 +60,7 @@ export default function MapControls({
       {/* Compact Search */}
       <input
         type="text"
-        placeholder="Search..."
+        placeholder={t("search")}
         value={filters.search}
         onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
         className="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent w-32"
@@ -71,16 +74,16 @@ export default function MapControls({
           onChange={(e) => onFilterChange({ ...filters, activeOnly: e.target.checked })}
           className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3"
         />
-        <span>Active</span>
+        <span>{t("active")}</span>
       </label>
       
       {/* Focus Mode Button */}
       <button
         onClick={() => onFocusMode()}
         className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all duration-200"
-        title="Focus Mode"
+        title={t("focusMode")}
       >
-        Focus
+        {t("focus")}
       </button>
     </div>
   );

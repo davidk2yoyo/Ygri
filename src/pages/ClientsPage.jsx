@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
 // CSV utility functions
@@ -52,6 +53,7 @@ const parseCSV = (text) => {
 };
 
 function BulkImportModal({ isOpen, onClose, onSuccess }) {
+  const { t } = useTranslation();
   const [file, setFile] = useState(null);
   const [csvData, setCsvData] = useState([]);
   const [previewData, setPreviewData] = useState([]);
@@ -155,7 +157,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
       <div className="relative top-10 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
         <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Bulk Import Clients</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">{t("bulkImportClients")}</h3>
           
           {error && (
             <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
@@ -166,12 +168,12 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
           <div className="space-y-6">
             <div>
               <div className="flex items-center justify-between mb-3">
-                <h4 className="font-medium text-gray-900">Step 1: Download Sample CSV</h4>
+                <h4 className="font-medium text-gray-900">{t("step1")}</h4>
                 <button
                   onClick={downloadSample}
                   className="px-3 py-1 text-sm bg-green-600 text-white rounded hover:bg-green-700"
                 >
-                  Download Sample
+                  {t("downloadSample")}
                 </button>
               </div>
               <p className="text-sm text-gray-600">
@@ -180,7 +182,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
             </div>
 
             <div>
-              <h4 className="font-medium text-gray-900 mb-3">Step 2: Upload Your CSV File</h4>
+              <h4 className="font-medium text-gray-900 mb-3">{t("step2")}</h4>
               <input
                 type="file"
                 accept=".csv"
@@ -192,7 +194,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
 
             {validationErrors.length > 0 && (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-md">
-                <h5 className="font-medium text-yellow-800 mb-2">Validation Errors:</h5>
+                <h5 className="font-medium text-yellow-800 mb-2">{t("validationErrors")}</h5>
                 <ul className="text-sm text-yellow-700 space-y-1">
                   {validationErrors.slice(0, 10).map((error, index) => (
                     <li key={index}>• {error}</li>
@@ -206,7 +208,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
 
             {previewData.length > 0 && (
               <div>
-                <h4 className="font-medium text-gray-900 mb-3">Step 3: Preview Data ({csvData.length} rows)</h4>
+                <h4 className="font-medium text-gray-900 mb-3">{t("step3", { count: csvData.length })}</h4>
                 <div className="overflow-x-auto max-h-60 border border-gray-200 rounded">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -252,7 +254,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
               {importing && (
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
               )}
-              {importing ? 'Importing...' : `Import ${csvData.length} Clients`}
+              {importing ? t('importing') : t('importClients', { count: csvData.length })}
             </button>
           </div>
         </div>
@@ -262,6 +264,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
 }
 
 export default function ClientsPage() {
+  const { t } = useTranslation();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -458,11 +461,11 @@ export default function ClientsPage() {
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
         <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-semibold text-gray-900">Clients</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{t("clients")}</h1>
           <div className="flex flex-col sm:flex-row gap-4">
             <input
               type="text"
-              placeholder="Search clients..."
+              placeholder={t("searchClients")}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -481,19 +484,19 @@ export default function ClientsPage() {
                 disabled={filteredClients.length === 0}
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 focus:ring-2 focus:ring-green-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Export CSV
+                {t("exportCSV")}
               </button>
               <button
                 onClick={() => setShowBulkImportModal(true)}
                 className="px-4 py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 border border-gray-800 font-medium"
               >
-                Bulk Import
+                {t("bulkImport")}
               </button>
               <button
                 onClick={openAddModal}
                 className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
-                Add Client
+                {t("addClient")}
               </button>
             </div>
           </div>
@@ -503,7 +506,7 @@ export default function ClientsPage() {
           {loading ? (
             <div className="p-8 text-center text-gray-500">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto mb-4"></div>
-              Loading clients...
+              {t("loadingClients")}
             </div>
           ) : error ? (
             <div className="p-8 text-center text-red-600">
@@ -520,12 +523,12 @@ export default function ClientsPage() {
             <div className="p-8 text-center text-gray-500">
               <div className="text-4xl mb-4">👥</div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {searchTerm ? "No clients found" : "No clients yet"}
+                {searchTerm ? t("noClientsFound") : t("noClientsYet")}
               </h3>
               <p>
                 {searchTerm
-                  ? "Try adjusting your search terms"
-                  : "Add your first client to get started"}
+                  ? t("tryAdjusting")
+                  : t("addFirstClient")}
               </p>
             </div>
           ) : (
@@ -535,25 +538,25 @@ export default function ClientsPage() {
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Company
+                        {t("company")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Contact
+                        {t("contact")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Email
+                        {t("email")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Phone
+                        {t("phone")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Website
+                        {t("website")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Remark
+                        {t("remark")}
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Actions
+                        {t("actions")}
                       </th>
                     </tr>
                   </thead>
@@ -594,7 +597,7 @@ export default function ClientsPage() {
                             onClick={() => openEditModal(client)}
                             className="text-blue-600 hover:text-blue-900 mr-3"
                           >
-                            Edit
+                            {t("edit")}
                           </button>
                           <button
                             onClick={() => handleDelete(client)}
@@ -666,13 +669,13 @@ export default function ClientsPage() {
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div className="mt-3">
               <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {editingClient ? "Edit Client" : "Add New Client"}
+                {editingClient ? t("editClient") : t("addNewClient")}
               </h3>
               <form onSubmit={handleSubmit} onKeyPress={handleKeyPress}>
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Company Name *
+                      {t("companyName")} *
                     </label>
                     <input
                       type="text"
@@ -684,7 +687,7 @@ export default function ClientsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Contact Person
+                      {t("contactPerson")}
                     </label>
                     <input
                       type="text"
@@ -767,7 +770,7 @@ export default function ClientsPage() {
                     disabled={submitLoading}
                     className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
                   >
-                    {submitLoading ? "Saving..." : editingClient ? "Update" : "Add Client"}
+                    {submitLoading ? t("saving") : editingClient ? t("update") : t("addClient")}
                   </button>
                 </div>
               </form>

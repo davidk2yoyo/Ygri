@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
 import "reactflow/dist/style.css";
+import { useTranslation } from "react-i18next";
 import { supabase } from "./supabaseClient";
 import Login from "./Login";
 import StageDrawer from "./StageDrawer";
@@ -16,6 +17,7 @@ export default function App() {
   const [commentDraft, setCommentDraft] = useState("");
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
+  const { t } = useTranslation();
 
   // --- Auth wiring ---
   useEffect(() => {
@@ -105,10 +107,10 @@ export default function App() {
             onClick={() => setSelectedStageId(s.track_stage_id)}
           >
             <div className="font-semibold">{s.order_index}. {s.name}</div>
-            <div className="text-xs mt-1">Status: {s.status.replaceAll("_"," ")}</div>
-            <div className="text-xs">Due: {s.due_date ?? "—"}</div>
+            <div className="text-xs mt-1">{t("status")}: {s.status.replaceAll("_"," ")}</div>
+            <div className="text-xs">{t("due")}: {s.due_date ?? "—"}</div>
             <div className="text-[11px] mt-1 opacity-70">📎 {s.files_count} • ✅ {s.todos_count} • 💬 {s.comments_count}</div>
-            <div className="mt-2 text-xs italic">Click to view details →</div>
+            <div className="mt-2 text-xs italic">{t("clickToViewDetails")}</div>
           </button>
         ) },
       });
@@ -126,18 +128,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       <header className="flex items-center justify-between px-4 py-3 border-b bg-white">
-        <div className="font-semibold">Ygri CRM</div>
+        <div className="font-semibold">{t("appName")}</div>
         <button
           onClick={async () => { await supabase.auth.signOut(); }}
           className="px-3 py-1.5 rounded-lg border bg-white hover:bg-slate-50"
-        >Sign out</button>
+        >{t("signOut")}</button>
       </header>
 
       <div className="grid grid-cols-12 gap-4 p-4">
         <aside className="col-span-3 space-y-2">
-          <div className="text-lg font-semibold mb-2">Projects</div>
+          <div className="text-lg font-semibold mb-2">{t("projects")}</div>
           {error && <div className="text-red-600 text-sm">{error}</div>}
-          {loading && <div>Loading…</div>}
+          {loading && <div>{t("loading")}</div>}
           {!loading && overview.map((t) => (
             <button
               key={t.track_id}
@@ -163,12 +165,12 @@ export default function App() {
 
           {detail && (
             <div className="mt-4 p-3 rounded-xl border bg-white">
-              <div className="text-sm font-semibold mb-2">Quick comment on active stage</div>
+              <div className="text-sm font-semibold mb-2">{t("quickComment")}</div>
               <div className="flex gap-2">
                 <input
                   value={commentDraft}
                   onChange={(e) => setCommentDraft(e.target.value)}
-                  placeholder="Write a short note…"
+                  placeholder={t("writeShortNote")}
                   className="flex-1 px-3 py-2 rounded-lg border"
                 />
                 <button
@@ -185,7 +187,7 @@ export default function App() {
                   }}
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white disabled:opacity-50"
                   disabled={busy || !commentDraft.trim()}
-                >Add comment</button>
+                >{t("addComment")}</button>
               </div>
             </div>
           )}

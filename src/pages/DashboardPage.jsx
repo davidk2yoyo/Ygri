@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
 // Key Metrics Card Component
@@ -34,12 +35,13 @@ function MetricCard({ title, value, subtitle, icon, color = "blue", trend, onCli
 
 // Active Projects Widget
 function ActiveProjectsWidget({ projects, onProjectClick }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Active Projects</h3>
+        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h3>
         <span className="text-xs text-bgray-500 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
-          {projects.length} active
+          {projects.length} {t("activeProjects").toLowerCase()}
         </span>
       </div>
       
@@ -75,7 +77,7 @@ function ActiveProjectsWidget({ projects, onProjectClick }) {
             
             {project.next_due_date && (
               <p className="text-xs text-bgray-500 mt-1">
-                Next due: {project.next_due_date}
+                {t("nextDue")}: {project.next_due_date}
               </p>
             )}
           </div>
@@ -84,7 +86,7 @@ function ActiveProjectsWidget({ projects, onProjectClick }) {
         {projects.length === 0 && (
           <div className="text-center py-8 text-bgray-500">
             <div className="text-4xl mb-2">📋</div>
-            <p>No active projects</p>
+            <p>{t("noActiveProjects")}</p>
           </div>
         )}
       </div>
@@ -94,15 +96,16 @@ function ActiveProjectsWidget({ projects, onProjectClick }) {
 
 // Recent Clients Widget
 function RecentClientsWidget({ clients, onClientClick, onAddClient }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Recent Clients</h3>
+        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("recentClients")}</h3>
         <button
           onClick={onAddClient}
           className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
         >
-          Add Client
+          {t("addClient")}
         </button>
       </div>
       
@@ -115,7 +118,7 @@ function RecentClientsWidget({ clients, onClientClick, onAddClient }) {
           >
             <div>
               <h4 className="font-medium text-darkblack-700 dark:text-white text-sm">{client.company_name}</h4>
-              <p className="text-xs text-bgray-500">{client.contact_person || client.email || "No contact info"}</p>
+              <p className="text-xs text-bgray-500">{client.contact_person || client.email || t("noContactInfo")}</p>
             </div>
             <div className="text-xs text-bgray-500">
               {new Date(client.created_at).toLocaleDateString()}
@@ -126,7 +129,7 @@ function RecentClientsWidget({ clients, onClientClick, onAddClient }) {
         {clients.length === 0 && (
           <div className="text-center py-8 text-bgray-500">
             <div className="text-4xl mb-2">👥</div>
-            <p>No clients yet</p>
+            <p>{t("noClientsYet")}</p>
           </div>
         )}
       </div>
@@ -136,6 +139,7 @@ function RecentClientsWidget({ clients, onClientClick, onAddClient }) {
 
 // Calendar Widget with Todo Integration
 function CalendarWidget({ todos, onDateClick }) {
+  const { t } = useTranslation();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   
@@ -201,7 +205,7 @@ function CalendarWidget({ todos, onDateClick }) {
   return (
     <div className="bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Todo Calendar</h3>
+        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("todoCalendar")}</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={() => navigateMonth(-1)}
@@ -264,15 +268,15 @@ function CalendarWidget({ todos, onDateClick }) {
       <div className="flex items-center justify-center gap-4 mt-4 text-xs">
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-          <span className="text-bgray-600 dark:text-bgray-300">Overdue</span>
+          <span className="text-bgray-600 dark:text-bgray-300">{t("overdue")}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 bg-orange-500 rounded-full"></div>
-          <span className="text-bgray-600 dark:text-bgray-300">Due Today</span>
+          <span className="text-bgray-600 dark:text-bgray-300">{t("dueToday")}</span>
         </div>
         <div className="flex items-center gap-1">
           <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-          <span className="text-bgray-600 dark:text-bgray-300">Upcoming</span>
+          <span className="text-bgray-600 dark:text-bgray-300">{t("upcoming")}</span>
         </div>
       </div>
     </div>
@@ -281,6 +285,7 @@ function CalendarWidget({ todos, onDateClick }) {
 
 // Todo Details Modal
 function TodoDetailsModal({ selectedDate, todos, onClose }) {
+  const { t } = useTranslation();
   if (!selectedDate) return null;
   
   console.log("Modal - selectedDate:", selectedDate.dateString);
@@ -300,7 +305,7 @@ function TodoDetailsModal({ selectedDate, todos, onClose }) {
       >
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">
-            Todos for {selectedDate.dateString}
+            {t("todosFor", { date: selectedDate.dateString })}
           </h3>
           <button
             onClick={onClose}
@@ -328,7 +333,7 @@ function TodoDetailsModal({ selectedDate, todos, onClose }) {
                 </h4>
               </div>
               <p className="text-xs text-bgray-500 mb-1">
-                Due: {todo.due_date}
+                {t("due")}: {todo.due_date}
               </p>
               <p className="text-xs text-bgray-400">
                 Stage ID: {todo.track_stage_id}
@@ -339,7 +344,7 @@ function TodoDetailsModal({ selectedDate, todos, onClose }) {
           {dateTodos.length === 0 && (
             <div className="text-center py-8 text-bgray-500">
               <div className="text-4xl mb-2">📅</div>
-              <p>No todos for this date</p>
+              <p>{t("noTodosForDate")}</p>
             </div>
           )}
         </div>
@@ -350,6 +355,7 @@ function TodoDetailsModal({ selectedDate, todos, onClose }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const [dashboardData, setDashboardData] = useState({
     projects: [],
     clients: [],
@@ -519,8 +525,8 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto">
         {/* Page Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">Dashboard</h1>
-          <p className="text-bgray-600 dark:text-bgray-300">Overview of your projects, clients, and tasks</p>
+          <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">{t("dashboard")}</h1>
+          <p className="text-bgray-600 dark:text-bgray-300">{t("overviewText")}</p>
         </div>
 
         {error && (

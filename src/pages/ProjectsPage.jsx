@@ -1,15 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
 import "reactflow/dist/style.css";
+import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
 
 // Vertical Stepper View Component
 function VerticalStepperView({ stages, onStageClick }) {
+  const { t } = useTranslation();
   if (!stages?.length) {
     return (
       <div className="flex items-center justify-center py-12 text-bgray-500 h-full">
-        No stages available
+        {t("noStagesAvailable")}
       </div>
     );
   }
@@ -44,7 +46,7 @@ function VerticalStepperView({ stages, onStageClick }) {
                   </h3>
                   <div className="flex items-center gap-4 text-sm text-bgray-600 dark:text-bgray-300">
                     <span className="capitalize">{stage.status.replace("_", " ")}</span>
-                    {stage.due_date && <span>Due: {stage.due_date}</span>}
+                    {stage.due_date && <span>{t("due")}: {stage.due_date}</span>}
                   </div>
                   <div className="flex items-center gap-4 mt-2 text-xs text-bgray-500">
                     <span>📎 {stage.files_count}</span>
@@ -63,11 +65,12 @@ function VerticalStepperView({ stages, onStageClick }) {
 
 // Kanban View Component
 function KanbanView({ stages, onStageClick }) {
+  const { t } = useTranslation();
   const statusColumns = [
-    { key: "not_started", title: "Not Started", color: "gray" },
-    { key: "in_progress", title: "In Progress", color: "blue" },
-    { key: "blocked", title: "Blocked", color: "red" },
-    { key: "done", title: "Done", color: "green" }
+    { key: "not_started", title: t("notStarted"), color: "gray" },
+    { key: "in_progress", title: t("inProgress"), color: "blue" },
+    { key: "blocked", title: t("blocked"), color: "red" },
+    { key: "done", title: t("done"), color: "green" }
   ];
 
   const stagesByStatus = statusColumns.reduce((acc, column) => {
@@ -87,7 +90,7 @@ function KanbanView({ stages, onStageClick }) {
                   {column.title}
                 </h3>
                 <span className="text-sm text-bgray-500">
-                  {stagesByStatus[column.key].length} stages
+                  {stagesByStatus[column.key].length} {t("stages")}
                 </span>
               </div>
               
@@ -103,7 +106,7 @@ function KanbanView({ stages, onStageClick }) {
                       {stage.order_index}. {stage.name}
                     </h4>
                     {stage.due_date && (
-                      <p className="text-xs text-bgray-500 mb-2">Due: {stage.due_date}</p>
+                      <p className="text-xs text-bgray-500 mb-2">{t("due")}: {stage.due_date}</p>
                     )}
                     <div className="flex items-center gap-3 text-xs text-bgray-500">
                       <span>📎 {stage.files_count}</span>
@@ -115,7 +118,7 @@ function KanbanView({ stages, onStageClick }) {
                 
                 {stagesByStatus[column.key].length === 0 && (
                   <div className="text-center py-8 text-bgray-400">
-                    No stages
+                    {t("noStages")}
                   </div>
                 )}
               </div>
@@ -128,6 +131,7 @@ function KanbanView({ stages, onStageClick }) {
 }
 
 function NewProjectModal({ isOpen, onClose, onSuccess }) {
+  const { t } = useTranslation();
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
   const [formData, setFormData] = useState({
@@ -235,7 +239,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mt-3">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Create New Project</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">{t("createNewProject")}</h3>
           
           {submitError && (
             <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md">
@@ -248,12 +252,12 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
               {/* Client Selection */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Client *
+                  {t("client")} *
                 </label>
                 {loadingClients ? (
                   <div className="flex items-center p-3 border border-gray-300 rounded-md bg-gray-50">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
-                    <span className="text-sm text-gray-600">Loading clients...</span>
+                    <span className="text-sm text-gray-600">{t("loadingClients")}</span>
                   </div>
                 ) : clients.length === 0 ? (
                   <div className="p-3 border border-yellow-300 rounded-md bg-yellow-50">
@@ -271,7 +275,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                     disabled={submitting}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
                   >
-                    <option value="">Select a client...</option>
+                    <option value="">{t("selectClient")}</option>
                     {clients.map((client) => (
                       <option key={client.id} value={client.id}>
                         {client.company_name}
@@ -287,7 +291,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
               {/* Project Name */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Project Name *
+                  {t("projectName")} *
                 </label>
                 <input
                   type="text"
@@ -295,7 +299,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                   onChange={(e) => setFormData({ ...formData, projectName: e.target.value })}
                   disabled={submitting}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
-                  placeholder="Enter project name"
+                  placeholder={t("enterProjectName")}
                 />
                 {errors.projectName && (
                   <p className="mt-1 text-xs text-red-600">{errors.projectName}</p>
@@ -305,7 +309,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
               {/* Workflow Kind */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Workflow Kind
+                  {t("workflowKind")}
                 </label>
                 <div className="flex gap-4">
                   <label className="flex items-center">
@@ -317,7 +321,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                       disabled={submitting}
                       className="mr-2 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-sm text-gray-700">Service</span>
+                    <span className="text-sm text-gray-700">{t("service")}</span>
                   </label>
                   <label className="flex items-center">
                     <input
@@ -328,7 +332,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                       disabled={submitting}
                       className="mr-2 text-blue-600 focus:ring-blue-500"
                     />
-                    <span className="text-sm text-gray-700">Product</span>
+                    <span className="text-sm text-gray-700">{t("product")}</span>
                   </label>
                 </div>
               </div>
@@ -336,7 +340,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
               {/* Remarks */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Remarks
+                  {t("remarks")}
                 </label>
                 <textarea
                   value={formData.remarks}
@@ -344,7 +348,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                   disabled={submitting}
                   rows="3"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
-                  placeholder="Optional remarks or notes"
+                  placeholder={t("optionalRemarks")}
                 />
               </div>
             </div>
@@ -356,7 +360,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                 disabled={submitting}
                 className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
               >
-                Cancel
+                {t("cancel")}
               </button>
               <button
                 type="submit"
@@ -366,7 +370,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                 {submitting && (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 )}
-                {submitting ? "Creating..." : "Create Project"}
+                {submitting ? t("creating") : t("createProject")}
               </button>
             </div>
           </form>
@@ -378,6 +382,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
 
 // Delete Project Confirmation Modal
 function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting }) {
+  const { t } = useTranslation();
   if (!isOpen || !project) return null;
 
   return (
@@ -391,13 +396,13 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
           </div>
           
           <div className="mt-3 text-center">
-            <h3 className="text-lg font-medium text-gray-900">Cancel Project</h3>
+            <h3 className="text-lg font-medium text-gray-900">{t("cancelProject")}</h3>
             <div className="mt-2 px-7 py-3">
               <p className="text-sm text-gray-500">
-                Are you sure you want to cancel "<strong>{project.track_name}</strong>" for {project.client_name}?
+                {t("areYouSure", { projectName: project.track_name, clientName: project.client_name })}
               </p>
               <p className="text-sm text-orange-600 mt-2 font-medium">
-                This will mark the project as cancelled and hide it from your active projects list. The project data will be preserved but marked as cancelled.
+                {t("cancelProjectWarning")}
               </p>
             </div>
             
@@ -407,7 +412,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
                 disabled={isDeleting}
                 className="px-4 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 disabled:opacity-50"
               >
-                Cancel
+                {t("cancel")}
               </button>
               <button
                 onClick={onConfirm}
@@ -417,7 +422,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
                 {isDeleting && (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                 )}
-                {isDeleting ? "Cancelling..." : "Cancel Project"}
+                {isDeleting ? t("cancelling") : t("cancelProject")}
               </button>
             </div>
           </div>
@@ -428,6 +433,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
 }
 
 export default function ProjectsPage() {
+  const { t } = useTranslation();
   const [overview, setOverview] = useState([]);
   const [cancelledProjects, setCancelledProjects] = useState([]);
   const [showCancelledProjects, setShowCancelledProjects] = useState(false);
@@ -675,14 +681,14 @@ export default function ProjectsPage() {
         {/* Page Header */}
         <div className="mb-8 flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">Projects</h1>
-            <p className="text-bgray-600 dark:text-bgray-300">Manage your client projects and track workflow progress</p>
+            <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white mb-2">{t("projects")}</h1>
+            <p className="text-bgray-600 dark:text-bgray-300">{t("manageProjects")}</p>
           </div>
           <button
             onClick={() => setShowNewProjectModal(true)}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
           >
-            New Project
+            {t("newProject")}
           </button>
         </div>
 
@@ -690,9 +696,9 @@ export default function ProjectsPage() {
           <aside className="col-span-4 xl:col-span-3 space-y-4">
             <div className="card p-4">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Active Projects</h2>
+                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h2>
                 <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
-                  {overview.length} total
+                  {overview.length} {t("total")}
                 </span>
               </div>
               
@@ -711,7 +717,7 @@ export default function ProjectsPage() {
               {loading && (
                 <div className="flex items-center justify-center py-8">
                   <div className="spinner h-6 w-6 mr-3"></div>
-                  <span className="text-bgray-600 dark:text-bgray-300">Loading projects...</span>
+                  <span className="text-bgray-600 dark:text-bgray-300">{t("loadingProjects")}</span>
                 </div>
               )}
               
@@ -772,7 +778,7 @@ export default function ProjectsPage() {
                     onClick={() => setShowCancelledProjects(!showCancelledProjects)}
                     className="flex items-center justify-between w-full text-left mb-3 text-sm font-medium text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white transition-colors"
                   >
-                    <span>Cancelled Projects ({cancelledProjects.length})</span>
+                    <span>{t("cancelledProjects")} ({cancelledProjects.length})</span>
                     <svg 
                       className={`w-4 h-4 transform transition-transform ${showCancelledProjects ? 'rotate-180' : ''}`} 
                       fill="none" 
@@ -801,7 +807,7 @@ export default function ProjectsPage() {
                               className="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
                               title="Reactivate project"
                             >
-                              Reactivate
+                              {t("reactivate")}
                             </button>
                           </div>
                         </div>
@@ -819,8 +825,8 @@ export default function ProjectsPage() {
               <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Workflow Canvas</h2>
-                    <p className="text-sm text-bgray-600 dark:text-bgray-300">Visual representation of project stages</p>
+                    <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("workflowCanvas")}</h2>
+                    <p className="text-sm text-bgray-600 dark:text-bgray-300">{t("visualRepresentation")}</p>
                   </div>
                   
                   {/* View Mode Toggle */}
@@ -833,7 +839,7 @@ export default function ProjectsPage() {
                           : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
                       }`}
                     >
-                      Flow View
+                      {t("flowView")}
                     </button>
                     <button
                       onClick={() => setViewMode("stepper")}
@@ -843,7 +849,7 @@ export default function ProjectsPage() {
                           : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
                       }`}
                     >
-                      Stepper
+                      {t("stepper")}
                     </button>
                     <button
                       onClick={() => setViewMode("kanban")}
@@ -853,7 +859,7 @@ export default function ProjectsPage() {
                           : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
                       }`}
                     >
-                      Kanban
+                      {t("kanban")}
                     </button>
                   </div>
                 </div>
@@ -889,7 +895,7 @@ export default function ProjectsPage() {
             {detail && (
               <div className="card p-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Quick Actions</h3>
+                  <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("quickActions")}</h3>
                   <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
                     {detail.client?.company_name} • {detail.track.name}
                   </div>
@@ -899,7 +905,7 @@ export default function ProjectsPage() {
                   <input
                     value={commentDraft}
                     onChange={(e) => setCommentDraft(e.target.value)}
-                    placeholder="Add a quick comment to the active stage..."
+                    placeholder={t("addQuickComment")}
                     className="input-field flex-1"
                   />
                   <button
@@ -928,10 +934,10 @@ export default function ProjectsPage() {
                     {busy ? (
                       <div className="flex items-center">
                         <div className="spinner h-4 w-4 mr-2"></div>
-                        Adding...
+                        {t("adding")}
                       </div>
                     ) : (
-                      "Add Comment"
+                      t("addComment")
                     )}
                   </button>
                 </div>
