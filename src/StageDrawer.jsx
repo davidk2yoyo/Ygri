@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient";
 
-export default function StageDrawer({ stageId, onClose, onUpdate }) {
+export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName }) {
   const [stageDetail, setStageDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -37,6 +37,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate }) {
           p_track_stage_id: stageId 
         });
         if (error) throw error;
+        console.log('Stage detail data:', data); // Debug log to see available data
         setStageDetail(data);
       } catch (e) {
         setError(e.message);
@@ -244,7 +245,11 @@ export default function StageDrawer({ stageId, onClose, onUpdate }) {
       <div className="w-[900px] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-bgray-200 dark:border-darkblack-400">
-          <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">Stage Details</h2>
+          <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">
+            Stage Details
+            {clientName && ` - ${clientName}`}
+            {projectName && ` - ${projectName}`}
+          </h2>
           <button 
             onClick={onClose}
             className="p-2 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-lg text-bgray-600 dark:text-bgray-300 transition-colors"
@@ -279,6 +284,8 @@ export default function StageDrawer({ stageId, onClose, onUpdate }) {
                   <h3 className="text-xl font-semibold text-darkblack-700 dark:text-white mb-2">
                     {stageDetail.stage?.name}
                   </h3>
+                  
+                  
                   <div className="text-sm text-gray-600">
                     <p>Status: <span className="capitalize">{stageDetail.stage?.status?.replace("_", " ")}</span></p>
                     <p>Due: {stageDetail.stage?.due_date || "—"}</p>

@@ -94,6 +94,145 @@ function ActiveProjectsWidget({ projects, onProjectClick }) {
   );
 }
 
+// Latest Todos Widget
+function LatestTodosWidget({ todos, projects, onTodoClick }) {
+  const { t } = useTranslation();
+  const today = new Date().toISOString().split('T')[0];
+  
+  // Get latest todos (limit to 5) - already filtered for incomplete
+  const recentTodos = todos
+    .sort((a, b) => new Date(b.created_at || b.due_date) - new Date(a.created_at || a.due_date))
+    .slice(0, 5);
+  
+  return (
+    <div className="bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">Latest To-do's</h3>
+        <span className="text-xs text-bgray-500 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
+          {recentTodos.length} {t("items")}
+        </span>
+      </div>
+      
+      <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-thin">
+        {recentTodos.map((todo) => {
+          const isOverdue = todo.due_date && todo.due_date < today && !todo.is_done;
+          const isDueToday = todo.due_date === today;
+          
+          // Find project name from projects array using track_id
+          const project = projects.find(p => p.track_id === todo.track_id);
+          const projectInfo = project ? 
+            `${project.track_name}${project.client_name ? ` • ${project.client_name}` : ''}` :
+            `Stage: ${todo.track_stage_id.slice(-8)}`;
+          
+          return (
+            <div 
+              key={todo.id}
+              className="p-3 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition-colors cursor-pointer"
+              onClick={() => onTodoClick && onTodoClick(todo)}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  isOverdue ? 'bg-red-500' :
+                  isDueToday ? 'bg-orange-500' :
+                  'bg-blue-500'
+                }`}></div>
+                <h4 className="font-medium text-sm text-darkblack-700 dark:text-white">
+                  {todo.title}
+                </h4>
+              </div>
+              
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-bgray-500">
+                  {projectInfo}
+                </span>
+                {todo.due_date && (
+                  <span className={`${
+                    isOverdue ? 'text-red-600' :
+                    isDueToday ? 'text-orange-600' :
+                    'text-bgray-500'
+                  }`}>
+                    {todo.due_date}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+        
+        {recentTodos.length === 0 && (
+          <div className="text-center py-8 text-bgray-500">
+            <div className="text-4xl mb-2">✓</div>
+            <p>{t("noTodosYet")}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Latest Comments Widget
+function LatestCommentsWidget({ comments, projects, onCommentClick }) {
+  const { t } = useTranslation();
+  
+  // Get latest comments (limit to 5)
+  const recentComments = comments
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .slice(0, 5);
+  
+  return (
+    <div className="bg-white dark:bg-darkblack-600 rounded-lg border border-bgray-200 dark:border-darkblack-400 p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("latestComments")}</h3>
+        <span className="text-xs text-bgray-500 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
+          {recentComments.length} {t("comments")}
+        </span>
+      </div>
+      
+      <div className="space-y-3 max-h-64 overflow-y-auto scrollbar-thin">
+        {recentComments.map((comment) => {
+          // Find project name from projects array using track_id
+          const project = projects.find(p => p.track_id === comment.track_id);
+          const projectInfo = project ? 
+            `${project.track_name}${project.client_name ? ` • ${project.client_name}` : ''}` :
+            `Stage: ${comment.track_stage_id?.slice(-8) || 'Unknown'}`;
+
+          return (
+            <div 
+              key={comment.id}
+              className="p-3 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition-colors cursor-pointer"
+              onClick={() => onCommentClick && onCommentClick(comment)}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-darkblack-700 dark:text-white">
+                  {comment.user_name || 'Unknown user'}
+                </span>
+                <span className="text-xs text-bgray-500">
+                  {new Date(comment.created_at).toLocaleDateString()}
+                </span>
+              </div>
+              
+              <p className="text-sm text-bgray-700 dark:text-bgray-300 mb-2 line-clamp-2">
+                {comment.body}
+              </p>
+              
+              <div className="text-xs text-bgray-500">
+                <span>{projectInfo}</span>
+              </div>
+            </div>
+          );
+        })}
+        
+        {recentComments.length === 0 && (
+          <div className="text-center py-8 text-bgray-500">
+            <div className="text-4xl mb-2">💬</div>
+            <p>{t("noCommentsYet")}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Recent Clients Widget
 function RecentClientsWidget({ clients, onClientClick, onAddClient }) {
   const { t } = useTranslation();
@@ -360,6 +499,7 @@ export default function DashboardPage() {
     projects: [],
     clients: [],
     todos: [],
+    comments: [],
     metrics: {
       activeProjects: 0,
       totalClients: 0,
@@ -394,63 +534,120 @@ export default function DashboardPage() {
       
       if (clientsError) throw clientsError;
 
-      // Try multiple approaches to fetch todos
+      // Fetch todos and comments efficiently with single project detail calls
       let todos = [];
-      const possibleTableNames = ["stage_todos", "track_stage_todos", "todos"];
+      let comments = [];
       
-      // First approach: try direct table queries
-      for (const tableName of possibleTableNames) {
+      // First, get project details once for all projects
+      const projectDetails = {};
+      for (const project of projects.slice(0, 5)) { // Limit to first 5 projects for performance
         try {
-          console.log(`Trying to fetch from table: ${tableName}`);
-          const { data: todosData, error: todosError } = await supabase
-            .from(tableName)
-            .select("*")
-            .not("due_date", "is", null)
-            .order("due_date", { ascending: true });
+          const { data: trackDetail } = await supabase
+            .rpc("get_track_detail", { p_track_id: project.track_id });
           
-          if (!todosError && todosData && todosData.length > 0) {
-            console.log(`Success! Found ${todosData.length} todos in table: ${tableName}`);
-            console.log("Sample todo:", todosData[0]);
-            todos = todosData;
-            break;
-          } else if (todosError) {
-            console.log(`Error with table ${tableName}:`, todosError.message);
-          } else {
-            console.log(`Table ${tableName} exists but has no todos with due dates`);
+          if (trackDetail) {
+            projectDetails[project.track_id] = trackDetail;
           }
         } catch (err) {
-          console.log(`Exception with table ${tableName}:`, err.message);
+          console.error(`Error fetching project details for ${project.track_id}:`, err);
         }
       }
       
-      // Second approach: if no direct table access works, try getting from one project's detail
-      if (todos.length === 0 && projects && projects.length > 0) {
-        console.log("Trying to get todos from project details...");
-        try {
-          const { data: trackDetail, error: trackError } = await supabase
-            .rpc("get_track_detail", { p_track_id: projects[0].track_id });
+      // Create mappings from the project details
+      const stageToTrackMap = {};
+      const userMap = {};
+      
+      Object.entries(projectDetails).forEach(([trackId, trackDetail]) => {
+        if (trackDetail.stages) {
+          trackDetail.stages.forEach(stage => {
+            // Map stage ID to track ID
+            stageToTrackMap[stage.track_stage_id] = trackId;
+            
+            // Extract user names from comments
+            if (stage.comments && Array.isArray(stage.comments)) {
+              stage.comments.forEach(comment => {
+                if (comment.user_id && comment.user_name) {
+                  userMap[comment.user_id] = comment.user_name;
+                }
+              });
+            }
+          });
+        }
+      });
+      
+      console.log('Stage to track mapping created:', Object.keys(stageToTrackMap).length, 'stages');
+      console.log('User mapping created:', Object.keys(userMap).length, 'users');
+      
+      // Get current user for fallback mapping
+      let currentUser = null;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        currentUser = user;
+        if (currentUser) {
+          const currentUserName = currentUser.email?.split('@')[0] || 'You';
+          userMap[currentUser.id] = currentUserName;
+          console.log('Added current user to mapping:', currentUser.id, '=', currentUserName);
+        }
+      } catch (err) {
+        console.error('Error getting current user:', err);
+      }
+      
+      // Fetch todos and apply mapping
+      try {
+        const { data: todosData, error: todosError } = await supabase
+          .from("stage_todos")
+          .select("*")
+          .order("created_at", { ascending: false });
+        
+        if (!todosError && todosData) {
+          todos = todosData
+            .filter(todo => !todo.is_done)
+            .map(todo => ({
+              ...todo,
+              track_id: stageToTrackMap[todo.track_stage_id]
+            }));
           
-          if (!trackError && trackDetail?.stages) {
-            console.log("Got track detail, extracting todos...");
-            for (const stage of trackDetail.stages) {
-              if (stage.todos && Array.isArray(stage.todos)) {
-                stage.todos.forEach(todo => {
-                  if (todo.due_date) {
-                    todos.push({
-                      ...todo,
-                      stage_name: stage.name,
-                      project_name: trackDetail.track.name,
-                      client_name: trackDetail.client?.company_name
-                    });
-                  }
-                });
+          console.log(`Found ${todos.length} incomplete todos`);
+        }
+      } catch (err) {
+        console.error("Error fetching todos:", err);
+      }
+      
+      // Fetch comments and apply mapping
+      try {
+        const { data: commentsData, error: commentsError } = await supabase
+          .from("stage_comments")
+          .select("*")
+          .order("created_at", { ascending: false });
+        
+        if (!commentsError && commentsData) {
+          console.log('Sample raw comment:', commentsData[0]); // See what fields are available
+          
+          comments = commentsData.map(comment => {
+            const userId = comment.user_id || comment.assignee_user_id;
+            
+            // Use same logic as StageDrawer for user names
+            let userName = userMap[userId];
+            if (!userName) {
+              if (userId === currentUser?.id) {
+                userName = currentUser?.email?.split("@")[0] || "You";
+              } else {
+                userName = "Unknown User";
               }
             }
-            console.log(`Found ${todos.length} todos from project details`);
-          }
-        } catch (err) {
-          console.error("Error fetching from project details:", err);
+            
+            return {
+              ...comment,
+              track_id: stageToTrackMap[comment.track_stage_id],
+              user_name: userName
+            };
+          });
+          
+          console.log(`Found ${comments.length} comments`);
+          console.log('Available user mappings:', userMap);
         }
+      } catch (err) {
+        console.error("Error fetching comments:", err);
       }
       
       console.log("Final todos array:", todos);
@@ -469,6 +666,7 @@ export default function DashboardPage() {
         projects: projects || [],
         clients: clients || [],
         todos: todos || [],
+        comments: comments || [],
         metrics: {
           activeProjects,
           totalClients,
@@ -504,6 +702,40 @@ export default function DashboardPage() {
   const handleDateClick = (day) => {
     if (day.todos.length > 0) {
       setSelectedDateForTodos(day);
+    }
+  };
+
+  const handleTodoClick = (todo) => {
+    console.log('Todo clicked:', todo);
+    
+    if (todo.track_id && todo.track_stage_id) {
+      // Navigate to projects page with specific project and stage
+      navigate('/projects', { 
+        state: { 
+          activeTrackId: todo.track_id, 
+          selectedStageId: todo.track_stage_id 
+        } 
+      });
+    } else {
+      // Fallback: just navigate to projects page
+      navigate('/projects');
+    }
+  };
+
+  const handleCommentClick = (comment) => {
+    console.log('Comment clicked:', comment);
+    
+    if (comment.track_id && comment.track_stage_id) {
+      // Navigate to projects page with specific project and stage
+      navigate('/projects', { 
+        state: { 
+          activeTrackId: comment.track_id, 
+          selectedStageId: comment.track_stage_id 
+        } 
+      });
+    } else {
+      // Fallback: just navigate to projects page
+      navigate('/projects');
     }
   };
 
@@ -566,8 +798,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-4 gap-6">
+          {/* First Column */}
           <div className="space-y-6">
             <ActiveProjectsWidget
               projects={dashboardData.projects}
@@ -575,7 +807,7 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Center Column */}
+          {/* Second Column */}
           <div className="space-y-6">
             <CalendarWidget
               todos={dashboardData.todos}
@@ -583,8 +815,22 @@ export default function DashboardPage() {
             />
           </div>
 
-          {/* Right Column */}
+          {/* Third Column */}
           <div className="space-y-6">
+            <LatestTodosWidget 
+              todos={dashboardData.todos}
+              projects={dashboardData.projects}
+              onTodoClick={handleTodoClick}
+            />
+          </div>
+
+          {/* Fourth Column */}
+          <div className="space-y-6">
+            <LatestCommentsWidget 
+              comments={dashboardData.comments}
+              projects={dashboardData.projects}
+              onCommentClick={handleCommentClick}
+            />
             <RecentClientsWidget
               clients={dashboardData.clients}
               onClientClick={handleClientClick}

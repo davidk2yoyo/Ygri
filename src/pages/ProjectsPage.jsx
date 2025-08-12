@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
 import "reactflow/dist/style.css";
 import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
 
@@ -434,6 +435,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
 
 export default function ProjectsPage() {
   const { t } = useTranslation();
+  const location = useLocation();
   const [overview, setOverview] = useState([]);
   const [cancelledProjects, setCancelledProjects] = useState([]);
   const [showCancelledProjects, setShowCancelledProjects] = useState(false);
@@ -492,7 +494,8 @@ export default function ProjectsPage() {
       setOverview(activeProjects);
       setCancelledProjects(cancelledProjects);
       
-      if (activeProjects.length && !activeTrackId) {
+      // Only auto-select first project if not coming from dashboard navigation
+      if (activeProjects.length && !activeTrackId && !location.state?.activeTrackId) {
         setActiveTrackId(activeProjects[0].track_id);
       }
     } catch (e) {
@@ -505,6 +508,21 @@ export default function ProjectsPage() {
   useEffect(() => {
     fetchTracksOverview();
   }, []);
+
+  // Handle navigation from dashboard
+  useEffect(() => {
+    if (location.state?.activeTrackId && overview.length > 0) {
+      console.log('Setting active track from dashboard navigation:', location.state.activeTrackId);
+      setActiveTrackId(location.state.activeTrackId);
+      if (location.state.selectedStageId) {
+        // Delay setting the stage ID slightly to ensure the track loads first
+        setTimeout(() => {
+          console.log('Setting selected stage from dashboard navigation:', location.state.selectedStageId);
+          setSelectedStageId(location.state.selectedStageId);
+        }, 100);
+      }
+    }
+  }, [location.state, overview]);
 
   // --- Data: track detail ---
   const loadTrackDetail = async () => {
@@ -791,19 +809,19 @@ export default function ProjectsPage() {
                   
                   {showCancelledProjects && (
                     <div className="space-y-2 max-h-48 overflow-y-auto scrollbar-thin">
-                      {cancelledProjects.map((t) => (
+                      {cancelledProjects.map((project) => (
                         <div
-                          key={t.track_id}
+                          key={project.track_id}
                           className="w-full relative p-3 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 group"
                         >
-                          <div className="text-xs text-red-600 dark:text-red-400 mb-1">{t.client_name}</div>
-                          <div className="font-semibold text-red-700 dark:text-red-300 mb-2">{t.track_name}</div>
+                          <div className="text-xs text-red-600 dark:text-red-400 mb-1">{project.client_name}</div>
+                          <div className="font-semibold text-red-700 dark:text-red-300 mb-2">{project.track_name}</div>
                           <div className="flex items-center justify-between">
                             <div className="text-xs text-red-600 dark:text-red-400">
-                              {t.workflow_kind}
+                              {project.workflow_kind}
                             </div>
                             <button
-                              onClick={() => reactivateProject(t)}
+                              onClick={() => reactivateProject(project)}
                               className="text-xs px-2 py-1 bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors"
                               title="Reactivate project"
                             >
@@ -989,6 +1007,8 @@ export default function ProjectsPage() {
           onUpdate={() => {
             loadTrackDetail(); // Refresh track detail when stage is updated
           }}
+          projectName={detail?.track?.track_name || detail?.track?.name}
+          clientName={detail?.client?.company_name || detail?.client?.name}
         />
       </div>
     </div>
