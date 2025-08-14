@@ -1,4 +1,5 @@
 import { supabase } from "../supabaseClient";
+import { layoutRadialSpokes, getLayoutParamsFromUI, detectAndResolveCollisions, createCurvedEdges } from "./radialSpokesLayout";
 
 // Status color mapping with safe fallbacks
 export const STATUS_COLORS = {
@@ -417,11 +418,19 @@ export function createTreeLayout(processedData, filters, collapsedClients, optio
 export function createRadialLayout(processedData, filters, collapsedClients, options = {}) {
   const nodes = [];
   const edges = [];
-  const { densityMode = "overview", zoomLevel = 1 } = options;
+  const { 
+    densityMode = "overview", 
+    zoomLevel = 1,
+    projectsOutside = true,
+    density = 200,
+    maxProjectsPerRing = 4
+  } = options;
   
   const filteredData = applyFilters(processedData, filters);
   
-  // Company center node - always at origin for true radial layout
+  // Simple stable radial layout with functional controls
+  
+  // Company center node - always at origin
   nodes.push({
     id: "company",
     type: "company",
@@ -435,22 +444,19 @@ export function createRadialLayout(processedData, filters, collapsedClients, opt
     draggable: false,
   });
 
-  // Ring 1: Position clients in perfect circle around company
-  const clientRadius = densityMode === "details" ? 350 : 280; // Reduced spacing
+  // Client positioning in circle - density affects radius
+  const baseClientRadius = 200;
+  const clientRadius = baseClientRadius + (density * 0.5); // 200 + (200 * 0.5) = 300 at density 200
   const clientCount = filteredData.clients.length;
   const angleStep = (2 * Math.PI) / Math.max(clientCount, 1);
-  
-  // Add collision padding for better spacing
-  const minNodeDistance = densityMode === "details" ? 120 : 100;
-  const adjustedRadius = Math.max(clientRadius, (clientCount * minNodeDistance) / (2 * Math.PI));
   
   filteredData.clients.forEach((client, clientIndex) => {
     const clientId = `client-${client.id}`;
     const angle = angleStep * clientIndex;
-    const clientX = Math.cos(angle) * adjustedRadius;
-    const clientY = Math.sin(angle) * adjustedRadius;
+    const clientX = Math.cos(angle) * clientRadius;
+    const clientY = Math.sin(angle) * clientRadius;
     
-    // Client node with enhanced data
+    // Client node
     nodes.push({
       id: clientId,
       type: "client",
@@ -466,47 +472,37 @@ export function createRadialLayout(processedData, filters, collapsedClients, opt
       draggable: true,
     });
 
-    // Edge from company to client - hidden by default
+    // Simple edge from company to client
     edges.push({
       id: `company-${clientId}`,
       source: "company",
       target: clientId,
       type: "straight",
-      animated: false,
-      style: { opacity: 0 }, // Hidden by default
-      className: "transition-opacity duration-220",
-      data: {
-        showLabel: true,
-        labelText: client.tracks.length.toString(),
-        isRootToClient: true
-      }
+      style: { opacity: 0.3, strokeWidth: 1, stroke: "#6B7280" },
     });
 
-    // Ring 2+: Projects only shown when client is expanded
+    // Project positioning - responds to projectsOutside toggle and density
     if (!collapsedClients.has(clientId) && client.tracks.length > 0) {
-      const projectRadius = densityMode === "details" ? 180 : 140; // Reduced spacing
-      const maxVisibleProjects = densityMode === "details" ? 12 : 8; // Cap visible projects
-      const totalProjects = client.tracks.length;
-      const visibleTracks = client.tracks.slice(0, maxVisibleProjects);
-      const hasMoreProjects = totalProjects > maxVisibleProjects;
+      const baseProjectDistance = 120;
+      const projectDistance = baseProjectDistance + (density * 0.2); // Scales with density
       
-      // Update client data to show +N more badge
-      const clientNodeIndex = nodes.findIndex(n => n.id === clientId);
-      if (clientNodeIndex !== -1 && hasMoreProjects) {
-        nodes[clientNodeIndex].data = {
-          ...nodes[clientNodeIndex].data,
-          hiddenProjectCount: totalProjects - maxVisibleProjects
-        };
-      }
-      
-      // Arrange projects in arc around client for single project, circle for multiple  
-      const projectCount = visibleTracks.length;
-      
-      if (projectCount === 1) {
-        const track = visibleTracks[0];
+      client.tracks.forEach((track, trackIndex) => {
         const projectId = `project-${track.id}`;
-        const projectX = clientX + Math.cos(angle + Math.PI) * projectRadius;
-        const projectY = clientY + Math.sin(angle + Math.PI) * projectRadius;
+        
+        let projectX, projectY;
+        
+        if (projectsOutside) {
+          // Projects outside: extend along spokes from clients
+          const projectAngle = angle; // Same angle as client (along spoke)
+          const spokeDist = clientRadius + projectDistance + (trackIndex * 40); // Spread along spoke
+          projectX = Math.cos(projectAngle) * spokeDist;
+          projectY = Math.sin(projectAngle) * spokeDist;
+        } else {
+          // Projects inside: circle around client
+          const projectAngle = angle + (trackIndex - (client.tracks.length - 1) / 2) * 0.3;
+          projectX = clientX + Math.cos(projectAngle) * projectDistance;
+          projectY = clientY + Math.sin(projectAngle) * projectDistance;
+        }
 
         nodes.push({
           id: projectId,
@@ -522,78 +518,15 @@ export function createRadialLayout(processedData, filters, collapsedClients, opt
           },
           draggable: true,
         });
-      } else {
-        // Multiple projects in arc with collision avoidance
-        const projectAngleSpan = Math.PI * 0.8; // 144 degrees
-        let projectAngleStep = projectAngleSpan / Math.max(projectCount - 1, 1);
-        
-        // Add slight angle nudges for collision avoidance when clients are close
-        const angleNudge = Math.sin(clientIndex * 0.7) * 0.1; // ±4-6 degrees
-        const startAngle = angle - projectAngleSpan / 2 + angleNudge;
-        
-        visibleTracks.forEach((track, trackIndex) => {
-          const projectId = `project-${track.id}`;
-          const projectAngle = startAngle + (projectAngleStep * trackIndex);
-          const projectX = clientX + Math.cos(projectAngle) * projectRadius;
-          const projectY = clientY + Math.sin(projectAngle) * projectRadius;
 
-          nodes.push({
-            id: projectId,
-            type: "project",
-            position: { x: projectX, y: projectY },
-            data: { 
-              ...track,
-              label: track.name,
-              clientName: client.company_name,
-              densityMode,
-              zoomLevel,
-              showLabels: zoomLevel > 0.8
-            },
-            draggable: true,
-          });
+        // Simple edge from client to project
+        edges.push({
+          id: `${clientId}-${projectId}`,
+          source: clientId,
+          target: projectId,
+          type: "straight",
+          style: { opacity: 0.5, strokeWidth: 1, stroke: "#6B7280" },
         });
-      }
-
-      // Edges from client to projects with smart Bézier curves (only for visible projects)
-      visibleTracks.forEach((track, trackIndex) => {
-        const projectId = `project-${track.id}`;
-        const projectNode = nodes.find(n => n.id === projectId);
-        const clientNode = nodes.find(n => n.id === clientId);
-        
-        if (projectNode && clientNode) {
-          // Calculate control points for smooth fan-out arcs
-          const dx = projectNode.position.x - clientNode.position.x;
-          const dy = projectNode.position.y - clientNode.position.y;
-          
-          // Create control point that curves outward from the client
-          const midX = clientNode.position.x + dx * 0.3;
-          const midY = clientNode.position.y + dy * 0.3;
-          
-          // Add slight curvature perpendicular to the connection
-          const perpX = -dy * 0.1;
-          const perpY = dx * 0.1;
-          
-          edges.push({
-            id: `${clientId}-${projectId}`,
-            source: clientId,
-            target: projectId,
-            type: "custom", // Use custom edge for better control
-            animated: track.overdue,
-            style: { 
-              opacity: 0, // Hidden by default
-            },
-            className: "transition-all duration-220",
-            data: {
-              projectStatus: track.status,
-              isOverdue: track.overdue,
-              clientAngle: angle,
-              projectIndex: trackIndex,
-              totalProjects: client.tracks.length,
-              showLabel: false, // Labels only for root→client edges
-              isClientToProject: true
-            }
-          });
-        }
       });
     }
   });

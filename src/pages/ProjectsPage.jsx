@@ -453,6 +453,7 @@ export default function ProjectsPage() {
   const [deleteError, setDeleteError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [viewMode, setViewMode] = useState("flow");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // --- Data: tracks list (left panel) ---
   const fetchTracksOverview = async () => {
@@ -642,6 +643,17 @@ export default function ProjectsPage() {
     }
   };
 
+  // Filter projects based on search query
+  const filteredOverview = useMemo(() => {
+    if (!searchQuery.trim()) return overview;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return overview.filter(project => 
+      project.client_name?.toLowerCase().includes(query) ||
+      project.track_name?.toLowerCase().includes(query)
+    );
+  }, [overview, searchQuery]);
+
   // --- Build nodes/edges for React Flow ---
   const { nodes, edges } = useMemo(() => {
     if (!detail) return { nodes: [], edges: [] };
@@ -716,8 +728,19 @@ export default function ProjectsPage() {
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h2>
                 <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
-                  {overview.length} {t("total")}
+                  {filteredOverview.length}/{overview.length} {t("total")}
                 </span>
+              </div>
+              
+              {/* Search Field */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder={t("searchProjects")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
+                />
               </div>
               
               {error && (
@@ -740,7 +763,7 @@ export default function ProjectsPage() {
               )}
               
               <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
-                {!loading && overview.map((t) => (
+                {!loading && filteredOverview.map((t) => (
                   <div
                     key={t.track_id}
                     className={`w-full relative p-4 rounded-lg border transition-all duration-200 hover:shadow-sm group ${

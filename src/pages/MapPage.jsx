@@ -71,17 +71,21 @@ function MapPageInner() {
   const [error, setError] = useState("");
 
   // View State
-  const [layoutMode, setLayoutMode] = useState("radial"); // tree | radial
+  const [layoutMode, setLayoutMode] = useState("radial"); // hierarchical | radial
   const [densityMode, setDensityMode] = useState("overview"); // overview | details
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedNode, setSelectedNode] = useState(null);
   const [detailsPanelOpen, setDetailsPanelOpen] = useState(false);
   const [collapsedClients, setCollapsedClients] = useState(new Set());
-  const [connectorMode, setConnectorMode] = useState("off"); // off | minimal | neighborhood | all
   const [hoveredNodeId, setHoveredNodeId] = useState(null);
   const [focusedNodeId, setFocusedNodeId] = useState(null);
   const [clickedNodeId, setClickedNodeId] = useState(null);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
+
+  // Radial Layout Parameters
+  const [projectsOutside, setProjectsOutside] = useState(true);
+  const [density, setDensity] = useState(200); // 0-300 (increased range)
+  const [maxProjectsPerRing, setMaxProjectsPerRing] = useState(4); // 2-8
 
   // Filters
   const [filters, setFilters] = useState({
@@ -124,124 +128,50 @@ function MapPageInner() {
 
     let newNodes, newEdges;
     
-    if (layoutMode === "tree") {
-      // Use ELK for professional tree layout
+    if (layoutMode === "hierarchical") {
+      // Use ELK for professional hierarchical layout
       const result = await createELKTreeLayout(processedData, filters, collapsedClients, { densityMode, zoomLevel });
       newNodes = result.nodes;
       newEdges = result.edges;
     } else {
-      // Use existing radial layout
-      const result = createRadialLayout(processedData, filters, collapsedClients, { densityMode, zoomLevel });
+      // Use existing radial layout with new parameters
+      const result = createRadialLayout(processedData, filters, collapsedClients, { 
+        densityMode, 
+        zoomLevel,
+        projectsOutside,
+        density,
+        maxProjectsPerRing
+      });
       newNodes = result.nodes;
       newEdges = result.edges;
     }
 
-    // Helper function for edge visibility - enhanced for tree layout
-    const getEdgeVisibility = (edge, mode, hoveredId, clickedId, focusedId, zoomLevel, isTreeMode = false) => {
+    // Simplified edge visibility - static visibility to prevent hover issues
+    const getEdgeVisibility = (edge, hoveredId, clickedId, focusedId, zoomLevel, isHierarchicalMode = false) => {
       const isRootToClient = edge.source === "company";
-      const isClientToProject = !isRootToClient;
       
-      let shouldShow = false;
-      let baseOpacity = 0;
+      // Fixed opacity - no hover effects to prevent disappearing nodes
+      let baseOpacity = 0.4;
       let thickness = 1;
       
-      // Special logic for tree layout
-      if (isTreeMode) {
-        if (isRootToClient) {
-          // Root→client edges: always visible in tree mode
-          shouldShow = true;
-          baseOpacity = 0.3;
-          thickness = 1;
-        } else if (isClientToProject) {
-          // Client→project edges: only when client is expanded/hovered/focused
-          const sourceClientId = edge.source;
-          const sourceClientNode = newNodes.find(n => n.id === sourceClientId);
-          const isClientExpanded = sourceClientNode && !sourceClientNode.data.collapsed;
-          
-          shouldShow = isClientExpanded || hoveredId === edge.source || 
-                      clickedId === edge.source || focusedId === edge.source;
-          baseOpacity = shouldShow ? 0.4 : 0;
-          thickness = 1;
-        }
+      if (isHierarchicalMode) {
+        baseOpacity = isRootToClient ? 0.3 : 0.4;
+        thickness = 1;
       } else {
-        // Regular radial layout logic
-        switch (mode) {
-          case "off":
-            shouldShow = false;
-            break;
-          case "minimal":
-            shouldShow = isRootToClient;
-            baseOpacity = 0.3;
-            thickness = 1;
-            break;
-          case "neighborhood":
-            if (isRootToClient) {
-              shouldShow = true;
-              baseOpacity = 0.3;
-              thickness = 1;
-            }
-            if (isClientToProject) {
-              shouldShow = hoveredId === edge.source || clickedId === edge.source || focusedId === edge.source;
-              baseOpacity = shouldShow ? 0.6 : 0;
-              thickness = shouldShow ? 1.5 : 1;
-            }
-            break;
-          case "all":
-            if (zoomLevel > 1.2) {
-              shouldShow = true;
-              baseOpacity = isRootToClient ? 0.3 : 0.5;
-              thickness = isRootToClient ? 1 : 1.5;
-            } else {
-              shouldShow = isRootToClient;
-              baseOpacity = 0.2;
-              thickness = 1;
-            }
-            break;
-        }
-      }
-      
-      let finalOpacity = baseOpacity;
-      let finalThickness = thickness;
-      
-      // Hover/focus enhancements
-      if (shouldShow && (hoveredId === edge.source || hoveredId === edge.target || 
-                        clickedId === edge.source || clickedId === edge.target ||
-                        focusedId === edge.source || focusedId === edge.target)) {
-        finalOpacity = Math.min(0.9, baseOpacity + 0.6);
-        finalThickness = Math.max(2, thickness + 0.5);
-      }
-      
-      // Dim non-related edges
-      if (shouldShow && (hoveredId || focusedId) && 
-          !(hoveredId === edge.source || hoveredId === edge.target ||
-            focusedId === edge.source || focusedId === edge.target)) {
-        finalOpacity = Math.max(0.15, finalOpacity * 0.4);
+        baseOpacity = isRootToClient ? 0.3 : 0.5;
+        thickness = isRootToClient ? 1 : 1.5;
       }
       
       return {
-        visible: shouldShow,
-        opacity: finalOpacity,
-        strokeWidth: finalThickness
+        visible: true,
+        opacity: baseOpacity, // Fixed opacity, no hover changes
+        strokeWidth: thickness // Fixed thickness, no hover changes
       };
     };
 
-    // Helper function for edge color
+    // Simplified edge color - static color to prevent hover issues
     const getEdgeColor = (edge, hoveredId, clickedId, focusedId) => {
-      const isHighlighted = hoveredId === edge.source || hoveredId === edge.target ||
-                           clickedId === edge.source || clickedId === edge.target ||
-                           focusedId === edge.source || focusedId === edge.target;
-      
-      if (!isHighlighted || edge.source === "company") {
-        return "#6B7280";
-      }
-      
-      if (edge.source !== "company" && processedData) {
-        const targetNode = newNodes.find(n => n.id === edge.target);
-        if (targetNode?.data?.status && processedData.statusColors) {
-          return processedData.statusColors[targetNode.data.status] || "#6B7280";
-        }
-      }
-      
+      // Always return the same color - no hover effects
       return "#6B7280";
     };
 
@@ -254,41 +184,63 @@ function MapPageInner() {
       );
     };
 
-    // Apply focus mode dimming
-    const processedNodes = newNodes.map(node => ({
-      ...node,
-      style: {
-        ...node.style,
-        opacity: focusedNodeId && focusedNodeId !== node.id && !isNodeRelated(node.id, focusedNodeId) ? 0.3 : 1,
-        transition: "opacity 220ms ease-out"
-      }
-    }));
-
-    // Apply advanced edge visibility and styling
-    const processedEdges = newEdges.map(edge => {
-      const visibility = getEdgeVisibility(edge, connectorMode, hoveredNodeId, clickedNodeId, focusedNodeId, zoomLevel, layoutMode === "tree");
+    // Focus effect - dim unrelated nodes when one is clicked
+    const processedNodes = newNodes.map(node => {
+      let nodeOpacity = 1;
       
-      // Determine if edge should be brought to front
-      const isHoveredPath = hoveredNodeId === edge.source || hoveredNodeId === edge.target ||
-                           clickedNodeId === edge.source || clickedNodeId === edge.target ||
-                           focusedNodeId === edge.source || focusedNodeId === edge.target;
+      // If a node is focused, dim others except the focused one and its connections
+      if (focusedNodeId && focusedNodeId !== node.id) {
+        // Check if this node is connected to the focused node
+        const isConnected = isNodeRelated(node.id, focusedNodeId);
+        nodeOpacity = isConnected ? 1 : 0.3; // Dim unrelated nodes
+      }
+      
+      return {
+        ...node,
+        style: {
+          ...node.style,
+          opacity: nodeOpacity,
+          transition: "opacity 300ms ease-out" // Smooth transition for focus effect
+        }
+      };
+    });
+
+    // Edge processing with focus highlighting
+    const processedEdges = newEdges.map(edge => {
+      const visibility = getEdgeVisibility(edge, null, clickedNodeId, focusedNodeId, zoomLevel, layoutMode === "hierarchical");
+      
+      let edgeOpacity = visibility.opacity;
+      let strokeWidth = visibility.strokeWidth;
+      
+      // Highlight edges connected to focused node
+      if (focusedNodeId) {
+        if (edge.source === focusedNodeId || edge.target === focusedNodeId) {
+          // Connected to focused node - highlight
+          edgeOpacity = 0.8;
+          strokeWidth = 2;
+        } else {
+          // Not connected to focused node - dim
+          edgeOpacity = 0.2;
+          strokeWidth = 1;
+        }
+      }
       
       return {
         ...edge,
         style: {
           ...edge.style,
-          opacity: visibility.opacity,
-          strokeWidth: visibility.strokeWidth,
-          stroke: getEdgeColor(edge, hoveredNodeId, clickedNodeId, focusedNodeId),
-          transition: "all 200ms ease-out",
-          zIndex: isHoveredPath ? 1000 : 1, // Bring hovered edges to front
+          opacity: edgeOpacity,
+          strokeWidth: strokeWidth,
+          stroke: getEdgeColor(edge, null, clickedNodeId, focusedNodeId),
+          transition: "all 300ms ease-out", // Smooth transition for focus effect
+          zIndex: 1,
         },
         data: {
           ...edge.data,
           zoomLevel,
-          showLabel: edge.data?.showLabel && zoomLevel > 1.3 && visibility.visible,
+          showLabel: false,
         },
-        markerEnd: visibility.visible && edge.source !== "company" ? {
+        markerEnd: edge.source !== "company" ? {
           type: "dot",
           width: 4,
           height: 4,
@@ -300,16 +252,16 @@ function MapPageInner() {
     setNodes(processedNodes);
     setEdges(processedEdges);
     
-    // Auto-fit view for tree layout and initial load
-    if (nodes.length === 0 || layoutMode === "tree") {
+    // Auto-fit view only on initial load or layout mode change
+    if (nodes.length === 0) {
       setTimeout(() => {
         reactFlow.fitView({ 
-          padding: layoutMode === "tree" ? 0.12 : 0.15, 
+          padding: 0.15, 
           duration: 300 
         });
-      }, layoutMode === "tree" ? 200 : 100);
+      }, 100);
     }
-  }, [processedData, layoutMode, filters, collapsedClients, densityMode, zoomLevel, connectorMode, focusedNodeId, hoveredNodeId, clickedNodeId, reactFlow]);
+  }, [processedData, layoutMode, filters, collapsedClients, densityMode, zoomLevel, focusedNodeId, clickedNodeId, projectsOutside, density, maxProjectsPerRing, reactFlow]);
 
   // Effects
   useEffect(() => {
@@ -367,11 +319,11 @@ function MapPageInner() {
   }, [processedData, nodes, edges, reactFlow]);
 
   const handleNodeMouseEnter = useCallback((event, node) => {
-    setHoveredNodeId(node.id);
+    // Completely disabled hover tracking to prevent disappearing nodes
   }, []);
 
   const handleNodeMouseLeave = useCallback(() => {
-    setHoveredNodeId(null);
+    // Completely disabled hover tracking to prevent disappearing nodes
   }, []);
 
   const handleNodeDoubleClick = useCallback((event, node) => {
@@ -404,23 +356,21 @@ function MapPageInner() {
 
   const handleFilterChange = useCallback((newFilters) => {
     setFilters(newFilters);
-    // Only fit view if search changed significantly or activeOnly changed
-    const significantChange = newFilters.search !== filters.search || 
-                             newFilters.activeOnly !== filters.activeOnly;
-    if (significantChange) {
-      setTimeout(() => {
-        reactFlow.fitView({ padding: 0.15, duration: 220 });
-      }, 200);
-    }
-  }, [reactFlow, filters]);
+    // Removed auto-fit on filter changes to prevent canvas reset issues
+  }, []);
 
   const handleLayoutToggle = useCallback(() => {
-    setLayoutMode(prev => prev === "tree" ? "radial" : "tree");
+    const newMode = layoutMode === "hierarchical" ? "radial" : "hierarchical";
+    setLayoutMode(newMode);
+    
     // Fit view after layout change with a delay to allow for layout calculation
     setTimeout(() => {
-      reactFlow.fitView({ padding: 0.15, duration: 500 });
-    }, 300);
-  }, [reactFlow]);
+      reactFlow.fitView({ 
+        padding: newMode === "hierarchical" ? 0.1 : 0.15, 
+        duration: 500 
+      });
+    }, 400);
+  }, [layoutMode, reactFlow]);
 
   const handleDensityToggle = useCallback(() => {
     setDensityMode(prev => prev === "overview" ? "details" : "overview");
@@ -428,13 +378,8 @@ function MapPageInner() {
 
   const handleZoomChange = useCallback((viewport) => {
     setZoomLevel(viewport.zoom);
-    // Auto-switch density based on zoom level
-    if (viewport.zoom > 1.2 && densityMode === "overview") {
-      setDensityMode("details");
-    } else if (viewport.zoom < 0.8 && densityMode === "details") {
-      setDensityMode("overview");
-    }
-  }, [densityMode]);
+    // Removed auto-switch density to prevent interference with user control
+  }, []);
 
   const handleFocusMode = useCallback((nodeId) => {
     setFocusedNodeId(nodeId);
@@ -448,13 +393,6 @@ function MapPageInner() {
     }
   }, [nodes, reactFlow]);
 
-  const handleConnectorModeChange = useCallback((mode) => {
-    setConnectorMode(mode);
-    // Reset clicked state when changing modes
-    if (mode === "off") {
-      setClickedNodeId(null);
-    }
-  }, []);
 
   const handleSaveView = useCallback((viewName) => {
     const viewData = {
@@ -651,13 +589,17 @@ function MapPageInner() {
           <MapControls
             layoutMode={layoutMode}
             densityMode={densityMode}
-            connectorMode={connectorMode}
             filters={filters}
             onLayoutToggle={handleLayoutToggle}
             onDensityToggle={handleDensityToggle}
-            onConnectorModeChange={handleConnectorModeChange}
             onFilterChange={handleFilterChange}
             onFocusMode={handleFocusMode}
+            projectsOutside={projectsOutside}
+            onProjectsOutsideToggle={setProjectsOutside}
+            density={density}
+            onDensityChange={setDensity}
+            maxProjectsPerRing={maxProjectsPerRing}
+            onMaxProjectsPerRingChange={setMaxProjectsPerRing}
           />
         </Panel>
 

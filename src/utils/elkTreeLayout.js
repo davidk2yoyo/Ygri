@@ -2,18 +2,19 @@ import ELK from 'elkjs/lib/elk.bundled.js';
 
 const elk = new ELK();
 
-// ELK layout configuration for readable tree layout
+// ELK layout configuration for horizontal hierarchical tree layout
 const elkOptions = {
   'elk.algorithm': 'layered',
   'elk.direction': 'RIGHT',
   'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
   'elk.edgeRouting': 'ORTHOGONAL',
-  'elk.spacing.nodeNode': '24',
-  'elk.layered.spacing.nodeNodeBetweenLayers': '64',
-  'elk.layered.spacing.edgeNodeBetweenLayers': '16',
-  'elk.layered.spacing.edgeEdgeBetweenLayers': '8',
+  'elk.spacing.nodeNode': '40',
+  'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+  'elk.layered.spacing.edgeNodeBetweenLayers': '20',
+  'elk.layered.spacing.edgeEdgeBetweenLayers': '12',
   'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
-  'elk.layered.thoroughness': '2'
+  'elk.layered.thoroughness': '3',
+  'elk.spacing.componentComponent': '20'
 };
 
 /**
@@ -40,9 +41,8 @@ export async function createELKTreeLayout(processedData, filters, collapsedClien
     width: companyNodeWidth,
     height: companyNodeHeight,
     layoutOptions: {
-      'elk.position': 'FIXED',
-      'elk.position.x': '0',
-      'elk.position.y': '0'
+      'elk.layered.priority.direction': '100', // Higher priority to place first in layout
+      'elk.portConstraints': 'FIXED_SIDE'
     }
   });
 

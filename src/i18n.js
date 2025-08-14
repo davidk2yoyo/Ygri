@@ -8,6 +8,9 @@ const resources = {
       "appName": "Ygri CRM",
       "signOut": "Sign out",
       "projects": "Projects",
+      "project": "Project", 
+      "company": "Company",
+      "details": "Details",
       "loading": "Loading…",
       "status": "Status",
       "due": "Due",
@@ -28,6 +31,7 @@ const resources = {
       // Dashboard page translations
       "overviewText": "Overview of your projects, clients, and tasks",
       "activeProjects": "Active Projects",
+      "searchProjects": "Search projects...",
       "totalClients": "Total Clients",
       "avgProgress": "Avg Progress",
       "overdueItems": "Overdue Items",
@@ -88,6 +92,18 @@ const resources = {
       "stages": "stages",
       "noStages": "No stages",
       
+      // Map/Details Panel translations
+      "currentStage": "Current Stage",
+      "loadingStageDetails": "Loading stage details...",
+      "stage": "Stage",
+      "dueDate": "Due Date",
+      "assignee": "Assignee",
+      "todos": "Todos",
+      "recentComments": "Recent Comments",
+      "moreComments": "more comments...",
+      "noStageDataYet": "No todos or comments for this stage yet.",
+      "noCurrentStage": "No current stage information available.",
+      
       // Clients page translations
       "searchClients": "Search clients...",
       "exportCSV": "Export CSV",
@@ -142,20 +158,17 @@ const resources = {
       "medium": "Medium",
       "high": "High",
       "radial": "Radial",
-      "tree": "Tree",
+      "hierarchical": "Hierarchical",
       "details": "Details",
       "overview": "Overview",
-      "off": "Off",
-      "minimal": "Min",
-      "neighborhood": "Hood",
-      "all": "All",
-      "cleanOverview": "Clean overview - no connectors",
-      "rootClientSpokes": "Root → client spokes only",
-      "showConnectionsHover": "Show connections on hover/focus",
-      "showAllConnections": "Show all connections when zoomed in",
       "search": "Search...",
       "focusMode": "Focus Mode",
-      "focus": "Focus"
+      "focus": "Focus",
+      "projectsOutside": "Projects Outside",
+      "projectsInsideRing": "Projects inside client ring",
+      "projectsOutsideSpokes": "Projects outside along spokes",
+      "density": "Density",
+      "maxProjectsPerRing": "Max per Ring"
     }
   },
   es: {
@@ -163,6 +176,9 @@ const resources = {
       "appName": "Ygri CRM",
       "signOut": "Cerrar sesión",
       "projects": "Proyectos",
+      "project": "Proyecto",
+      "company": "Empresa", 
+      "details": "Detalles",
       "loading": "Cargando…",
       "status": "Estado",
       "due": "Vencimiento",
@@ -183,6 +199,7 @@ const resources = {
       // Dashboard page translations
       "overviewText": "Resumen de tus proyectos, clientes y tareas",
       "activeProjects": "Proyectos Activos",
+      "searchProjects": "Buscar proyectos...",
       "totalClients": "Total de Clientes",
       "avgProgress": "Progreso Promedio",
       "overdueItems": "Elementos Vencidos",
@@ -243,6 +260,18 @@ const resources = {
       "stages": "etapas",
       "noStages": "Sin etapas",
       
+      // Map/Details Panel translations
+      "currentStage": "Etapa Actual",
+      "loadingStageDetails": "Cargando detalles de la etapa...",
+      "stage": "Etapa",
+      "dueDate": "Fecha de Vencimiento",
+      "assignee": "Asignado",
+      "todos": "Tareas",
+      "recentComments": "Comentarios Recientes",
+      "moreComments": "comentarios más...",
+      "noStageDataYet": "Aún no hay tareas o comentarios para esta etapa.",
+      "noCurrentStage": "No hay información de etapa actual disponible.",
+      
       // Clients page translations
       "searchClients": "Buscar clientes...",
       "exportCSV": "Exportar CSV",
@@ -297,20 +326,17 @@ const resources = {
       "medium": "Medio",
       "high": "Alto",
       "radial": "Radial",
-      "tree": "Árbol",
+      "hierarchical": "Jerárquico",
       "details": "Detalles",
       "overview": "Vista General",
-      "off": "Apagado",
-      "minimal": "Mín",
-      "neighborhood": "Vecindario",
-      "all": "Todo",
-      "cleanOverview": "Vista general limpia - sin conectores",
-      "rootClientSpokes": "Solo radios raíz → cliente",
-      "showConnectionsHover": "Mostrar conexiones al pasar/enfocar",
-      "showAllConnections": "Mostrar todas las conexiones al hacer zoom",
       "search": "Buscar...",
       "focusMode": "Modo Enfoque",
-      "focus": "Enfocar"
+      "focus": "Enfocar",
+      "projectsOutside": "Proyectos Afuera",
+      "projectsInsideRing": "Proyectos dentro del anillo de clientes",
+      "projectsOutsideSpokes": "Proyectos afuera a lo largo de radios",
+      "density": "Densidad",
+      "maxProjectsPerRing": "Máx por Anillo"
     }
   }
 };
