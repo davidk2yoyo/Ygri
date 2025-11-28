@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import ReactFlow, { Background, Controls, MiniMap } from "reactflow";
+import ReactFlow, { Background, Controls, MiniMap, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
+import NetworkGraphView from "../components/NetworkGraphView";
+import { nodeTypes } from "../components/FlowNodes";
 
 // Vertical Stepper View Component
 function VerticalStepperView({ stages, onStageClick }) {
@@ -144,6 +146,9 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showNewClientForm, setShowNewClientForm] = useState(false);
+  const [newClientName, setNewClientName] = useState("");
+  const [creatingClient, setCreatingClient] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -166,13 +171,42 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
         .from("clients")
         .select("id, company_name")
         .order("company_name", { ascending: true });
-      
+
       if (error) throw error;
       setClients(data || []);
     } catch (err) {
       console.error("Error fetching clients:", err);
     } finally {
       setLoadingClients(false);
+    }
+  };
+
+  const handleCreateClient = async () => {
+    if (!newClientName.trim()) return;
+
+    try {
+      setCreatingClient(true);
+
+      const { data, error } = await supabase
+        .from("clients")
+        .insert([{
+          company_name: newClientName.trim()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Add to clients list and select it
+      setClients(prev => [...prev, data].sort((a, b) => a.company_name.localeCompare(b.company_name)));
+      setFormData({ ...formData, clientId: data.id });
+      setNewClientName("");
+      setShowNewClientForm(false);
+    } catch (err) {
+      console.error("Error creating client:", err);
+      alert("Failed to create client: " + err.message);
+    } finally {
+      setCreatingClient(false);
     }
   };
 
@@ -260,29 +294,94 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600 mr-2"></div>
                     <span className="text-sm text-gray-600">{t("loadingClients")}</span>
                   </div>
-                ) : clients.length === 0 ? (
-                  <div className="p-3 border border-yellow-300 rounded-md bg-yellow-50">
-                    <p className="text-sm text-yellow-800">
-                      You don't have clients yet.{" "}
-                      <a href="/clients" className="underline hover:text-yellow-900">
-                        Add one first
-                      </a>.
-                    </p>
-                  </div>
                 ) : (
-                  <select
-                    value={formData.clientId}
-                    onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                    disabled={submitting}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
-                  >
-                    <option value="">{t("selectClient")}</option>
-                    {clients.map((client) => (
-                      <option key={client.id} value={client.id}>
-                        {client.company_name}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    {clients.length > 0 ? (
+                      <select
+                        value={formData.clientId}
+                        onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
+                        disabled={submitting}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
+                      >
+                        <option value="">{t("selectClient")}</option>
+                        {clients.map((client) => (
+                          <option key={client.id} value={client.id}>
+                            {client.company_name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : null}
+
+                    {/* Create New Client Button */}
+                    {!showNewClientForm && (
+                      <button
+                        type="button"
+                        onClick={() => setShowNewClientForm(true)}
+                        className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 bg-blue-50 border border-blue-200 rounded-md hover:bg-blue-100 transition-colors"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        {clients.length === 0 ? "Create Your First Client" : "Create New Client"}
+                      </button>
+                    )}
+
+                    {/* Inline New Client Form */}
+                    {showNewClientForm && (
+                      <div className="mt-2 p-3 border-2 border-blue-300 rounded-md bg-blue-50">
+                        <label className="block text-xs font-medium text-gray-700 mb-2">
+                          New Client Name
+                        </label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={newClientName}
+                            onChange={(e) => setNewClientName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleCreateClient();
+                              }
+                            }}
+                            placeholder="Enter client name..."
+                            className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 bg-white"
+                            disabled={creatingClient}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            onClick={handleCreateClient}
+                            disabled={creatingClient || !newClientName.trim()}
+                            className="px-3 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                          >
+                            {creatingClient ? (
+                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                            ) : (
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowNewClientForm(false);
+                              setNewClientName("");
+                            }}
+                            disabled={creatingClient}
+                            className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                        <p className="mt-1 text-xs text-gray-600">
+                          Press Enter or click ✓ to create client
+                        </p>
+                      </div>
+                    )}
+                  </>
                 )}
                 {errors.clientId && (
                   <p className="mt-1 text-xs text-red-600">{errors.clientId}</p>
@@ -454,6 +553,7 @@ export default function ProjectsPage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [viewMode, setViewMode] = useState("flow");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sidebarViewMode, setSidebarViewMode] = useState("network"); // "network" or "list"
 
   // --- Data: tracks list (left panel) ---
   const fetchTracksOverview = async () => {
@@ -494,11 +594,10 @@ export default function ProjectsPage() {
       
       setOverview(activeProjects);
       setCancelledProjects(cancelledProjects);
-      
-      // Only auto-select first project if not coming from dashboard navigation
-      if (activeProjects.length && !activeTrackId && !location.state?.activeTrackId) {
-        setActiveTrackId(activeProjects[0].track_id);
-      }
+
+      // Don't auto-select any project - let user explore the network graph first
+      // Only set active track if coming from dashboard navigation
+      // (removed auto-selection: was line 502)
     } catch (e) {
       setError(e.message);
     } finally {
@@ -657,49 +756,76 @@ export default function ProjectsPage() {
   // --- Build nodes/edges for React Flow ---
   const { nodes, edges } = useMemo(() => {
     if (!detail) return { nodes: [], edges: [] };
-    const baseY = 80, gapX = 230;
+    const baseY = 120, gapX = 280;
     const nodes = [];
     const edges = [];
 
+    // Project Root Node
     nodes.push({
       id: `track:${detail.track.id}`,
-      position: { x: 20, y: baseY - 60 },
-      data: { label: (
-        <div className="px-4 py-2 rounded-2xl shadow-sm border bg-white">
-          <div className="text-sm opacity-70">{detail.client?.company_name}</div>
-          <div className="font-semibold">{detail.track.name}</div>
-          <div className="text-xs mt-1">Status: {detail.track.status}</div>
-        </div>
-      ) },
+      position: { x: 20, y: baseY },
+      data: {
+        clientName: detail.client?.company_name || "Client",
+        projectName: detail.track.name,
+        status: detail.track.status || "Active"
+      },
       draggable: false,
-      type: "input",
+      type: "projectNode",
     });
 
+    // Stage Nodes
     detail.stages.forEach((s, idx) => {
-      const x = 220 + idx * gapX;
-      const y = baseY + (s.status === "done" ? 60 : s.status === "blocked" ? -20 : 0);
+      const x = 300 + idx * gapX;
+      // Organic wave pattern based on status and index
+      const yOffset = s.status === "done" ? Math.sin(idx * 0.5) * 40 + 30 :
+                      s.status === "blocked" ? -40 :
+                      s.status === "in_progress" ? Math.cos(idx * 0.3) * 20 :
+                      Math.sin(idx * 0.4) * 15;
+      const y = baseY + yOffset;
+
       nodes.push({
         id: s.track_stage_id,
         position: { x, y },
-        data: { label: (
-          <button
-            className={`px-4 py-3 rounded-2xl border shadow-sm text-left w-[200px] transition hover:shadow-md ${
-              s.status === "done" ? "bg-green-50 border-green-200" :
-              s.status === "in_progress" ? "bg-blue-50 border-blue-200" :
-              s.status === "blocked" ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}`}
-            onClick={() => setSelectedStageId(s.track_stage_id)}
-          >
-            <div className="font-semibold">{s.order_index}. {s.name}</div>
-            <div className="text-xs mt-1">Status: {s.status.replaceAll("_"," ")}</div>
-            <div className="text-xs">Due: {s.due_date ?? "—"}</div>
-            <div className="text-[11px] mt-1 opacity-70">📎 {s.files_count} • ✅ {s.todos_count} • 💬 {s.comments_count}</div>
-            <div className="mt-2 text-xs italic">Click to view details →</div>
-          </button>
-        ) },
+        data: {
+          name: s.name,
+          status: s.status,
+          orderIndex: s.order_index,
+          dueDate: s.due_date,
+          filesCount: s.files_count,
+          todosCount: s.todos_count,
+          commentsCount: s.comments_count,
+          progress: s.progress_pct || 0,
+          index: idx,
+          onClick: () => setSelectedStageId(s.track_stage_id)
+        },
+        type: "stageNode",
       });
 
+      // Create edges with enhanced styling
       const fromId = idx === 0 ? `track:${detail.track.id}` : detail.stages[idx - 1].track_stage_id;
-      edges.push({ id: `${fromId}->${s.track_stage_id}`, source: fromId, target: s.track_stage_id });
+      edges.push({
+        id: `${fromId}->${s.track_stage_id}`,
+        source: fromId,
+        target: s.track_stage_id,
+        type: 'smoothstep',
+        animated: s.status === "in_progress",
+        style: {
+          stroke: s.status === "done" ? "#22c55e" :
+                  s.status === "in_progress" ? "#3b82f6" :
+                  s.status === "blocked" ? "#ef4444" :
+                  "#9ca3af",
+          strokeWidth: s.status === "in_progress" ? 3 : 2,
+        },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: s.status === "done" ? "#22c55e" :
+                 s.status === "in_progress" ? "#3b82f6" :
+                 s.status === "blocked" ? "#ef4444" :
+                 "#9ca3af",
+          width: 20,
+          height: 20,
+        },
+      });
     });
 
     return { nodes, edges };
@@ -722,26 +848,49 @@ export default function ProjectsPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-12 gap-6">
-          <aside className="col-span-4 xl:col-span-3 space-y-4">
+        <div className="grid grid-cols-12 gap-6 transition-all duration-500">
+          <aside className={`space-y-4 transition-all duration-500 ${
+            activeTrackId && detail ? 'col-span-4 xl:col-span-3' : 'col-span-12'
+          }`}>
             <div className="card p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h2>
-                <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
-                  {filteredOverview.length}/{overview.length} {t("total")}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-2 py-1 rounded">
+                    {filteredOverview.length}/{overview.length} {t("total")}
+                  </span>
+
+                  {/* View Toggle */}
+                  <button
+                    onClick={() => setSidebarViewMode(sidebarViewMode === "network" ? "list" : "network")}
+                    className="p-1.5 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded transition-colors"
+                    title={sidebarViewMode === "network" ? "Switch to list view" : "Switch to network view"}
+                  >
+                    {sidebarViewMode === "network" ? (
+                      <svg className="w-4 h-4 text-bgray-600 dark:text-bgray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
+                      </svg>
+                    ) : (
+                      <svg className="w-4 h-4 text-bgray-600 dark:text-bgray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
               </div>
-              
-              {/* Search Field */}
-              <div className="mb-4">
-                <input
-                  type="text"
-                  placeholder={t("searchProjects")}
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
-                />
-              </div>
+
+              {/* Search Field - Only show in list view */}
+              {sidebarViewMode === "list" && (
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    placeholder={t("searchProjects")}
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
+                  />
+                </div>
+              )}
               
               {error && (
                 <div className="bg-error-50 text-error-300 text-sm p-3 rounded-lg mb-4 border border-error-200">
@@ -761,56 +910,68 @@ export default function ProjectsPage() {
                   <span className="text-bgray-600 dark:text-bgray-300">{t("loadingProjects")}</span>
                 </div>
               )}
-              
-              <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
-                {!loading && filteredOverview.map((t) => (
-                  <div
-                    key={t.track_id}
-                    className={`w-full relative p-4 rounded-lg border transition-all duration-200 hover:shadow-sm group ${
-                      activeTrackId === t.track_id 
-                        ? "border-primary bg-success-50 dark:bg-darkblack-500 shadow-sm" 
-                        : "border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 hover:border-primary"
-                    }`}
-                  >
-                    <button
-                      onClick={() => setActiveTrackId(t.track_id)}
-                      className="w-full text-left"
+
+              {/* Conditional Rendering: Network Graph or List View */}
+              {!loading && sidebarViewMode === "network" ? (
+                <div className="h-[600px]">
+                  <NetworkGraphView
+                    projects={filteredOverview}
+                    onProjectSelect={setActiveTrackId}
+                    activeProjectId={activeTrackId}
+                    searchQuery={searchQuery}
+                  />
+                </div>
+              ) : (
+                <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
+                  {!loading && filteredOverview.map((t) => (
+                    <div
+                      key={t.track_id}
+                      className={`w-full relative p-4 rounded-lg border transition-all duration-200 hover:shadow-sm group ${
+                        activeTrackId === t.track_id
+                          ? "border-primary bg-success-50 dark:bg-darkblack-500 shadow-sm"
+                          : "border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 hover:border-primary"
+                      }`}
                     >
-                      <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
-                      <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
-                      <div className="flex items-center justify-between">
-                        <div className="text-xs text-bgray-600 dark:text-bgray-300">
-                          {t.workflow_kind}
+                      <button
+                        onClick={() => setActiveTrackId(t.track_id)}
+                        className="w-full text-left"
+                      >
+                        <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
+                        <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-bgray-600 dark:text-bgray-300">
+                            {t.workflow_kind}
+                          </div>
+                          <div className={`text-xs px-2 py-1 rounded font-medium ${
+                            Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
+                            Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
+                            "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
+                          }`}>
+                            {Number(t.progress_pct).toFixed(0)}%
+                          </div>
                         </div>
-                        <div className={`text-xs px-2 py-1 rounded font-medium ${
-                          Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
-                          Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
-                          "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
-                        }`}>
-                          {Number(t.progress_pct).toFixed(0)}%
+                        <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
+                          Due: {t.next_due_date ?? "No due date"}
                         </div>
-                      </div>
-                      <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
-                        Due: {t.next_due_date ?? "No due date"}
-                      </div>
-                    </button>
-                    
-                    {/* Delete Button - Hidden by default, shown on hover */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDeleteProject(t);
-                      }}
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 hover:text-red-700"
-                      title="Cancel project"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      </button>
+
+                      {/* Delete Button - Hidden by default, shown on hover */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteProject(t);
+                        }}
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 hover:text-red-700"
+                        title="Cancel project"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Cancelled Projects Section */}
               {cancelledProjects.length > 0 && (
@@ -860,59 +1021,101 @@ export default function ProjectsPage() {
             </div>
           </aside>
 
-          <main className="col-span-8 xl:col-span-9 space-y-6">
-            {/* Workflow Canvas */}
-            <div className="card">
-              <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("workflowCanvas")}</h2>
-                    <p className="text-sm text-bgray-600 dark:text-bgray-300">{t("visualRepresentation")}</p>
+          {/* Show Workflow Canvas only when a project is selected */}
+          {activeTrackId && detail && (
+            <main className="col-span-8 xl:col-span-9 space-y-6 transition-all duration-500">
+              <>
+                {/* Workflow Canvas */}
+                <div className="card">
+                  <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("workflowCanvas")}</h2>
+                        <p className="text-sm text-bgray-600 dark:text-bgray-300">{t("visualRepresentation")}</p>
+                      </div>
+
+                      {/* View Mode Toggle */}
+                      <div className="flex bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-1">
+                        <button
+                          onClick={() => setViewMode("flow")}
+                          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                            viewMode === "flow"
+                              ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                              : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                          }`}
+                        >
+                          {t("flowView")}
+                        </button>
+                        <button
+                          onClick={() => setViewMode("stepper")}
+                          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                            viewMode === "stepper"
+                              ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                              : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                          }`}
+                        >
+                          {t("stepper")}
+                        </button>
+                        <button
+                          onClick={() => setViewMode("kanban")}
+                          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
+                            viewMode === "kanban"
+                              ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
+                              : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
+                          }`}
+                        >
+                          {t("kanban")}
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                  
-                  {/* View Mode Toggle */}
-                  <div className="flex bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-1">
-                    <button
-                      onClick={() => setViewMode("flow")}
-                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                        viewMode === "flow"
-                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
-                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
-                      }`}
-                    >
-                      {t("flowView")}
-                    </button>
-                    <button
-                      onClick={() => setViewMode("stepper")}
-                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                        viewMode === "stepper"
-                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
-                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
-                      }`}
-                    >
-                      {t("stepper")}
-                    </button>
-                    <button
-                      onClick={() => setViewMode("kanban")}
-                      className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                        viewMode === "kanban"
-                          ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
-                          : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
-                      }`}
-                    >
-                      {t("kanban")}
-                    </button>
-                  </div>
-                </div>
-              </div>
               
               {/* Conditional View Rendering */}
-              <div className="h-[520px] overflow-hidden">
+              <div className="h-[600px] overflow-hidden rounded-lg">
                 {viewMode === "flow" && (
-                  <ReactFlow nodes={nodes} edges={edges} fitView>
-                    <MiniMap pannable zoomable />
-                    <Controls />
-                    <Background variant="dots" gap={16} size={1} />
+                  <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={nodeTypes}
+                    fitView
+                    fitViewOptions={{ padding: 0.2, duration: 800 }}
+                    defaultEdgeOptions={{
+                      type: 'smoothstep',
+                      animated: false,
+                      style: { strokeWidth: 2 }
+                    }}
+                    minZoom={0.3}
+                    maxZoom={1.5}
+                    proOptions={{ hideAttribution: true }}
+                    className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-darkblack-700 dark:to-darkblack-600"
+                  >
+                    <Background
+                      variant="dots"
+                      gap={20}
+                      size={1.5}
+                      color="#cbd5e1"
+                      className="opacity-30"
+                    />
+                    <Controls
+                      showZoom
+                      showFitView
+                      showInteractive
+                      className="!bg-white !dark:bg-darkblack-600 !shadow-xl !rounded-lg !border !border-bgray-200 dark:!border-darkblack-400"
+                    />
+                    <MiniMap
+                      nodeColor={(node) => {
+                        if (node.type === 'projectNode') return '#8b5cf6';
+                        const status = node.data?.status;
+                        return status === 'done' ? '#22c55e' :
+                               status === 'in_progress' ? '#3b82f6' :
+                               status === 'blocked' ? '#ef4444' :
+                               '#9ca3af';
+                      }}
+                      maskColor="rgba(0, 0, 0, 0.05)"
+                      className="!bg-white !dark:bg-darkblack-600 !shadow-xl !rounded-lg !border-2 !border-bgray-200 dark:!border-darkblack-400"
+                      pannable
+                      zoomable
+                    />
                   </ReactFlow>
                 )}
                 
@@ -932,59 +1135,61 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-            {/* Quick Actions */}
-            {detail && (
-              <div className="card p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("quickActions")}</h3>
-                  <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
-                    {detail.client?.company_name} • {detail.track.name}
-                  </div>
-                </div>
-                
-                <div className="flex gap-3">
-                  <input
-                    value={commentDraft}
-                    onChange={(e) => setCommentDraft(e.target.value)}
-                    placeholder={t("addQuickComment")}
-                    className="input-field flex-1"
-                  />
-                  <button
-                    onClick={async () => {
-                      const active = detail.stages.find((s) => s.status === "in_progress");
-                      if (!active || !commentDraft.trim()) return;
-                      try {
-                        setBusy(true);
-                        // Get current user
-                        const { data: { user } } = await supabase.auth.getUser();
-                        if (!user) throw new Error("User not authenticated");
-                        
-                        await supabase.rpc("add_stage_comment", { 
-                          p_track_stage_id: active.track_stage_id, 
-                          p_body: commentDraft,
-                          p_user: user.id
-                        });
-                        const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
-                        setDetail(data);
-                        setCommentDraft("");
-                      } catch (e) { setError(e.message); } finally { setBusy(false); }
-                    }}
-                    className="btn-primary"
-                    disabled={busy || !commentDraft.trim()}
-                  >
-                    {busy ? (
-                      <div className="flex items-center">
-                        <div className="spinner h-4 w-4 mr-2"></div>
-                        {t("adding")}
+                {/* Quick Actions */}
+                {detail && (
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("quickActions")}</h3>
+                      <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
+                        {detail.client?.company_name} • {detail.track.name}
                       </div>
-                    ) : (
-                      t("addComment")
-                    )}
-                  </button>
-                </div>
-              </div>
-            )}
-          </main>
+                    </div>
+
+                    <div className="flex gap-3">
+                      <input
+                        value={commentDraft}
+                        onChange={(e) => setCommentDraft(e.target.value)}
+                        placeholder={t("addQuickComment")}
+                        className="input-field flex-1"
+                      />
+                      <button
+                        onClick={async () => {
+                          const active = detail.stages.find((s) => s.status === "in_progress");
+                          if (!active || !commentDraft.trim()) return;
+                          try {
+                            setBusy(true);
+                            // Get current user
+                            const { data: { user } } = await supabase.auth.getUser();
+                            if (!user) throw new Error("User not authenticated");
+
+                            await supabase.rpc("add_stage_comment", {
+                              p_track_stage_id: active.track_stage_id,
+                              p_body: commentDraft,
+                              p_user: user.id
+                            });
+                            const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
+                            setDetail(data);
+                            setCommentDraft("");
+                          } catch (e) { setError(e.message); } finally { setBusy(false); }
+                        }}
+                        className="btn-primary"
+                        disabled={busy || !commentDraft.trim()}
+                      >
+                        {busy ? (
+                          <div className="flex items-center">
+                            <div className="spinner h-4 w-4 mr-2"></div>
+                            {t("adding")}
+                          </div>
+                        ) : (
+                          t("addComment")
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            </main>
+          )}
         </div>
 
         {/* New Project Modal */}
