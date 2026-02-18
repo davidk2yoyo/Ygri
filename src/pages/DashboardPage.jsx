@@ -56,8 +56,9 @@ const METRIC_CONFIGS = {
     ),
   },
   overdue: {
-    gradient: "from-orange-500 to-red-500",
-    glow: "shadow-orange-500/25",
+    gradient: "from-rose-500 to-pink-600",
+    glow: "shadow-rose-500/25",
+    bgStyle: { background: "linear-gradient(135deg, #f43f5e 0%, #db2777 100%)" },
     icon: (
       <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.464 0L4.35 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -76,6 +77,7 @@ function MetricCard({ type, title, value, suffix = "", onClick }) {
     <div
       onClick={onClick}
       className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${cfg.gradient} ${cfg.glow} shadow-lg shadow-lg/50 p-5 text-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl ${onClick ? "cursor-pointer" : ""}`}
+      style={cfg.bgStyle || {}}
     >
       {/* Decorative circles */}
       <div className="absolute -top-6 -right-6 w-28 h-28 bg-white/10 rounded-full" />

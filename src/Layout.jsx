@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "./supabaseClient";
 import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
+import YgriAiChat from "./pages/AiAssistantPage";
 
 export default function Layout() {
   const location = useLocation();
@@ -237,6 +238,8 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      <YgriAiChat />
     </div>
   );
 }
