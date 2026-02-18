@@ -10,6 +10,8 @@ import MapPage from "./pages/MapPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import ClientsPage from "./pages/ClientsPage";
 import FilesPage from "./pages/FilesPage";
+import InvoicesPage from "./pages/InvoicesPage";
+import SuppliersPage from "./pages/SuppliersPage";
 import SettingsPage from "./pages/SettingsPage";
 import "./index.css";
 import "./i18n";
@@ -30,6 +32,8 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/clients" element={<ClientsPage />} />
           <Route path="/files" element={<FilesPage />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/suppliers" element={<SuppliersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Routes>

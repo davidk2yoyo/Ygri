@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import ReactFlow, { Background, Controls, MiniMap, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
 import { useTranslation } from "react-i18next";
@@ -6,7 +6,9 @@ import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import StageDrawer from "../StageDrawer";
 import NetworkGraphView from "../components/NetworkGraphView";
+import PipelineView from "../components/PipelineView";
 import { nodeTypes } from "../components/FlowNodes";
+import HorizontalWorkflow from "../components/HorizontalWorkflow";
 
 // Vertical Stepper View Component
 function VerticalStepperView({ stages, onStageClick }) {
@@ -554,6 +556,37 @@ export default function ProjectsPage() {
   const [viewMode, setViewMode] = useState("flow");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarViewMode, setSidebarViewMode] = useState("network"); // "network" or "list"
+  const [remarksDraft, setRemarksDraft] = useState("");
+  const [isEditingRemarks, setIsEditingRemarks] = useState(false);
+  const [savingRemarks, setSavingRemarks] = useState(false);
+
+  // --- Resizable panels ---
+  const [sidebarWidth, setSidebarWidth] = useState(30); // percentage, default 30%
+  const containerRef = useRef(null);
+  const isResizing = useRef(false);
+
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    isResizing.current = true;
+
+    const handleMouseMove = (moveEvent) => {
+      if (!isResizing.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const offsetX = moveEvent.clientX - rect.left;
+      const pct = (offsetX / rect.width) * 100;
+      // Clamp between 20% and 60%
+      setSidebarWidth(Math.min(60, Math.max(20, pct)));
+    };
+
+    const handleMouseUp = () => {
+      isResizing.current = false;
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }, []);
 
   // --- Data: tracks list (left panel) ---
   const fetchTracksOverview = async () => {
@@ -637,6 +670,16 @@ export default function ProjectsPage() {
       loadTrackDetail();
     }
   }, [activeTrackId]);
+
+  // Update remarks draft when detail changes
+  useEffect(() => {
+    if (detail?.track?.remarks) {
+      setRemarksDraft(detail.track.remarks);
+    } else {
+      setRemarksDraft("");
+    }
+    setIsEditingRemarks(false);
+  }, [detail]);
 
   // --- Project Deletion ---
   const handleDeleteProject = async (project) => {
@@ -848,10 +891,8 @@ export default function ProjectsPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-12 gap-6 transition-all duration-500">
-          <aside className={`space-y-4 transition-all duration-500 ${
-            activeTrackId && detail ? 'col-span-4 xl:col-span-3' : 'col-span-12'
-          }`}>
+        <div ref={containerRef} className="flex transition-all duration-300" style={{ userSelect: isResizing.current ? "none" : "auto" }}>
+          <aside className="space-y-4 flex-shrink-0 overflow-hidden" style={{ width: activeTrackId && detail ? `${sidebarWidth}%` : "100%" }}>
             <div className="card p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h2>
@@ -879,18 +920,16 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              {/* Search Field - Only show in list view */}
-              {sidebarViewMode === "list" && (
-                <div className="mb-4">
-                  <input
-                    type="text"
-                    placeholder={t("searchProjects")}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
-                  />
-                </div>
-              )}
+              {/* Search Field */}
+              <div className="mb-4">
+                <input
+                  type="text"
+                  placeholder={t("searchProjects")}
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
+                />
+              </div>
               
               {error && (
                 <div className="bg-error-50 text-error-300 text-sm p-3 rounded-lg mb-4 border border-error-200">
@@ -911,10 +950,10 @@ export default function ProjectsPage() {
                 </div>
               )}
 
-              {/* Conditional Rendering: Network Graph or List View */}
+              {/* Conditional Rendering: Pipeline or List View */}
               {!loading && sidebarViewMode === "network" ? (
                 <div className="h-[600px]">
-                  <NetworkGraphView
+                  <PipelineView
                     projects={filteredOverview}
                     onProjectSelect={setActiveTrackId}
                     activeProjectId={activeTrackId}
@@ -1021,9 +1060,17 @@ export default function ProjectsPage() {
             </div>
           </aside>
 
+          {/* Resizable divider */}
+          {activeTrackId && detail && (
+            <div
+              onMouseDown={handleResizeStart}
+              className="flex-shrink-0 w-1.5 cursor-col-resize bg-bgray-200 dark:bg-darkblack-400 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors rounded-full mx-1"
+            />
+          )}
+
           {/* Show Workflow Canvas only when a project is selected */}
           {activeTrackId && detail && (
-            <main className="col-span-8 xl:col-span-9 space-y-6 transition-all duration-500">
+            <main className="flex-1 min-w-0 space-y-6 transition-all duration-300">
               <>
                 {/* Workflow Canvas */}
                 <div className="card">
@@ -1047,16 +1094,6 @@ export default function ProjectsPage() {
                           {t("flowView")}
                         </button>
                         <button
-                          onClick={() => setViewMode("stepper")}
-                          className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
-                            viewMode === "stepper"
-                              ? "bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shadow-sm"
-                              : "text-bgray-600 dark:text-bgray-300 hover:text-darkblack-700 dark:hover:text-white"
-                          }`}
-                        >
-                          {t("stepper")}
-                        </button>
-                        <button
                           onClick={() => setViewMode("kanban")}
                           className={`px-3 py-1 text-sm font-medium rounded-md transition-colors ${
                             viewMode === "kanban"
@@ -1069,68 +1106,25 @@ export default function ProjectsPage() {
                       </div>
                     </div>
                   </div>
-              
+
               {/* Conditional View Rendering */}
-              <div className="h-[600px] overflow-hidden rounded-lg">
+              <div className="rounded-lg bg-white dark:bg-darkblack-700">
                 {viewMode === "flow" && (
-                  <ReactFlow
-                    nodes={nodes}
-                    edges={edges}
-                    nodeTypes={nodeTypes}
-                    fitView
-                    fitViewOptions={{ padding: 0.2, duration: 800 }}
-                    defaultEdgeOptions={{
-                      type: 'smoothstep',
-                      animated: false,
-                      style: { strokeWidth: 2 }
-                    }}
-                    minZoom={0.3}
-                    maxZoom={1.5}
-                    proOptions={{ hideAttribution: true }}
-                    className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-darkblack-700 dark:to-darkblack-600"
-                  >
-                    <Background
-                      variant="dots"
-                      gap={20}
-                      size={1.5}
-                      color="#cbd5e1"
-                      className="opacity-30"
+                  <div className="p-4">
+                    <HorizontalWorkflow
+                      detail={detail}
+                      onStageClick={setSelectedStageId}
                     />
-                    <Controls
-                      showZoom
-                      showFitView
-                      showInteractive
-                      className="!bg-white !dark:bg-darkblack-600 !shadow-xl !rounded-lg !border !border-bgray-200 dark:!border-darkblack-400"
-                    />
-                    <MiniMap
-                      nodeColor={(node) => {
-                        if (node.type === 'projectNode') return '#8b5cf6';
-                        const status = node.data?.status;
-                        return status === 'done' ? '#22c55e' :
-                               status === 'in_progress' ? '#3b82f6' :
-                               status === 'blocked' ? '#ef4444' :
-                               '#9ca3af';
-                      }}
-                      maskColor="rgba(0, 0, 0, 0.05)"
-                      className="!bg-white !dark:bg-darkblack-600 !shadow-xl !rounded-lg !border-2 !border-bgray-200 dark:!border-darkblack-400"
-                      pannable
-                      zoomable
-                    />
-                  </ReactFlow>
+                  </div>
                 )}
-                
-                {viewMode === "stepper" && (
-                  <VerticalStepperView 
-                    stages={detail?.stages || []} 
-                    onStageClick={setSelectedStageId}
-                  />
-                )}
-                
+
                 {viewMode === "kanban" && (
-                  <KanbanView 
-                    stages={detail?.stages || []} 
-                    onStageClick={setSelectedStageId}
-                  />
+                  <div className="h-[500px]">
+                    <KanbanView
+                      stages={detail?.stages || []}
+                      onStageClick={setSelectedStageId}
+                    />
+                  </div>
                 )}
               </div>
             </div>
@@ -1187,6 +1181,85 @@ export default function ProjectsPage() {
                     </div>
                   </div>
                 )}
+
+                {/* Project Remarks */}
+                {detail && (
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("projectRemarks")}</h3>
+                      {!isEditingRemarks ? (
+                        <button
+                          onClick={() => setIsEditingRemarks(true)}
+                          className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+                        >
+                          {detail.track?.remarks ? t("edit") : t("add")}
+                        </button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              setIsEditingRemarks(false);
+                              setRemarksDraft(detail.track?.remarks || "");
+                            }}
+                            disabled={savingRemarks}
+                            className="text-sm text-gray-600 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 font-medium disabled:opacity-50"
+                          >
+                            {t("cancel")}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                setSavingRemarks(true);
+                                const { error } = await supabase
+                                  .from('tracks')
+                                  .update({ remarks: remarksDraft.trim() || null })
+                                  .eq('id', detail.track.id);
+
+                                if (error) throw error;
+
+                                // Reload track detail
+                                await loadTrackDetail();
+                                setIsEditingRemarks(false);
+                                setSuccessMessage(t("remarksUpdated"));
+                                setTimeout(() => setSuccessMessage(""), 3000);
+                              } catch (err) {
+                                setError(err.message || "Failed to update remarks");
+                              } finally {
+                                setSavingRemarks(false);
+                              }
+                            }}
+                            disabled={savingRemarks}
+                            className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium disabled:opacity-50 flex items-center"
+                          >
+                            {savingRemarks && (
+                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
+                            )}
+                            {t("save")}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {isEditingRemarks ? (
+                      <textarea
+                        value={remarksDraft}
+                        onChange={(e) => setRemarksDraft(e.target.value)}
+                        placeholder={t("enterProjectRemarks")}
+                        rows="4"
+                        className="w-full px-3 py-2 border border-bgray-200 dark:border-darkblack-400 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500 dark:placeholder-bgray-300"
+                        disabled={savingRemarks}
+                      />
+                    ) : (
+                      <div className="text-sm text-bgray-700 dark:text-bgray-200 whitespace-pre-wrap">
+                        {detail.track?.remarks || (
+                          <span className="text-bgray-500 dark:text-bgray-400 italic">
+                            {t("noRemarksYet")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             </main>
           )}
@@ -1229,8 +1302,9 @@ export default function ProjectsPage() {
         )}
 
         {/* Stage Drawer */}
-        <StageDrawer 
+        <StageDrawer
           stageId={selectedStageId}
+          trackId={activeTrackId}
           onClose={() => setSelectedStageId(null)}
           onUpdate={() => {
             loadTrackDetail(); // Refresh track detail when stage is updated

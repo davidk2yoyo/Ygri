@@ -91,7 +91,13 @@ const resources = {
       "done": "Done",
       "stages": "stages",
       "noStages": "No stages",
-      
+      "projectRemarks": "Project Remarks",
+      "add": "Add",
+      "save": "Save",
+      "enterProjectRemarks": "Enter project remarks or notes...",
+      "noRemarksYet": "No remarks added yet. Click 'Add' to create one.",
+      "remarksUpdated": "Remarks updated successfully",
+
       // Map/Details Panel translations
       "currentStage": "Current Stage",
       "loadingStageDetails": "Loading stage details...",
@@ -168,7 +174,14 @@ const resources = {
       "projectsInsideRing": "Projects inside client ring",
       "projectsOutsideSpokes": "Projects outside along spokes",
       "density": "Density",
-      "maxProjectsPerRing": "Max per Ring"
+      "maxProjectsPerRing": "Max per Ring",
+
+      // Files page translations
+      "filesDescription": "Browse and download all project files organized by client",
+      "searchFiles": "Search clients or projects...",
+      "noClientsWithFiles": "No clients found",
+      "selectClientToView": "Select a client",
+      "selectClientToViewDesc": "Choose a client from the left panel to see their project files"
     }
   },
   es: {
@@ -259,7 +272,13 @@ const resources = {
       "done": "Completado",
       "stages": "etapas",
       "noStages": "Sin etapas",
-      
+      "projectRemarks": "Observaciones del Proyecto",
+      "add": "Agregar",
+      "save": "Guardar",
+      "enterProjectRemarks": "Ingrese observaciones o notas del proyecto...",
+      "noRemarksYet": "Sin observaciones aún. Haga clic en 'Agregar' para crear una.",
+      "remarksUpdated": "Observaciones actualizadas exitosamente",
+
       // Map/Details Panel translations
       "currentStage": "Etapa Actual",
       "loadingStageDetails": "Cargando detalles de la etapa...",
@@ -336,7 +355,14 @@ const resources = {
       "projectsInsideRing": "Proyectos dentro del anillo de clientes",
       "projectsOutsideSpokes": "Proyectos afuera a lo largo de radios",
       "density": "Densidad",
-      "maxProjectsPerRing": "Máx por Anillo"
+      "maxProjectsPerRing": "Máx por Anillo",
+
+      // Files page translations
+      "filesDescription": "Explora y descarga todos los archivos de proyectos organizados por cliente",
+      "searchFiles": "Buscar clientes o proyectos...",
+      "noClientsWithFiles": "No se encontraron clientes",
+      "selectClientToView": "Selecciona un cliente",
+      "selectClientToViewDesc": "Elige un cliente del panel izquierdo para ver los archivos de sus proyectos"
     }
   }
 };

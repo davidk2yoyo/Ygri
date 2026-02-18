@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "./supabaseClient";
+import QuotationForm from "./components/QuotationForm";
 
-export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName }) {
+export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId }) {
   const [stageDetail, setStageDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,6 +24,24 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const [showFileMentions, setShowFileMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState("");
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [activeMenu, setActiveMenu] = useState(null);
+  const [likedComments, setLikedComments] = useState({});
+  const [replyingTo, setReplyingTo] = useState(null); // { id, userName }
+  const commentInputRef = useRef(null);
+
+  // Quotation tab state
+  const [activeTab, setActiveTab] = useState("details"); // "details" | "quotation"
+  const [quotationAmount, setQuotationAmount] = useState(null);
+  const [quotationCurrency, setQuotationCurrency] = useState("USD");
+
+  // Close active ··· menu on outside click
+  useEffect(() => {
+    const handler = () => setActiveMenu(null);
+    if (activeMenu !== null) {
+      document.addEventListener("mousedown", handler);
+    }
+    return () => document.removeEventListener("mousedown", handler);
+  }, [activeMenu]);
 
   // Load current user
   useEffect(() => {
@@ -55,6 +74,23 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     
     loadStageDetail();
   }, [stageId]);
+
+  // Load existing quotation amount for display in non-quotation stages
+  useEffect(() => {
+    if (!trackId) return;
+    const loadQuotationAmount = async () => {
+      const { data } = await supabase
+        .from("quotations")
+        .select("total_amount, currency")
+        .eq("track_id", trackId)
+        .maybeSingle();
+      if (data) {
+        setQuotationAmount(data.total_amount);
+        setQuotationCurrency(data.currency || "USD");
+      }
+    };
+    loadQuotationAmount();
+  }, [trackId]);
 
   // Helper functions for files
   const isImageFile = (filePath) => {
@@ -167,6 +203,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       });
       setStageDetail(data);
       setCommentDraft("");
+      setReplyingTo(null);
       onUpdate?.(); // Refresh parent component
     } catch (e) {
       setError(e.message);
@@ -486,20 +523,68 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     <div className="fixed inset-0 bg-black/50 flex items-center justify-end z-50 font-urbanist">
       <div className="w-[900px] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-bgray-200 dark:border-darkblack-400">
-          <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">
-            Stage Details
-            {clientName && ` - ${clientName}`}
-            {projectName && ` - ${projectName}`}
-          </h2>
-          <button 
-            onClick={onClose}
-            className="p-2 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-lg text-bgray-600 dark:text-bgray-300 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+        <div className="border-b border-bgray-200 dark:border-darkblack-400">
+          <div className="flex items-center justify-between px-6 pt-5 pb-3">
+            <div>
+              <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">
+                Stage Details
+                {clientName && ` · ${clientName}`}
+                {projectName && ` · ${projectName}`}
+              </h2>
+              {/* Order value badge — shown when quotation exists */}
+              {quotationAmount != null && (
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-50 border border-amber-200 text-amber-700 rounded-full text-xs font-semibold">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Order: {quotationCurrency} {Number(quotationAmount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                  <button
+                    onClick={() => setActiveTab("quotation")}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    View / Edit
+                  </button>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-lg text-bgray-600 dark:text-bgray-300 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Tabs — show Quotation tab on all stages */}
+          {stageDetail && trackId && (
+            <div className="flex gap-0 px-6">
+              {[
+                { key: "details", label: "Stage Details" },
+                {
+                  key: "quotation",
+                  label: stageDetail.stage?.name?.toLowerCase().includes("quotation")
+                    ? "📋 Quotation"
+                    : "📋 Quotation",
+                },
+              ].map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                    activeTab === tab.key
+                      ? "border-primary text-primary"
+                      : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -517,7 +602,23 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
             </div>
           )}
 
-          {stageDetail && (
+          {/* Quotation Tab */}
+          {stageDetail && activeTab === "quotation" && trackId && (
+            <div className="p-6">
+              <QuotationForm
+                trackId={trackId}
+                clientName={clientName}
+                projectName={projectName}
+                onSaved={(amount, currency) => {
+                  setQuotationAmount(amount);
+                  setQuotationCurrency(currency);
+                }}
+                onClose={() => setActiveTab("details")}
+              />
+            </div>
+          )}
+
+          {stageDetail && activeTab === "details" && (
             <div className="grid grid-cols-2 gap-6 p-6 h-full">
               {/* Left Column */}
               <div className="space-y-6">
@@ -694,166 +795,279 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                   )}
                 </div>
 
-                {/* Comments Section */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-medium">Comments ({stageDetail.comments?.length || 0})</h4>
+                {/* Comments Section — Instagram bottom-sheet style */}
+                <div className="bg-white dark:bg-darkblack-600 rounded-t-2xl shadow-lg border border-bgray-100 dark:border-darkblack-400 flex flex-col" style={{ maxHeight: "420px" }}>
+
+                  {/* Drag handle */}
+                  <div className="flex justify-center pt-2 pb-1">
+                    <div className="w-10 h-1 rounded-full bg-bgray-300 dark:bg-darkblack-400"></div>
                   </div>
-                  
-                  {/* Comments list */}
-                  <div className="space-y-3 mb-4 max-h-64 overflow-y-auto">
-                    {stageDetail.comments?.map((comment) => (
-                      <div key={comment.id} className="p-3 bg-white dark:bg-darkblack-500 rounded-lg border border-bgray-200 dark:border-darkblack-400 group">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-medium text-darkblack-700 dark:text-white">
-                            {comment.user_name || 
-                             (comment.user_id === currentUser?.id ? (currentUser?.email?.split("@")[0] || "You") : "Unknown")}
-                          </span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-bgray-500 dark:text-bgray-400">
-                              {new Date(comment.created_at).toLocaleDateString()}
-                              {comment.updated_at && comment.updated_at !== comment.created_at && (
-                                <span className="ml-1 italic">(edited)</span>
-                              )}
-                            </span>
-                            {/* Edit/Delete buttons for own comments */}
-                            {comment.user_id === currentUser?.id && (
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => startEditingComment(comment)}
-                                  className="p-1 hover:bg-bgray-100 dark:hover:bg-darkblack-400 rounded text-bgray-500 hover:text-primary transition-colors"
-                                  title="Edit comment"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteComment(comment.id)}
-                                  className="p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded text-bgray-500 hover:text-red-600 transition-colors"
-                                  title="Delete comment"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                                  </svg>
-                                </button>
+
+                  {/* Centered header */}
+                  <div className="flex items-center justify-center gap-2 pb-2">
+                    <h4 className="text-sm font-semibold text-darkblack-700 dark:text-white">Comments</h4>
+                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-bgray-100 dark:bg-darkblack-500 text-xs text-bgray-500 dark:text-bgray-300">
+                      {stageDetail.comments?.length || 0}
+                    </span>
+                  </div>
+
+                  {/* Scrollable comment list — fills remaining space */}
+                  <div className="flex-1 overflow-y-auto divide-y divide-bgray-100 dark:divide-darkblack-400 px-3">
+                    {stageDetail.comments?.length === 0 && (
+                      <p className="text-xs text-bgray-400 dark:text-bgray-500 text-center py-5">No comments yet. Be the first!</p>
+                    )}
+                    {stageDetail.comments?.map((comment) => {
+                      const userName = comment.user_name ||
+                        (comment.user_id === currentUser?.id ? (currentUser?.email?.split("@")[0] || "You") : "Unknown");
+                      const initials = userName.slice(0, 2).toUpperCase();
+                      const colors = ["from-purple-400 to-pink-400","from-blue-400 to-cyan-400","from-emerald-400 to-teal-400","from-orange-400 to-rose-400","from-indigo-400 to-violet-400"];
+                      const colorClass = colors[userName.charCodeAt(0) % colors.length];
+                      const isLiked = !!likedComments[comment.id];
+                      const likeCount = isLiked ? 1 : 0;
+
+                      const getRelativeTime = (date) => {
+                        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
+                        if (seconds < 60) return "just now";
+                        const minutes = Math.floor(seconds / 60);
+                        if (minutes < 60) return minutes === 1 ? "1m" : `${minutes}m`;
+                        const hours = Math.floor(minutes / 60);
+                        if (hours < 24) return hours === 1 ? "1h" : `${hours}h`;
+                        const days = Math.floor(hours / 24);
+                        if (days < 7) return days === 1 ? "1d" : `${days}d`;
+                        return new Date(date).toLocaleDateString();
+                      };
+
+                      return (
+                        <div key={comment.id} className="flex items-start gap-3 py-3 group">
+                          {/* Avatar */}
+                          <div className={`shrink-0 w-8 h-8 rounded-full bg-gradient-to-br ${colorClass} flex items-center justify-center shadow-sm`}>
+                            <span className="text-white text-xs font-semibold">{initials}</span>
+                          </div>
+
+                          {/* Content */}
+                          <div className="flex-1 min-w-0">
+                            {editingCommentId === comment.id ? (
+                              /* ── Edit mode ── */
+                              <div className="space-y-2">
+                                <div className="relative">
+                                  <textarea
+                                    value={editCommentText}
+                                    onChange={(e) => handleCommentTextChange(e, true)}
+                                    rows={2}
+                                    autoFocus
+                                    className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-xl text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-bgray-50 dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                                  />
+                                  {showFileMentions && getFilteredFiles().length > 0 && (
+                                    <div className="absolute z-10 mt-1 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                                      {getFilteredFiles().map(file => (
+                                        <button
+                                          key={file.id}
+                                          onClick={() => insertFileMention(file, true)}
+                                          className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
+                                        >
+                                          <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                          </svg>
+                                          {file.label || file.file_path.split("/").pop()}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="flex gap-3">
+                                  <button
+                                    onClick={() => handleEditComment(comment.id)}
+                                    disabled={!editCommentText.trim() || busy}
+                                    className="text-xs font-semibold text-blue-600 hover:text-blue-500 disabled:opacity-40 transition-colors"
+                                  >
+                                    {busy ? "Saving..." : "Save"}
+                                  </button>
+                                  <button
+                                    onClick={cancelEditingComment}
+                                    className="text-xs text-bgray-400 dark:text-bgray-500 hover:text-bgray-600 dark:hover:text-bgray-300 transition-colors"
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
                               </div>
+                            ) : (
+                              /* ── Display mode ── */
+                              <>
+                                {/* username + text inline */}
+                                <p className="text-sm leading-snug">
+                                  <span className="font-semibold text-darkblack-700 dark:text-white">{userName} </span>
+                                  <span className="text-bgray-600 dark:text-bgray-300">
+                                    {parseFileMentions(comment.body).map((part, index) => (
+                                      part.type === "mention" ? (
+                                        <button
+                                          key={index}
+                                          onClick={() => {
+                                            const file = stageDetail.files?.find(f => f.id === part.fileId);
+                                            if (file) setPreviewFile(file);
+                                          }}
+                                          className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
+                                        >
+                                          {part.content}
+                                        </button>
+                                      ) : (
+                                        <span key={index}>{part.content}</span>
+                                      )
+                                    ))}
+                                  </span>
+                                </p>
+
+                                {/* time · heart · like count · Reply row */}
+                                <div className="flex items-center gap-3 mt-1.5">
+                                  <span className="text-xs text-bgray-400 dark:text-bgray-500">
+                                    {getRelativeTime(comment.created_at)}
+                                    {comment.updated_at && comment.updated_at !== comment.created_at && (
+                                      <span className="ml-1 italic">(edited)</span>
+                                    )}
+                                  </span>
+
+                                  {/* Heart like button */}
+                                  <button
+                                    type="button"
+                                    onClick={() => setLikedComments(prev => ({ ...prev, [comment.id]: !prev[comment.id] }))}
+                                    className="flex items-center gap-1 transition-transform active:scale-90"
+                                  >
+                                    <svg
+                                      className={`w-3.5 h-3.5 transition-colors ${isLiked ? "fill-red-500 text-red-500" : "fill-none text-bgray-400 dark:text-bgray-500 hover:text-red-400"}`}
+                                      stroke="currentColor"
+                                      viewBox="0 0 24 24"
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                                    </svg>
+                                  </button>
+
+                                  {/* Like count */}
+                                  {likeCount > 0 && (
+                                    <span className="text-xs font-semibold text-darkblack-700 dark:text-white">{likeCount} like</span>
+                                  )}
+
+                                  {/* Reply */}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setReplyingTo({ id: comment.id, userName });
+                                      setCommentDraft(`@${userName} `);
+                                      setTimeout(() => commentInputRef.current?.focus(), 0);
+                                    }}
+                                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors"
+                                  >
+                                    Reply
+                                  </button>
+                                </div>
+                              </>
                             )}
                           </div>
-                        </div>
-                        
-                        {/* Comment content - editable or display */}
-                        {editingCommentId === comment.id ? (
-                          <div className="space-y-2">
-                            <div className="relative">
-                              <textarea
-                                value={editCommentText}
-                                onChange={(e) => handleCommentTextChange(e, true)}
-                                rows={3}
-                                className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
-                              />
-                              
-                              {/* File mention dropdown for edit mode */}
-                              {showFileMentions && getFilteredFiles().length > 0 && (
-                                <div className="absolute z-10 mt-1 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                                  {getFilteredFiles().map(file => (
-                                    <button
-                                      key={file.id}
-                                      onClick={() => insertFileMention(file, true)}
-                                      className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
-                                    >
-                                      <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                      </svg>
-                                      {file.label || file.file_path.split("/").pop()}
-                                    </button>
-                                  ))}
+
+                          {/* ··· menu — own comments only */}
+                          {comment.user_id === currentUser?.id && editingCommentId !== comment.id && (
+                            <div className="relative shrink-0">
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveMenu(activeMenu === comment.id ? null : comment.id);
+                                }}
+                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-bgray-100 dark:hover:bg-darkblack-400 text-bgray-400 dark:text-bgray-500"
+                              >
+                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                  <circle cx="12" cy="5" r="1.5" />
+                                  <circle cx="12" cy="12" r="1.5" />
+                                  <circle cx="12" cy="19" r="1.5" />
+                                </svg>
+                              </button>
+                              {activeMenu === comment.id && (
+                                <div className="absolute right-0 top-6 z-10 w-28 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg overflow-hidden">
+                                  <button
+                                    onClick={() => { startEditingComment(comment); setActiveMenu(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-darkblack-700 dark:text-white hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition-colors"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={() => { handleDeleteComment(comment.id); setActiveMenu(null); }}
+                                    className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                  >
+                                    Delete
+                                  </button>
                                 </div>
                               )}
                             </div>
-                            <div className="flex gap-2">
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* ── Pinned bottom input bar ── */}
+                  <div className="border-t border-bgray-100 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 rounded-b-0 px-3 py-2.5">
+                    {/* Replying-to pill */}
+                    {replyingTo && (
+                      <div className="flex items-center justify-between mb-1.5 px-1">
+                        <span className="text-xs text-bgray-500 dark:text-bgray-400">
+                          Replying to <span className="font-semibold text-darkblack-700 dark:text-white">@{replyingTo.userName}</span>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => { setReplyingTo(null); setCommentDraft(""); }}
+                          className="text-xs text-bgray-400 dark:text-bgray-500 hover:text-red-500 transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+
+                    <form onSubmit={handleAddComment} className="flex items-center gap-3">
+                      {/* Current user avatar */}
+                      <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center shadow-sm">
+                        <span className="text-white text-xs font-semibold">
+                          {currentUser?.email?.slice(0, 2).toUpperCase() || "ME"}
+                        </span>
+                      </div>
+
+                      {/* Input + mention dropdown */}
+                      <div className="relative flex-1">
+                        <input
+                          ref={commentInputRef}
+                          type="text"
+                          value={commentDraft}
+                          onChange={(e) => handleCommentTextChange(e, false)}
+                          placeholder="Add a comment..."
+                          disabled={busy}
+                          className="w-full px-4 py-2 rounded-full border border-bgray-200 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-600 text-sm text-darkblack-700 dark:text-white placeholder-bgray-400 dark:placeholder-bgray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                        />
+                        {/* File mention dropdown — pops above input */}
+                        {showFileMentions && getFilteredFiles().length > 0 && (
+                          <div className="absolute bottom-full mb-2 left-0 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                            {getFilteredFiles().map(file => (
                               <button
-                                onClick={() => handleEditComment(comment.id)}
-                                disabled={!editCommentText.trim() || busy}
-                                className="px-3 py-1 bg-blue-600 text-white rounded text-xs disabled:opacity-50 hover:bg-blue-700 transition-colors"
+                                key={file.id}
+                                type="button"
+                                onClick={() => insertFileMention(file, false)}
+                                className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
                               >
-                                {busy ? "Saving..." : "Save"}
+                                <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                </svg>
+                                {file.label || file.file_path.split("/").pop()}
                               </button>
-                              <button
-                                onClick={cancelEditingComment}
-                                className="px-3 py-1 bg-bgray-200 dark:bg-darkblack-400 text-bgray-700 dark:text-bgray-200 rounded text-xs hover:bg-bgray-300 dark:hover:bg-darkblack-300 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-sm text-bgray-700 dark:text-bgray-300">
-                            {/* Render comment with file mentions */}
-                            {parseFileMentions(comment.body).map((part, index) => (
-                              part.type === "mention" ? (
-                                <button
-                                  key={index}
-                                  onClick={() => {
-                                    const file = stageDetail.files?.find(f => f.id === part.fileId);
-                                    if (file) setPreviewFile(file);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
-                                >
-                                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                  </svg>
-                                  {part.content}
-                                </button>
-                              ) : (
-                                <span key={index}>{part.content}</span>
-                              )
                             ))}
                           </div>
                         )}
                       </div>
-                    ))}
-                  </div>
 
-                  {/* Add comment form */}
-                  <form onSubmit={handleAddComment} className="space-y-3">
-                    <div className="relative">
-                      <textarea
-                        value={commentDraft}
-                        onChange={(e) => handleCommentTextChange(e, false)}
-                        placeholder="Add a comment... (Type @ to mention files)"
-                        rows={3}
-                        disabled={busy}
-                        className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-500"
-                      />
-                      
-                      {/* File mention dropdown for new comments */}
-                      {showFileMentions && getFilteredFiles().length > 0 && (
-                        <div className="absolute z-10 mt-1 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg shadow-lg max-h-40 overflow-y-auto">
-                          {getFilteredFiles().map(file => (
-                            <button
-                              key={file.id}
-                              type="button"
-                              onClick={() => insertFileMention(file, false)}
-                              className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
-                            >
-                              <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                              </svg>
-                              {file.label || file.file_path.split("/").pop()}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      type="submit"
-                      disabled={!commentDraft.trim() || busy}
-                      className="w-full py-2 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50 hover:bg-blue-700 transition-colors"
-                    >
-                      {busy ? "Adding..." : "Add Comment"}
-                    </button>
-                  </form>
+                      {/* Post button — IG blue text link */}
+                      <button
+                        type="submit"
+                        disabled={!commentDraft.trim() || busy}
+                        className="shrink-0 text-sm font-semibold text-blue-600 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {busy ? "..." : "Post"}
+                      </button>
+                    </form>
+                  </div>
                 </div>
               </div>
             </div>

@@ -195,8 +195,9 @@ export default function App() {
       </div>
 
       {/* Stage Drawer */}
-      <StageDrawer 
+      <StageDrawer
         stageId={selectedStageId}
+        trackId={activeTrackId}
         onClose={() => setSelectedStageId(null)}
         onUpdate={() => {
           loadTrackDetail(); // Refresh track detail when stage is updated
