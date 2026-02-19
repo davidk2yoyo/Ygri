@@ -12,6 +12,8 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const [commentDraft, setCommentDraft] = useState("");
   const [todoDraft, setTodoDraft] = useState("");
   const [newTodoDueDate, setNewTodoDueDate] = useState("");
+  const [newTodoAssignee, setNewTodoAssignee] = useState("");
+  const [profiles, setProfiles] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [fileUpload, setFileUpload] = useState(null);
   const [fileLabel, setFileLabel] = useState("");
@@ -43,13 +45,15 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     return () => document.removeEventListener("mousedown", handler);
   }, [activeMenu]);
 
-  // Load current user
+  // Load current user + profiles
   useEffect(() => {
-    const getCurrentUser = async () => {
+    const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setCurrentUser(user);
+      const { data } = await supabase.from("profiles").select("id, full_name").order("full_name");
+      setProfiles(data || []);
     };
-    getCurrentUser();
+    init();
   }, []);
 
   // Load stage details
@@ -460,17 +464,18 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
         p_track_stage_id: stageId,
         p_title: todoDraft.trim(),
         p_due: newTodoDueDate || null,
-        p_assignee: null, // Can be set to user.id if you want to auto-assign
+        p_assignee: newTodoAssignee || null,
         p_user: user.id
       });
-      
+
       // Reload stage detail
-      const { data } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
+      const { data } = await supabase.rpc("get_stage_detail", {
+        p_track_stage_id: stageId
       });
       setStageDetail(data);
       setTodoDraft("");
       setNewTodoDueDate("");
+      setNewTodoAssignee("");
       onUpdate?.();
     } catch (e) {
       setError(e.message);
@@ -659,29 +664,45 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                   
                   {/* Todo list */}
                   <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
-                    {stageDetail.todos?.map((todo) => (
-                      <div key={todo.id} className="flex items-center gap-3 p-3 bg-white dark:bg-darkblack-500 rounded-lg border border-bgray-200 dark:border-darkblack-400">
-                        <input
-                          type="checkbox"
-                          checked={todo.is_done}
-                          onChange={() => handleToggleTodo(todo.id, todo.is_done)}
-                          className="rounded border-bgray-300 text-primary focus:ring-primary"
-                          disabled={busy}
-                        />
-                        <div className="flex-1">
-                          <p className={`text-sm ${todo.is_done ? "line-through text-gray-500" : "text-darkblack-700 dark:text-white"}`}>
-                            {todo.title}
-                          </p>
-                          {todo.due_date && (
-                            <p className="text-xs text-gray-500">Due: {todo.due_date}</p>
-                          )}
+                    {stageDetail.todos?.map((todo) => {
+                      const assigneeProfile = profiles.find(p => p.id === todo.assignee_user_id);
+                      const creatorProfile = profiles.find(p => p.id === todo.created_by);
+                      return (
+                        <div key={todo.id} className="flex items-start gap-3 p-3 bg-white dark:bg-darkblack-500 rounded-lg border border-bgray-200 dark:border-darkblack-400">
+                          <input
+                            type="checkbox"
+                            checked={todo.is_done}
+                            onChange={() => handleToggleTodo(todo.id, todo.is_done)}
+                            className="mt-0.5 rounded border-bgray-300 text-primary focus:ring-primary"
+                            disabled={busy}
+                          />
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm ${todo.is_done ? "line-through text-gray-500" : "text-darkblack-700 dark:text-white"}`}>
+                              {todo.title}
+                            </p>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                              {todo.due_date && (
+                                <p className="text-xs text-gray-500">Due: {todo.due_date}</p>
+                              )}
+                              {assigneeProfile && (
+                                <p className="text-xs text-violet-600 dark:text-violet-400">
+                                  Assigned to: {assigneeProfile.full_name}
+                                </p>
+                              )}
+                              {creatorProfile && (
+                                <p className="text-xs text-gray-400">
+                                  By: {creatorProfile.full_name}
+                                </p>
+                              )}
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* Add todo form */}
-                  <form onSubmit={handleAddTodo} className="space-y-3">
+                  <form onSubmit={handleAddTodo} className="space-y-2">
                     <input
                       type="text"
                       value={todoDraft}
@@ -698,14 +719,25 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                         disabled={busy}
                         className="flex-1 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
                       />
-                      <button
-                        type="submit"
-                        disabled={!todoDraft.trim() || busy}
-                        className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      <select
+                        value={newTodoAssignee}
+                        onChange={(e) => setNewTodoAssignee(e.target.value)}
+                        disabled={busy}
+                        className="flex-1 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
                       >
-                        {busy ? "Adding..." : "Add"}
-                      </button>
+                        <option value="">Assign to...</option>
+                        {profiles.map(p => (
+                          <option key={p.id} value={p.id}>{p.full_name}</option>
+                        ))}
+                      </select>
                     </div>
+                    <button
+                      type="submit"
+                      disabled={!todoDraft.trim() || busy}
+                      className="w-full px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                    >
+                      {busy ? "Adding..." : "Add"}
+                    </button>
                   </form>
                 </div>
 
