@@ -1,0 +1,185 @@
+{
+  "name": "ygridailyreport",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 16
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -880,
+        208
+      ],
+      "id": "1f620667-d3e2-4929-988d-24aa90b5fc23",
+      "name": "Cron"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://axnulnpogemjrzwidtqe.supabase.co/rest/v1/rpc/rpc_daily_summary",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_date",
+              "value": "={{ $now.setZone('Asia/Shanghai').toISODate() }}"
+            }
+          ]
+        },
+        "options": {
+          "redirect": {}
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -608,
+        208
+      ],
+      "id": "5e399b16-03d6-4164-b482-fee98dfdbc37",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = items[0].json;\nconst c = d.counts || {};\nconst events = Array.isArray(d.events) ? d.events : [];\n\n// === CONFIG ===\nconst LOGO_URL = 'https://ygri.interasia.com.co/assets/logo-short-BP0qi55G.png';\nconst TIMEZONE_LABEL = 'Asia/Shanghai';\n\n// ===== Telegram MarkdownV2 (unchanged) =====\nconst esc = (s='') => String(s).replace(/([_*\\[\\]()~`>#+\\-=|{}.!\\\\])/g, '\\\\$1');\nconst s = (n, w) => (n === 1 ? w : w + 's');\n\nconst tLines = [];\ntLines.push(`*Good morning\\\\!* This is your daily summary for *Ygri CRM* — ${esc(d.date)} \\\\(${esc(TIMEZONE_LABEL)}\\\\)`);\ntLines.push('');\ntLines.push(`*Highlights*`);\ntLines.push(`• ${esc(c.projects_created ?? 0)} new ${esc(s(c.projects_created ?? 0, 'project'))}`);\ntLines.push(`• ${esc(c.comments_count ?? 0)} ${esc(s(c.comments_count ?? 0, 'comment'))}`);\ntLines.push(`• ${esc(c.stage_changes ?? 0)} ${esc(s(c.stage_changes ?? 0, 'stage change'))}`);\nif (events.length) {\n  tLines.push('');\n  tLines.push(`*Recent activity*`);\n  for (const e of events.slice(0, 10)) {\n    const icon =\n      e.event_type === 'project_created' ? '🆕' :\n      e.event_type === 'new_comment'    ? '💬' :\n      e.event_type === 'stage_changed'  ? '🔁' : '•';\n    const who   = e.actor ? ` \\\\(${esc(e.actor)}\\\\)` : '';\n    const client= e.client_name ? ` — ${esc(e.client_name)}` : '';\n    const stage = e.event_type === 'stage_changed'\n      ? ` — ${esc(e.from_stage || '—')} → ${esc(e.to_stage || '—')}`\n      : '';\n    tLines.push(`  ${icon} ${esc(e.track_name)}${client}${stage}${who}`);\n  }\n} else {\n  tLines.push('');\n  tLines.push(`No activity recorded for this day.`);\n}\ntLines.push('');\ntLines.push(`Have a great day\\\\! — *Ygri CRM*`);\nconst text = tLines.join('\\n');\n\n// ===== Plain text (email fallback) =====\nconst pLines = [];\npLines.push(`Good morning! This is your daily summary for Ygri CRM — ${d.date} (${TIMEZONE_LABEL}).`);\npLines.push('');\npLines.push(`Highlights: ${c.projects_created ?? 0} ${s(c.projects_created ?? 0,'project')}, `\n  + `${c.comments_count ?? 0} ${s(c.comments_count ?? 0,'comment')}, `\n  + `${c.stage_changes ?? 0} ${s(c.stage_changes ?? 0,'stage change')}.`);\nif (events.length) {\n  pLines.push('');\n  pLines.push('Recent activity:');\n  for (const e of events.slice(0, 10)) {\n    const icon =\n      e.event_type === 'project_created' ? '🆕' :\n      e.event_type === 'new_comment'    ? '💬' :\n      e.event_type === 'stage_changed'  ? '🔁' : '•';\n    const who = e.actor ? ` (${e.actor})` : '';\n    const client = e.client_name ? ` — ${e.client_name}` : '';\n    const stage = e.event_type === 'stage_changed'\n      ? ` — ${e.from_stage || '—'} → ${e.to_stage || '—'}`\n      : '';\n    pLines.push(`  ${icon} ${e.track_name}${client}${stage}${who}`);\n  }\n}\npLines.push('');\npLines.push('Have a great day! — Ygri CRM');\nconst text_plain = pLines.join('\\n');\n\n// ===== HTML (styled, with logo) =====\nconst hEsc = (s='') => String(s).replace(/[&<>\"]/g, ch =>\n  ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[ch]));\nconst pill = (label, value) =>\n  `<div class=\"pill\"><span>${hEsc(label)}</span><b>${hEsc(value)}</b></div>`;\nconst eventsHtml = events.slice(0,10).map(e=>{\n  const icon =\n    e.event_type === 'project_created' ? '🆕' :\n    e.event_type === 'new_comment'    ? '💬' :\n    e.event_type === 'stage_changed'  ? '🔁' : '•';\n  const who = e.actor ? ` <span class=\"muted\">(${hEsc(e.actor)})</span>` : '';\n  const client = e.client_name ? ` — ${hEsc(e.client_name)}` : '';\n  const stage = e.event_type === 'stage_changed'\n    ? ` — <span class=\"stage\">${hEsc(e.from_stage || '—')} → ${hEsc(e.to_stage || '—')}</span>`\n    : '';\n  return `<div class=\"event\">${icon} ${hEsc(e.track_name)}${client}${stage}${who}</div>`;\n}).join('');\n\nconst html = `\n<!doctype html>\n<meta charset=\"utf-8\">\n<style>\n  body{background:#f6f7fb;margin:0;padding:24px;font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Arial;}\n  .card{max-width:720px;margin:0 auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 8px 28px rgba(0,0,0,.08)}\n  .logo{display:flex;justify-content:center;margin:4px 0 12px}\n  .logo img{width:48px;height:48px;border-radius:10px;display:block}\n  h1{margin:0 0 6px;font-size:18px}\n  .subtitle{color:#667;margin:2px 0 16px}\n  .row{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px}\n  .pill{background:#f1f4f8;border-radius:999px;padding:8px 12px;display:inline-flex;gap:8px}\n  .pill span{color:#667}\n  .pill b{font-weight:700}\n  .section-title{margin:12px 0 8px;font-weight:600}\n  .event{padding:10px 0;border-top:1px solid #eee}\n  .muted{color:#667}\n  .stage{font-weight:600}\n  .footer{margin-top:18px;color:#889;font-size:12px}\n  @media (prefers-color-scheme: dark) {\n    body{background:#0b0e14}\n    .card{background:#111827;color:#e5e7eb}\n    .pill{background:#1f2937}\n    .muted{color:#a1a1aa}\n    .event{border-top-color:#222}\n  }\n</style>\n<body>\n  <div class=\"card\">\n    <div class=\"logo\">\n      <img src=\"${LOGO_URL}\" alt=\"Ygri CRM logo\" width=\"48\" height=\"48\" />\n    </div>\n    <h1>Daily summary for Ygri CRM</h1>\n    <div class=\"subtitle\">${hEsc(d.date)} · ${hEsc(TIMEZONE_LABEL)}</div>\n    <div class=\"row\">\n      ${pill('Projects', c.projects_created ?? 0)}\n      ${pill('Comments', c.comments_count ?? 0)}\n      ${pill('Stage changes', c.stage_changes ?? 0)}\n    </div>\n    ${events.length ? `<div class=\"section-title\">Recent activity</div>${eventsHtml}` : `<div class=\"section-title\">Recent activity</div><div class=\"muted\">No activity recorded for this day.</div>`}\n    <div class=\"footer\">Have a great day! — Ygri CRM</div>\n  </div>\n</body>\n`;\n\nconst subject = `Daily summary • ${d.date} (${TIMEZONE_LABEL})`;\n\nreturn [{ json: { text, text_plain, html, subject } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        208
+      ],
+      "id": "06b586aa-8666-4ff5-9a28-3020aaf9d82c",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "chatId": "7940168989",
+        "text": "={{$json[\"text\"]}}",
+        "additionalFields": {
+          "parse_mode": "MarkdownV2"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        0,
+        80
+      ],
+      "id": "7ce1a597-7a54-4e71-958b-c1c21e0a5db2",
+      "name": "Send a text message",
+      "webhookId": "f1e0948e-8687-4d6d-9be6-e8ecd2084223",
+      "credentials": {
+        "telegramApi": {
+          "id": "HLiEFjQtpQ3Yc8Sx",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "ygri@interasia.com.co",
+        "toEmail": "gerencia@interasia.com.co",
+        "subject": "={{ $json.subject }}",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        -128
+      ],
+      "id": "149837f9-d1ff-4630-ae0c-c16551531f1a",
+      "name": "Send email",
+      "webhookId": "5af874ed-7fac-430b-a5bf-b3d2a958c3a7",
+      "credentials": {
+        "smtp": {
+          "id": "F9BPFi2pMp0QT9tp",
+          "name": "SMTP account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Cron": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "bef2471d-7307-4465-8b5b-ae80ddc9703a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4aa13fb6f34addcb6657e4f3a4efab48ccc2b475ceb4e80559df58b0ae0950a2"
+  },
+  "id": "PLszJrJ3TNHLR2et",
+  "tags": []
+}

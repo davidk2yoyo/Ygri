@@ -1,0 +1,289 @@
+{
+  "name": "INTERASIA - Email Intelligence Agent v2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "id": "schedule-trigger"
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "simple": false,
+        "options": {
+          "maxResults": 50,
+          "labelIds": [],
+          "q": "is:unread"
+        }
+      },
+      "name": "Gmail - Read New Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "id": "gmail-read",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CONFIGURAR_TU_GMAIL_OAUTH",
+          "name": "asistenteinterasia@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract From and To emails from Gmail headers\nconst headers = $json.payload.headers;\n\nconst extractEmail = (headerName) => {\n  const header = headers.find(h => h.name === headerName);\n  if (!header) return null;\n  const match = header.value.match(/<(.+?)>/);\n  return match ? match[1].toLowerCase().trim() : header.value.toLowerCase().trim();\n};\n\nconst fromEmail = extractEmail('From');\nconst toEmail = extractEmail('To');\nconst subject = headers.find(h => h.name === 'Subject')?.value || '(No subject)';\n\n// Get from name\nconst fromHeader = headers.find(h => h.name === 'From')?.value || '';\nconst fromName = fromHeader.includes('<') ? fromHeader.split('<')[0].trim() : fromEmail;\n\nreturn {\n  json: {\n    from_email: fromEmail,\n    to_email: toEmail,\n    from_name: fromName,\n    subject: subject,\n    thread_id: $json.threadId,\n    message_id: $json.id,\n    snippet: $json.snippet,\n    received_at: new Date(parseInt($json.internalDate)).toISOString(),\n    gmail_payload: $json.payload\n  }\n};"
+      },
+      "name": "Extract Email Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [650, 300],
+      "id": "extract-email"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://axnulnpogemjrzwidtqe.supabase.co/rest/v1/rpc/rpc_match_email_bidirectional",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "p_from_email",
+              "value": "={{ $json.from_email }}"
+            },
+            {
+              "name": "p_to_email",
+              "value": "={{ $json.to_email }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Match Email (Supabase RPC)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [850, 300],
+      "id": "match-email"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge email data with match result\nconst emailData = items[0].json; // From \"Extract Email Data\"\nconst matchResult = items[1].json; // From \"Match Email (Supabase RPC)\"\n\nreturn {\n  json: {\n    ...emailData,\n    match: matchResult\n  }\n};"
+      },
+      "name": "Merge Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1050, 300],
+      "id": "merge-data"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.match.found }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Email Matched?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300],
+      "id": "if-matched"
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.3
+        },
+        "messages": {
+          "values": [
+            {
+              "message": "=Eres un asistente experto en análisis de comunicaciones empresariales.\n\nTipo de contacto: {{ $json.match.type === 'supplier' ? 'Proveedor' : 'Cliente' }}\nDirección: {{ $json.match.direction === 'incoming' ? 'Entrante (te escriben)' : 'Saliente (tú escribes)' }}\n\nAnaliza este email y extrae la siguiente información en formato JSON:\n\n{\n  \"summary\": \"resumen en español de 2-3 líneas del email\",\n  \"sentiment\": \"positive/neutral/negative/urgent\",\n  \"key_topics\": [\"array de temas clave mencionados\"],\n  \"action_items\": [{\"task\": \"descripción de la acción\", \"deadline\": \"YYYY-MM-DD si mencionan\", \"completed\": false}],\n  \"needs_response\": true/false,\n  \"priority\": \"low/normal/high/urgent\",\n  \"extracted_data\": {\n    \"products\": [\"productos mencionados\"],\n    \"prices\": [{\"product\": \"...\", \"price\": 0, \"currency\": \"USD\"}],\n    \"quantities\": [{\"product\": \"...\", \"quantity\": 0}],\n    \"deadlines\": [\"fechas mencionadas\"],\n    \"tracking_numbers\": [\"números de tracking\"],\n    \"issues\": [\"problemas mencionados\"],\n    \"requests\": [\"solicitudes específicas\"]\n  }\n}\n\nEmail:\nDe: {{ $json.from_email }}\nPara: {{ $json.to_email }}\nAsunto: {{ $json.subject }}\nContenido: {{ $json.snippet }}\n\nResponde SOLO con el JSON válido, sin texto adicional ni markdown."
+            }
+          ]
+        }
+      },
+      "name": "AI Analyze Email",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [1450, 200],
+      "id": "ai-analyze",
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_TU_OPENAI_KEY",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parse AI response and prepare for DB insert\nconst aiResponse = $json.message?.content || $json.choices?.[0]?.message?.content || '';\n\nlet aiData;\ntry {\n  // Remove markdown code blocks if present\n  const cleaned = aiResponse.replace(/```json\\n?/g, '').replace(/```\\n?/g, '');\n  aiData = JSON.parse(cleaned);\n} catch (e) {\n  // Fallback if parsing fails\n  aiData = {\n    summary: $json.snippet || 'Error parsing AI response',\n    sentiment: 'neutral',\n    key_topics: [],\n    action_items: [],\n    needs_response: false,\n    priority: 'normal',\n    extracted_data: {}\n  };\n}\n\nreturn {\n  json: {\n    thread_id: items[0].json.thread_id,\n    type: items[0].json.match.type,\n    entity_id: items[0].json.match.entity_id,\n    direction: items[0].json.match.direction,\n    subject: items[0].json.subject,\n    from_email: items[0].json.from_email,\n    from_name: items[0].json.from_name,\n    to_email: items[0].json.to_email,\n    last_message: items[0].json.snippet,\n    last_received_at: items[0].json.received_at,\n    summary: aiData.summary,\n    sentiment: aiData.sentiment,\n    key_topics: JSON.stringify(aiData.key_topics),\n    action_items: JSON.stringify(aiData.action_items),\n    extracted_data: JSON.stringify(aiData.extracted_data),\n    needs_response: aiData.needs_response,\n    priority: aiData.priority\n  }\n};"
+      },
+      "name": "Prepare DB Insert",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1650, 200],
+      "id": "prepare-insert"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO email_threads (\n  thread_id,\n  type,\n  supplier_id,\n  client_id,\n  direction,\n  subject,\n  from_email,\n  from_name,\n  to_email,\n  last_message,\n  last_received_at,\n  summary,\n  sentiment,\n  key_topics,\n  action_items,\n  extracted_data,\n  needs_response,\n  priority\n) VALUES (\n  '{{ $json.thread_id }}',\n  '{{ $json.type }}',\n  {{ $json.type === 'supplier' ? \"'\" + $json.entity_id + \"'\" : 'NULL' }},\n  {{ $json.type === 'client' ? \"'\" + $json.entity_id + \"'\" : 'NULL' }},\n  '{{ $json.direction }}',\n  $${{ $json.subject }}$$,\n  '{{ $json.from_email }}',\n  $${{ $json.from_name }}$$,\n  '{{ $json.to_email }}',\n  $${{ $json.last_message }}$$,\n  '{{ $json.last_received_at }}',\n  $${{ $json.summary }}$$,\n  '{{ $json.sentiment }}',\n  '{{ $json.key_topics }}'::jsonb,\n  '{{ $json.action_items }}'::jsonb,\n  '{{ $json.extracted_data }}'::jsonb,\n  {{ $json.needs_response }},\n  '{{ $json.priority }}'\n)\nON CONFLICT (thread_id) DO UPDATE SET\n  last_message = EXCLUDED.last_message,\n  last_received_at = EXCLUDED.last_received_at,\n  summary = EXCLUDED.summary,\n  sentiment = EXCLUDED.sentiment,\n  key_topics = EXCLUDED.key_topics,\n  action_items = EXCLUDED.action_items,\n  extracted_data = EXCLUDED.extracted_data,\n  needs_response = EXCLUDED.needs_response,\n  priority = EXCLUDED.priority,\n  direction = EXCLUDED.direction,\n  message_count = email_threads.message_count + 1,\n  updated_at = now()\nRETURNING *;"
+      },
+      "name": "Save to Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1850, 200],
+      "id": "save-db",
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURAR_TU_SUPABASE_DB",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.priority }}",
+              "operation": "equals",
+              "value2": "urgent"
+            }
+          ]
+        }
+      },
+      "name": "Is Urgent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [2050, 200],
+      "id": "if-urgent"
+    },
+    {
+      "parameters": {
+        "text": "=🚨 *Email Urgente* 🚨\\n\\n*{{ $json.direction === 'incoming' ? '📥 Recibido de' : '📤 Enviado a' }}:* {{ $json.from_email }}\\n*Tipo:* {{ $json.type === 'supplier' ? 'Proveedor' : 'Cliente' }}\\n*Asunto:* {{ $json.subject }}\\n\\n*Resumen:*\\n{{ $json.summary }}\\n\\n*Action Items:*\\n{{ $json.action_items }}"
+      },
+      "name": "Send Urgent Notification",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [2250, 100],
+      "id": "telegram-urgent",
+      "notes": "Configurar con tu chat ID de Telegram",
+      "credentials": {
+        "telegramApi": {
+          "id": "CONFIGURAR_TELEGRAM",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "messageId": "={{ $item(0).json.message_id }}",
+        "updateFields": {
+          "labelIds": ["UNREAD"]
+        }
+      },
+      "name": "Mark as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [2050, 350],
+      "id": "mark-read",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CONFIGURAR_TU_GMAIL_OAUTH",
+          "name": "asistenteinterasia@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log unmatched email for review\nconsole.log('❌ Email no matcheado:', {\n  from: $json.from_email,\n  to: $json.to_email,\n  subject: $json.subject,\n  match_result: $json.match\n});\n\nreturn {\n  json: {\n    skipped: true,\n    reason: 'No match found in suppliers or clients',\n    email: $json.from_email,\n    subject: $json.subject\n  }\n};"
+      },
+      "name": "Log Unmatched",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1450, 400],
+      "id": "log-unmatched",
+      "notes": "Opcional: guardar en tabla de emails no procesados"
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [[{ "node": "Gmail - Read New Emails", "type": "main", "index": 0 }]]
+    },
+    "Gmail - Read New Emails": {
+      "main": [[{ "node": "Extract Email Data", "type": "main", "index": 0 }]]
+    },
+    "Extract Email Data": {
+      "main": [[{ "node": "Match Email (Supabase RPC)", "type": "main", "index": 0 }]]
+    },
+    "Match Email (Supabase RPC)": {
+      "main": [[{ "node": "Merge Data", "type": "main", "index": 0 }]]
+    },
+    "Merge Data": {
+      "main": [[{ "node": "Email Matched?", "type": "main", "index": 0 }]]
+    },
+    "Email Matched?": {
+      "main": [
+        [{ "node": "AI Analyze Email", "type": "main", "index": 0 }],
+        [{ "node": "Log Unmatched", "type": "main", "index": 0 }]
+      ]
+    },
+    "AI Analyze Email": {
+      "main": [[{ "node": "Prepare DB Insert", "type": "main", "index": 0 }]]
+    },
+    "Prepare DB Insert": {
+      "main": [[{ "node": "Save to Database", "type": "main", "index": 0 }]]
+    },
+    "Save to Database": {
+      "main": [[{ "node": "Is Urgent?", "type": "main", "index": 0 }]]
+    },
+    "Is Urgent?": {
+      "main": [
+        [{ "node": "Send Urgent Notification", "type": "main", "index": 0 }],
+        [{ "node": "Mark as Read", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": ["email", "interasia", "intelligence"],
+  "pinData": {},
+  "meta": {
+    "instanceId": "INTERASIA_EMAIL_INTELLIGENCE_V2"
+  }
+}

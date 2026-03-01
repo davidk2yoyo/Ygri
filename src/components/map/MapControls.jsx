@@ -1,9 +1,11 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 
-export default function MapControls({ 
-  layoutMode, 
+export default function MapControls({
+  layoutMode,
   onLayoutToggle,
+  viewMode,
+  onViewModeToggle,
   densityMode,
   onDensityToggle,
   filters,
@@ -20,6 +22,16 @@ export default function MapControls({
 
   return (
     <div className="flex items-center space-x-3 flex-wrap">
+      {/* View Mode Toggle (Client/Supplier) */}
+      {layoutMode === "hierarchical" && onViewModeToggle && (
+        <button
+          onClick={onViewModeToggle}
+          className="px-2 py-1 bg-purple-600 text-white rounded text-xs hover:bg-purple-700 transition-all duration-200 font-medium"
+        >
+          {viewMode === "client" ? "📊 Client View" : "🏭 Supplier View"}
+        </button>
+      )}
+
       {/* Layout Toggle */}
       <button
         onClick={onLayoutToggle}
@@ -27,43 +39,48 @@ export default function MapControls({
       >
         {layoutMode === "hierarchical" ? t("radial") : t("hierarchical")}
       </button>
-      
-      {/* Density Toggle */}
-      <button
-        onClick={onDensityToggle}
-        className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-all duration-200"
-      >
-        {densityMode === "overview" ? t("details") : t("overview")}
-      </button>
-      
-      {/* Compact Search */}
-      <input
-        type="text"
-        placeholder={t("search")}
-        value={filters.search}
-        onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
-        className="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent w-32"
-      />
-      
-      {/* Active Only Toggle */}
-      <label className="flex items-center space-x-1 text-xs">
-        <input
-          type="checkbox"
-          checked={filters.activeOnly}
-          onChange={(e) => onFilterChange({ ...filters, activeOnly: e.target.checked })}
-          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3"
-        />
-        <span>{t("active")}</span>
-      </label>
-      
-      {/* Focus Mode Button */}
-      <button
-        onClick={() => onFocusMode()}
-        className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all duration-200"
-        title={t("focusMode")}
-      >
-        {t("focus")}
-      </button>
+
+      {/* Show these controls only in radial mode */}
+      {layoutMode === "radial" && (
+        <>
+          {/* Density Toggle */}
+          <button
+            onClick={onDensityToggle}
+            className="px-2 py-1 bg-gray-600 text-white rounded text-xs hover:bg-gray-700 transition-all duration-200"
+          >
+            {densityMode === "overview" ? t("details") : t("overview")}
+          </button>
+
+          {/* Compact Search */}
+          <input
+            type="text"
+            placeholder={t("search")}
+            value={filters.search}
+            onChange={(e) => onFilterChange({ ...filters, search: e.target.value })}
+            className="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-blue-500 focus:border-transparent w-32"
+          />
+
+          {/* Active Only Toggle */}
+          <label className="flex items-center space-x-1 text-xs">
+            <input
+              type="checkbox"
+              checked={filters.activeOnly}
+              onChange={(e) => onFilterChange({ ...filters, activeOnly: e.target.checked })}
+              className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-3 h-3"
+            />
+            <span>{t("active")}</span>
+          </label>
+
+          {/* Focus Mode Button */}
+          <button
+            onClick={() => onFocusMode()}
+            className="px-2 py-1 bg-amber-600 text-white rounded text-xs hover:bg-amber-700 transition-all duration-200"
+            title={t("focusMode")}
+          >
+            {t("focus")}
+          </button>
+        </>
+      )}
       
       {/* Radial Layout Controls - only show when in radial mode */}
       {layoutMode === "radial" && (

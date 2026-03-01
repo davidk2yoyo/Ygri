@@ -72,9 +72,9 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
   }, [isOpen]);
 
   const downloadSample = () => {
-    const sampleData = `company_name,contact_person,email,phone,website,address,remark
-"Acme Corp","John Doe","john@acmecorp.com","+1-555-0123","https://acmecorp.com","123 Main St, City, State 12345","Important client"
-"Tech Solutions","Jane Smith","jane@techsolutions.com","+1-555-0456","https://techsolutions.com","456 Tech Ave, Silicon Valley, CA 94105","New partnership"`;
+    const sampleData = `company_name,contact_person,email,phone,website,address,country,remark
+"Acme Corp","John Doe","john@acmecorp.com","+1-555-0123","https://acmecorp.com","123 Main St, City, State 12345","United States","Important client"
+"Tech Solutions","Jane Smith","jane@techsolutions.com","+1-555-0456","https://techsolutions.com","456 Tech Ave, Silicon Valley, CA 94105","United States","New partnership"`;
     downloadCSV(sampleData, 'clients_sample.csv');
   };
 
@@ -133,6 +133,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
           phone: row.phone?.trim() || null,
           website: row.website?.trim() || null,
           address: row.address?.trim() || null,
+          country: row.country?.trim() || null,
           remark: row.remark?.trim() || null
         }));
 
@@ -279,6 +280,7 @@ export default function ClientsPage() {
     phone: "",
     website: "",
     address: "",
+    country: "",
     remark: ""
   });
   const [formError, setFormError] = useState("");
@@ -293,7 +295,7 @@ export default function ClientsPage() {
       setError("");
       const { data, error } = await supabase
         .from("clients")
-        .select("id, company_name, contact_person, email, phone, website, remark, created_at")
+        .select("id, company_name, contact_person, email, phone, website, address, country, remark, created_at")
         .order("created_at", { ascending: false });
       
       if (error) throw error;
@@ -345,6 +347,7 @@ export default function ClientsPage() {
       phone: "",
       website: "",
       address: "",
+      country: "",
       remark: ""
     });
     setFormError("");
@@ -364,6 +367,7 @@ export default function ClientsPage() {
       phone: client.phone || "",
       website: client.website || "",
       address: client.address || "",
+      country: client.country || "",
       remark: client.remark || ""
     });
     setEditingClient(client);
@@ -395,6 +399,7 @@ export default function ClientsPage() {
         phone: formData.phone.trim() || null,
         website: formData.website.trim() || null,
         address: formData.address.trim() || null,
+        country: formData.country.trim() || null,
         remark: formData.remark.trim() || null
       };
 
@@ -474,9 +479,9 @@ export default function ClientsPage() {
               <button
                 onClick={() => {
                   const csvContent = [
-                    'company_name,contact_person,email,phone,website,address,remark',
-                    ...filteredClients.map(client => 
-                      `"${client.company_name || ''}","${client.contact_person || ''}","${client.email || ''}","${client.phone || ''}","${client.website || ''}","${client.address || ''}","${client.remark || ''}"`
+                    'company_name,contact_person,email,phone,website,address,country,remark',
+                    ...filteredClients.map(client =>
+                      `"${client.company_name || ''}","${client.contact_person || ''}","${client.email || ''}","${client.phone || ''}","${client.website || ''}","${client.address || ''}","${client.country || ''}","${client.remark || ''}"`
                     )
                   ].join('\n');
                   downloadCSV(csvContent, 'clients_export.csv');
@@ -553,6 +558,9 @@ export default function ClientsPage() {
                         {t("website")}
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {t("country")}
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         {t("remark")}
                       </th>
                       <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -588,6 +596,9 @@ export default function ClientsPage() {
                           ) : (
                             <span className="text-gray-900">-</span>
                           )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-gray-900">{client.country || "-"}</div>
                         </td>
                         <td className="px-6 py-4">
                           <div className="text-gray-900 max-w-xs truncate">{client.remark || "-"}</div>
@@ -731,12 +742,23 @@ export default function ClientsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Address
+                      {t("address")}
                     </label>
                     <textarea
                       value={formData.address}
                       onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                       rows="2"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {t("country")}
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.country}
+                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     />
                   </div>

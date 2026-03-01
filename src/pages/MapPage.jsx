@@ -15,6 +15,9 @@ import { supabase } from "../supabaseClient";
 import CompanyNode from "../components/map/CompanyNode";
 import ClientNode from "../components/map/ClientNode";
 import ProjectNode from "../components/map/ProjectNode";
+import QuotationNode from "../components/map/QuotationNode";
+import ProductNode from "../components/map/ProductNode";
+import SupplierNode from "../components/map/SupplierNode";
 
 // Custom Edge Components
 import CustomEdge from "../components/map/CustomEdge";
@@ -29,20 +32,39 @@ import MapControls from "../components/map/MapControls";
 import MapLegend from "../components/map/MapLegend";
 import DetailsPanel from "../components/map/DetailsPanel";
 import SavedViews from "../components/map/SavedViews";
+import HierarchySelector from "../components/map/HierarchySelector";
 
 // Utilities
-import { 
-  fetchMapData, 
-  processMapData, 
-  createTreeLayout, 
-  createRadialLayout 
+import {
+  fetchMapData,
+  processMapData,
+  createTreeLayout,
+  createRadialLayout
 } from "../utils/mapUtils";
 import { createELKTreeLayout } from "../utils/elkTreeLayout";
+import {
+  fetchHierarchicalMapData,
+  buildClientHierarchy,
+  buildSupplierHierarchy
+} from "../utils/hierarchicalMapUtils";
+import {
+  createClientHierarchicalLayout,
+  createSupplierHierarchicalLayout
+} from "../utils/hierarchicalLayout";
+import {
+  filterHierarchy,
+  getSingleItemHierarchy,
+  createCompactClientLayout,
+  createCompactSupplierLayout
+} from "../utils/compactHierarchicalLayout";
 
 const nodeTypes = {
   company: CompanyNode,
   client: ClientNode,
   project: ProjectNode,
+  quotation: QuotationNode,
+  product: ProductNode,
+  supplier: SupplierNode,
   treeClient: TreeClientNode,
   treeProject: TreeProjectNode,
 };
@@ -71,7 +93,8 @@ function MapPageInner() {
   const [error, setError] = useState("");
 
   // View State
-  const [layoutMode, setLayoutMode] = useState("radial"); // hierarchical | radial
+  const [layoutMode, setLayoutMode] = useState("hierarchical"); // hierarchical | radial
+  const [viewMode, setViewMode] = useState("client"); // client | supplier (for hierarchical mode)
   const [densityMode, setDensityMode] = useState("overview"); // overview | details
   const [zoomLevel, setZoomLevel] = useState(1);
   const [selectedNode, setSelectedNode] = useState(null);
@@ -81,6 +104,12 @@ function MapPageInner() {
   const [focusedNodeId, setFocusedNodeId] = useState(null);
   const [clickedNodeId, setClickedNodeId] = useState(null);
   const [legendCollapsed, setLegendCollapsed] = useState(false);
+
+  // Hierarchical data
+  const [hierarchicalData, setHierarchicalData] = useState(null);
+  const [selectedHierarchyId, setSelectedHierarchyId] = useState(null); // Selected client/supplier ID
+  const [showHierarchySidebar, setShowHierarchySidebar] = useState(true); // Show/hide sidebar
+  const [shouldAutoZoom, setShouldAutoZoom] = useState(false); // Control auto-zoom
 
   // Radial Layout Parameters
   const [projectsOutside, setProjectsOutside] = useState(true);
@@ -107,12 +136,18 @@ function MapPageInner() {
     try {
       setLoading(true);
       setError("");
-      
-      const data = await fetchMapData();
-      const processed = processMapData(data);
-      
-      setRawData(data);
+
+      // Load both regular and hierarchical data
+      const [regularData, hierData] = await Promise.all([
+        fetchMapData(),
+        fetchHierarchicalMapData()
+      ]);
+
+      const processed = processMapData(regularData);
+
+      setRawData(regularData);
       setProcessedData(processed);
+      setHierarchicalData(hierData);
     } catch (err) {
       setError(err.message);
       console.error("Map data loading error:", err);
@@ -124,19 +159,42 @@ function MapPageInner() {
 
   // Generate visualization
   const generateVisualization = useCallback(async () => {
-    if (!processedData) return;
+    if (!processedData && !hierarchicalData) return;
 
     let newNodes, newEdges;
-    
-    if (layoutMode === "hierarchical") {
-      // Use ELK for professional hierarchical layout
+
+    if (layoutMode === "hierarchical" && hierarchicalData) {
+      // Only show map if a client/supplier is selected
+      if (!selectedHierarchyId) {
+        // Show empty state - no nodes until selection
+        newNodes = [];
+        newEdges = [];
+      } else {
+        // Use new compact hierarchical layouts with quotations and suppliers
+        let hierarchy = viewMode === "client"
+          ? buildClientHierarchy(hierarchicalData)
+          : buildSupplierHierarchy(hierarchicalData);
+
+        // Show only the selected item
+        hierarchy = getSingleItemHierarchy(hierarchy, selectedHierarchyId, viewMode);
+
+        // Use compact single-column layout
+        const result = viewMode === "client"
+          ? createCompactClientLayout(hierarchy, { maxClientsPerRow: 1 })
+          : createCompactSupplierLayout(hierarchy, { maxSuppliersPerRow: 1 });
+
+        newNodes = result.nodes;
+        newEdges = result.edges;
+      }
+    } else if (layoutMode === "hierarchical" && processedData) {
+      // Fallback to ELK layout if hierarchical data not loaded
       const result = await createELKTreeLayout(processedData, filters, collapsedClients, { densityMode, zoomLevel });
       newNodes = result.nodes;
       newEdges = result.edges;
     } else {
       // Use existing radial layout with new parameters
-      const result = createRadialLayout(processedData, filters, collapsedClients, { 
-        densityMode, 
+      const result = createRadialLayout(processedData, filters, collapsedClients, {
+        densityMode,
         zoomLevel,
         projectsOutside,
         density,
@@ -251,22 +309,32 @@ function MapPageInner() {
 
     setNodes(processedNodes);
     setEdges(processedEdges);
-    
-    // Auto-fit view only on initial load or layout mode change
-    if (nodes.length === 0) {
+
+    // Only auto-zoom when flag is set (when selection changes)
+    if (shouldAutoZoom && newNodes.length > 0) {
       setTimeout(() => {
-        reactFlow.fitView({ 
-          padding: 0.15, 
-          duration: 300 
+        reactFlow.fitView({
+          padding: 0.15,
+          duration: 400,
+          minZoom: 0.5,
+          maxZoom: 1.5
         });
-      }, 100);
+        setShouldAutoZoom(false); // Reset flag after zoom
+      }, 150);
     }
-  }, [processedData, layoutMode, filters, collapsedClients, densityMode, zoomLevel, focusedNodeId, clickedNodeId, projectsOutside, density, maxProjectsPerRing, reactFlow]);
+  }, [processedData, hierarchicalData, layoutMode, viewMode, selectedHierarchyId, filters, collapsedClients, densityMode, zoomLevel, focusedNodeId, clickedNodeId, projectsOutside, density, maxProjectsPerRing, reactFlow, shouldAutoZoom]);
 
   // Effects
   useEffect(() => {
     loadMapData();
   }, [loadMapData]);
+
+  // Trigger auto-zoom when hierarchy selection changes
+  useEffect(() => {
+    if (selectedHierarchyId) {
+      setShouldAutoZoom(true);
+    }
+  }, [selectedHierarchyId, viewMode]);
 
   useEffect(() => {
     generateVisualization().catch(console.error);
@@ -543,10 +611,45 @@ function MapPageInner() {
     );
   }
 
+  // Build hierarchy for sidebar
+  const sidebarHierarchy = hierarchicalData ? (
+    viewMode === "client"
+      ? buildClientHierarchy(hierarchicalData)
+      : buildSupplierHierarchy(hierarchicalData)
+  ) : [];
+
   return (
-    <div className="h-screen w-full relative bg-gray-50 dark:bg-gray-900 font-urbanist">
-      {/* Main ReactFlow Canvas */}
-      <ReactFlow
+    <div className="h-screen w-full relative bg-gray-50 dark:bg-gray-900 font-urbanist flex">
+      {/* Hierarchy Selector Sidebar - Only show in hierarchical mode */}
+      {layoutMode === "hierarchical" && showHierarchySidebar && (
+        <HierarchySelector
+          viewMode={viewMode}
+          hierarchy={sidebarHierarchy}
+          selectedId={selectedHierarchyId}
+          onSelect={(id) => setSelectedHierarchyId(id)}
+          onClose={() => setShowHierarchySidebar(false)}
+        />
+      )}
+
+      {/* Main Map Container */}
+      <div className="flex-1 relative">
+        {/* Empty State Message - shown when no client/supplier selected */}
+        {layoutMode === "hierarchical" && !selectedHierarchyId && nodes.length === 0 && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <div className="text-center p-8 bg-white/80 dark:bg-darkblack-600/80 backdrop-blur-sm rounded-2xl shadow-lg max-w-md">
+              <div className="text-6xl mb-4">👈</div>
+              <h3 className="text-xl font-semibold text-darkblack-700 dark:text-white mb-2">
+                {viewMode === 'client' ? 'Select a Client' : 'Select a Supplier'}
+              </h3>
+              <p className="text-bgray-600 dark:text-bgray-400">
+                Choose a {viewMode === 'client' ? 'client' : 'supplier'} from the list on the left to view their complete hierarchy
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Main ReactFlow Canvas */}
+        <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -588,6 +691,8 @@ function MapPageInner() {
         <Panel position="top-center" className="flex items-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md p-2 border border-gray-200 dark:border-gray-700">
           <MapControls
             layoutMode={layoutMode}
+            viewMode={viewMode}
+            onViewModeToggle={() => setViewMode(prev => prev === "client" ? "supplier" : "client")}
             densityMode={densityMode}
             filters={filters}
             onLayoutToggle={handleLayoutToggle}
@@ -665,6 +770,7 @@ function MapPageInner() {
         }}
         onFocusNode={handleFocusMode}
       />
+      </div>
     </div>
   );
 }

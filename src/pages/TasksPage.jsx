@@ -126,9 +126,13 @@ export default function TasksPage() {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [clientFilter, setClientFilter] = useState("all");
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
   const [newTask, setNewTask] = useState({ title: "", due_date: "" });
   const [projects, setProjects] = useState([]);
   const [stages, setStages] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [assignees, setAssignees] = useState([]);
   const [selectedStageId, setSelectedStageId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
@@ -186,6 +190,7 @@ export default function TasksPage() {
           stage_name: template.name ?? "",
           track_name: track.name ?? "",
           track_id: track.id ?? null,
+          client_id: track.client_id ?? null,
           client_name: client.company_name ?? "",
           creator_name: creator.full_name ?? "",
           assignee_name: assignee.full_name ?? "",
@@ -193,6 +198,26 @@ export default function TasksPage() {
       });
 
       setTasks(mapped);
+
+      // Set unique clients and assignees for filters
+      const uniqueClients = Array.from(
+        new Map(
+          (clientsRes.data || [])
+            .filter((c) => mapped.some((t) => t.client_id === c.id))
+            .map((c) => [c.id, { id: c.id, name: c.company_name }])
+        ).values()
+      ).sort((a, b) => a.name.localeCompare(b.name));
+
+      const uniqueAssignees = Array.from(
+        new Map(
+          (profilesRes.data || [])
+            .filter((p) => mapped.some((t) => t.assignee_user_id === p.id))
+            .map((p) => [p.id, { id: p.id, name: p.full_name || "Unknown" }])
+        ).values()
+      ).sort((a, b) => a.name.localeCompare(b.name));
+
+      setClients(uniqueClients);
+      setAssignees(uniqueAssignees);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -279,12 +304,18 @@ export default function TasksPage() {
   const filtered = tasks.filter((t) => {
     const status = getTaskStatus(t);
     const matchFilter = filter === "all" || status === filter;
+    const matchClient = clientFilter === "all" || t.client_id === clientFilter;
+    const matchAssignee =
+      assigneeFilter === "all" ||
+      (assigneeFilter === "unassigned" && !t.assignee_user_id) ||
+      t.assignee_user_id === assigneeFilter;
     const matchSearch =
       !search ||
       t.title.toLowerCase().includes(search.toLowerCase()) ||
       t.track_name.toLowerCase().includes(search.toLowerCase()) ||
-      t.stage_name.toLowerCase().includes(search.toLowerCase());
-    return matchFilter && matchSearch;
+      t.stage_name.toLowerCase().includes(search.toLowerCase()) ||
+      t.client_name.toLowerCase().includes(search.toLowerCase());
+    return matchFilter && matchClient && matchAssignee && matchSearch;
   });
 
   const counts = {
@@ -405,18 +436,50 @@ export default function TasksPage() {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="relative mb-4">
-        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search tasks, projects, stages..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      {/* Filters and Search */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+        {/* Search */}
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search tasks, projects, stages, clients..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* Client Filter */}
+        <select
+          value={clientFilter}
+          onChange={(e) => setClientFilter(e.target.value)}
+          className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Clients</option>
+          {clients.map((client) => (
+            <option key={client.id} value={client.id}>
+              {client.name}
+            </option>
+          ))}
+        </select>
+
+        {/* Assignee Filter */}
+        <select
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.target.value)}
+          className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Assignees</option>
+          <option value="unassigned">Unassigned</option>
+          {assignees.map((assignee) => (
+            <option key={assignee.id} value={assignee.id}>
+              {assignee.name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Error */}

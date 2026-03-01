@@ -256,36 +256,115 @@ function CalendarWidget({ todos, onDateClick }) {
 }
 
 // ─── Latest Todos Widget ──────────────────────────────────────────
-function LatestTodosWidget({ todos, projects, onTodoClick }) {
+function LatestTodosWidget({ todos, projects, clients, assignees, onTodoClick, onToggleTodo, busy }) {
   const { t } = useTranslation();
+  const [assigneeFilter, setAssigneeFilter] = useState("all");
   const today = new Date().toISOString().split("T")[0];
-  const recentTodos = todos.sort((a, b) => new Date(b.created_at || b.due_date) - new Date(a.created_at || a.due_date)).slice(0, 5);
+
+  // Filter by assignee
+  const filteredTodos = todos.filter((todo) => {
+    if (assigneeFilter === "all") return true;
+    if (assigneeFilter === "unassigned") return !todo.assignee_user_id;
+    return todo.assignee_user_id === assigneeFilter;
+  });
+
+  const recentTodos = filteredTodos
+    .sort((a, b) => new Date(b.created_at || b.due_date) - new Date(a.created_at || a.due_date))
+    .slice(0, 5);
 
   return (
     <div className="bg-white dark:bg-darkblack-600 rounded-2xl border border-bgray-100 dark:border-darkblack-400 p-5 shadow-sm">
-      <SectionHeader title="Latest To-do's" badge={`${recentTodos.length} items`} />
+      <SectionHeader title="Latest To-do's" badge={`${recentTodos.length} items`}>
+        {/* Assignee Filter */}
+        <select
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.target.value)}
+          className="text-xs px-2 py-1 rounded-lg border border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+          <option value="all">All Assignees</option>
+          <option value="unassigned">Unassigned</option>
+          {assignees.map((assignee) => (
+            <option key={assignee.id} value={assignee.id}>
+              {assignee.name}
+            </option>
+          ))}
+        </select>
+      </SectionHeader>
       <div className="space-y-2 max-h-[260px] overflow-y-auto scrollbar-thin pr-1">
         {recentTodos.map((todo) => {
           const isOverdue = todo.due_date && todo.due_date < today && !todo.is_done;
           const isDueToday = todo.due_date === today;
           const project = projects.find((p) => p.track_id === todo.track_id);
+          const client = clients.find((c) => c.id === project?.client_id);
+          const assignee = assignees.find((a) => a.id === todo.assignee_user_id);
 
           return (
             <div
               key={todo.id}
-              onClick={() => onTodoClick?.(todo)}
-              className="group flex items-start gap-3 p-3 rounded-xl bg-bgray-50 dark:bg-darkblack-500 hover:bg-violet-50 dark:hover:bg-violet-900/20 border border-transparent hover:border-violet-200 dark:hover:border-violet-800 transition-all duration-200 cursor-pointer"
+              className={`group flex items-start gap-2 p-3 rounded-xl transition-all duration-200 border ${
+                todo.is_done
+                  ? "bg-bgray-50/50 dark:bg-darkblack-500/50 border-transparent opacity-60"
+                  : isOverdue
+                  ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
+                  : "bg-bgray-50 dark:bg-darkblack-500 border-transparent hover:border-violet-200 dark:hover:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+              }`}
             >
-              {/* Priority dot */}
-              <div className={`flex-shrink-0 mt-1 w-2.5 h-2.5 rounded-full ${isOverdue ? "bg-red-500 shadow-sm shadow-red-500/50" : isDueToday ? "bg-orange-500 shadow-sm shadow-orange-500/50" : "bg-blue-500"}`} />
+              {/* Checkbox */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onToggleTodo?.(todo.id, todo.is_done);
+                }}
+                disabled={busy}
+                className={`flex-shrink-0 mt-0.5 w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors ${
+                  todo.is_done
+                    ? "bg-emerald-500 border-emerald-500"
+                    : "border-bgray-300 dark:border-bgray-600 hover:border-emerald-500"
+                }`}
+              >
+                {todo.is_done && (
+                  <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+              </button>
 
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-darkblack-700 dark:text-white truncate">{todo.title}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  {project && <span className="text-xs text-bgray-500 dark:text-bgray-400 truncate">{project.track_name}</span>}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => onTodoClick?.(todo)}
+              >
+                <p className={`font-semibold text-sm truncate ${todo.is_done ? "line-through text-bgray-400 dark:text-bgray-500" : "text-darkblack-700 dark:text-white"}`}>
+                  {todo.title}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                  {/* Client */}
+                  {client && (
+                    <span className="inline-flex items-center gap-0.5 text-xs text-blue-600 dark:text-blue-400">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                      </svg>
+                      {client.company_name}
+                    </span>
+                  )}
+                  {/* Project */}
+                  {project && (
+                    <span className="text-xs text-bgray-500 dark:text-bgray-400 truncate">
+                      {project.track_name}
+                    </span>
+                  )}
+                  {/* Due date */}
                   {todo.due_date && (
-                    <span className={`text-xs font-medium ${isOverdue ? "text-red-600" : isDueToday ? "text-orange-600" : "text-bgray-400"}`}>
+                    <span className={`text-xs ${isOverdue && !todo.is_done ? "text-red-600 font-medium" : isDueToday ? "text-orange-600" : "text-bgray-400"}`}>
                       • {todo.due_date}
+                    </span>
+                  )}
+                  {/* Assignee */}
+                  {assignee && (
+                    <span className="inline-flex items-center gap-0.5 text-xs text-violet-600 dark:text-violet-400">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      {assignee.name}
                     </span>
                   )}
                 </div>
@@ -442,11 +521,13 @@ export default function DashboardPage() {
     clients: [],
     todos: [],
     comments: [],
+    assignees: [],
     metrics: { activeProjects: 0, totalClients: 0, avgProgress: 0, overdueItems: 0 },
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selectedDateForTodos, setSelectedDateForTodos] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   const fetchDashboardData = async () => {
     try {
@@ -458,6 +539,9 @@ export default function DashboardPage() {
 
       const { data: clients, error: clientsError } = await supabase.from("clients").select("*").order("created_at", { ascending: false }).limit(10);
       if (clientsError) throw clientsError;
+
+      const { data: profiles, error: profilesError } = await supabase.from("profiles").select("id, full_name").order("full_name");
+      const assignees = (profiles || []).map((p) => ({ id: p.id, name: p.full_name || "Unknown" }));
 
       let todos = [];
       let comments = [];
@@ -524,6 +608,7 @@ export default function DashboardPage() {
         clients: clients || [],
         todos,
         comments,
+        assignees,
         metrics: { activeProjects, totalClients, avgProgress: Math.round(avgProgress), overdueItems },
       });
     } catch (err) {
@@ -544,6 +629,17 @@ export default function DashboardPage() {
   const handleCommentClick = (comment) => {
     if (comment.track_id && comment.track_stage_id) navigate("/projects", { state: { activeTrackId: comment.track_id, selectedStageId: comment.track_stage_id } });
     else navigate("/projects");
+  };
+  const handleToggleTodo = async (todoId, currentDone) => {
+    try {
+      setBusy(true);
+      await supabase.rpc("update_stage_todo", { p_todo_id: todoId, p_done: !currentDone });
+      await fetchDashboardData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading) {
@@ -583,7 +679,15 @@ export default function DashboardPage() {
           {/* Left column */}
           <div className="space-y-4">
             <ActiveProjectsWidget projects={dashboardData.projects} onProjectClick={handleProjectClick} />
-            <LatestTodosWidget todos={dashboardData.todos} projects={dashboardData.projects} onTodoClick={handleTodoClick} />
+            <LatestTodosWidget
+              todos={dashboardData.todos}
+              projects={dashboardData.projects}
+              clients={dashboardData.clients}
+              assignees={dashboardData.assignees}
+              onTodoClick={handleTodoClick}
+              onToggleTodo={handleToggleTodo}
+              busy={busy}
+            />
           </div>
 
           {/* Right column */}

@@ -118,9 +118,9 @@ export default function YgriAiChat() {
           </div>
 
           {/* Inline full chat — fills remaining space */}
-          <div className="flex-1 overflow-hidden" style={{ minHeight: 0, height: "100%", display: "flex", flexDirection: "column" }}>
+          <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
             <FullPageChat
-              style={{ flex: 1, height: "100%", width: "100%", minHeight: 0 }}
+              style={{ flex: 1, width: "100%", height: "100%", minHeight: 0 }}
               chatflowid="6f481b22-c059-47a7-a421-3ca1c81d6ed3"
               apiHost="https://flowise.heruba.guru"
               theme={{

@@ -1,0 +1,288 @@
+{
+  "name": "INTERASIA - Email Intelligence Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "name": "Every 15 minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "simple": false,
+        "options": {
+          "maxResults": 50,
+          "labelIds": [],
+          "q": "is:unread"
+        }
+      },
+      "name": "Gmail - Read New Emails",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "CONFIGURAR_TU_GMAIL_OAUTH",
+          "name": "asistenteinterasia@gmail.com"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.payload.headers.find(h => h.name === 'To').value }}",
+              "operation": "contains",
+              "value2": "suppliers@interasia.com.co"
+            }
+          ]
+        }
+      },
+      "name": "Is Supplier Email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.3
+        },
+        "messages": {
+          "values": [
+            {
+              "message": "=Eres un asistente experto en supply chain y comunicación con proveedores de China.\n\nAnaliza este email y extrae la siguiente información en formato JSON:\n\n{\n  \"supplier_name\": \"nombre del proveedor si se identifica\",\n  \"products\": [\"lista de productos o SKUs mencionados\"],\n  \"prices\": [{\"product\": \"...\", \"price\": 0, \"currency\": \"USD\"}],\n  \"lead_time_days\": 0,\n  \"tracking_number\": \"si mencionan tracking\",\n  \"quality_issue\": true/false,\n  \"moq\": 0,\n  \"summary\": \"resumen en español de 2-3 líneas\",\n  \"sentiment\": \"positive/neutral/negative/urgent\",\n  \"key_topics\": [\"array de temas clave\"],\n  \"action_items\": [{\"task\": \"...\", \"deadline\": \"YYYY-MM-DD\", \"completed\": false}],\n  \"needs_response\": true/false,\n  \"priority\": \"low/normal/high/urgent\"\n}\n\nEmail:\nFrom: {{ $json.payload.headers.find(h => h.name === 'From').value }}\nSubject: {{ $json.payload.headers.find(h => h.name === 'Subject').value }}\nBody: {{ $json.snippet }}\n\nResponde SOLO con el JSON, sin texto adicional."
+            }
+          ]
+        }
+      },
+      "name": "AI Analyze - Supplier Email",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [850, 200],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_TU_OPENAI_KEY",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.3
+        },
+        "messages": {
+          "values": [
+            {
+              "message": "=Eres un asistente experto en gestión de proyectos y comunicación con clientes.\n\nAnaliza este email y extrae la siguiente información en formato JSON:\n\n{\n  \"client_name\": \"nombre del cliente si se identifica\",\n  \"project_name\": \"nombre/código del proyecto mencionado\",\n  \"requested_products\": [\"lista de productos solicitados\"],\n  \"budget_mentioned\": 0,\n  \"deadline\": \"YYYY-MM-DD si mencionan fecha\",\n  \"approval_status\": \"pending/approved/rejected\",\n  \"complaint\": true/false,\n  \"summary\": \"resumen en español de 2-3 líneas\",\n  \"sentiment\": \"positive/neutral/negative/urgent\",\n  \"key_topics\": [\"array de temas clave\"],\n  \"action_items\": [{\"task\": \"...\", \"deadline\": \"YYYY-MM-DD\", \"completed\": false}],\n  \"needs_response\": true/false,\n  \"priority\": \"low/normal/high/urgent\"\n}\n\nEmail:\nFrom: {{ $json.payload.headers.find(h => h.name === 'From').value }}\nSubject: {{ $json.payload.headers.find(h => h.name === 'Subject').value }}\nBody: {{ $json.snippet }}\n\nResponde SOLO con el JSON, sin texto adicional."
+            }
+          ]
+        }
+      },
+      "name": "AI Analyze - Client Email",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [850, 400],
+      "credentials": {
+        "openAiApi": {
+          "id": "CONFIGURAR_TU_OPENAI_KEY",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO email_threads (\n  thread_id,\n  type,\n  supplier_id,\n  subject,\n  from_email,\n  from_name,\n  to_email,\n  last_message,\n  last_received_at,\n  summary,\n  sentiment,\n  key_topics,\n  action_items,\n  extracted_data,\n  needs_response,\n  priority\n) VALUES (\n  '{{ $json.threadId }}',\n  'supplier',\n  (SELECT id FROM suppliers WHERE email ILIKE '%{{ $json.ai_analysis.supplier_name }}%' LIMIT 1),\n  '{{ $json.payload.headers.find(h => h.name === \"Subject\").value }}',\n  '{{ $json.payload.headers.find(h => h.name === \"From\").value }}',\n  '{{ $json.payload.headers.find(h => h.name === \"From\").value.split(\"<\")[0].trim() }}',\n  'suppliers@interasia.com.co',\n  '{{ $json.snippet }}',\n  to_timestamp({{ $json.internalDate }}/1000),\n  '{{ $json.ai_analysis.summary }}',\n  '{{ $json.ai_analysis.sentiment }}',\n  '{{ JSON.stringify($json.ai_analysis.key_topics) }}',\n  '{{ JSON.stringify($json.ai_analysis.action_items) }}',\n  '{{ JSON.stringify($json.ai_analysis) }}',\n  {{ $json.ai_analysis.needs_response }},\n  '{{ $json.ai_analysis.priority }}'\n)\nON CONFLICT (thread_id) DO UPDATE SET\n  last_message = EXCLUDED.last_message,\n  last_received_at = EXCLUDED.last_received_at,\n  summary = EXCLUDED.summary,\n  sentiment = EXCLUDED.sentiment,\n  key_topics = EXCLUDED.key_topics,\n  action_items = EXCLUDED.action_items,\n  extracted_data = EXCLUDED.extracted_data,\n  needs_response = EXCLUDED.needs_response,\n  priority = EXCLUDED.priority,\n  message_count = email_threads.message_count + 1,\n  updated_at = now()\nRETURNING *;"
+      },
+      "name": "Supabase - Save Supplier Thread",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 200],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURAR_TU_SUPABASE_DB",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "=INSERT INTO email_threads (\n  thread_id,\n  type,\n  client_id,\n  subject,\n  from_email,\n  from_name,\n  to_email,\n  last_message,\n  last_received_at,\n  summary,\n  sentiment,\n  key_topics,\n  action_items,\n  extracted_data,\n  needs_response,\n  priority\n) VALUES (\n  '{{ $json.threadId }}',\n  'client',\n  (SELECT id FROM clients WHERE name ILIKE '%{{ $json.ai_analysis.client_name }}%' LIMIT 1),\n  '{{ $json.payload.headers.find(h => h.name === \"Subject\").value }}',\n  '{{ $json.payload.headers.find(h => h.name === \"From\").value }}',\n  '{{ $json.payload.headers.find(h => h.name === \"From\").value.split(\"<\")[0].trim() }}',\n  'proyectos@interasia.com.co',\n  '{{ $json.snippet }}',\n  to_timestamp({{ $json.internalDate }}/1000),\n  '{{ $json.ai_analysis.summary }}',\n  '{{ $json.ai_analysis.sentiment }}',\n  '{{ JSON.stringify($json.ai_analysis.key_topics) }}',\n  '{{ JSON.stringify($json.ai_analysis.action_items) }}',\n  '{{ JSON.stringify($json.ai_analysis) }}',\n  {{ $json.ai_analysis.needs_response }},\n  '{{ $json.ai_analysis.priority }}'\n)\nON CONFLICT (thread_id) DO UPDATE SET\n  last_message = EXCLUDED.last_message,\n  last_received_at = EXCLUDED.last_received_at,\n  summary = EXCLUDED.summary,\n  sentiment = EXCLUDED.sentiment,\n  key_topics = EXCLUDED.key_topics,\n  action_items = EXCLUDED.action_items,\n  extracted_data = EXCLUDED.extracted_data,\n  needs_response = EXCLUDED.needs_response,\n  priority = EXCLUDED.priority,\n  message_count = email_threads.message_count + 1,\n  updated_at = now()\nRETURNING *;"
+      },
+      "name": "Supabase - Save Client Thread",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 1,
+      "position": [1050, 400],
+      "credentials": {
+        "postgres": {
+          "id": "CONFIGURAR_TU_SUPABASE_DB",
+          "name": "Supabase PostgreSQL"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.ai_analysis.priority === 'urgent' || $json.ai_analysis.needs_response }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Is Urgent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "text": "=🚨 Email Urgente Detectado\\n\\nDe: {{ $json.from_email }}\\nAsunto: {{ $json.subject }}\\nTipo: {{ $json.type }}\\n\\nResumen: {{ $json.summary }}\\n\\nAction Items: {{ JSON.stringify($json.action_items, null, 2) }}"
+      },
+      "name": "Send Notification (Configurar)",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [1450, 250],
+      "notes": "Puedes cambiar a Slack, Discord, Email, etc."
+    },
+    {
+      "parameters": {},
+      "name": "Mark as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 1,
+      "position": [1250, 500],
+      "notes": "Opcional: marcar como leído después de procesar"
+    }
+  ],
+  "connections": {
+    "Every 15 minutes": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Read New Emails",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Read New Emails": {
+      "main": [
+        [
+          {
+            "node": "Is Supplier Email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Supplier Email?": {
+      "main": [
+        [
+          {
+            "node": "AI Analyze - Supplier Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Analyze - Client Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze - Supplier Email": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Save Supplier Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Analyze - Client Email": {
+      "main": [
+        [
+          {
+            "node": "Supabase - Save Client Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Save Supplier Thread": {
+      "main": [
+        [
+          {
+            "node": "Is Urgent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase - Save Client Thread": {
+      "main": [
+        [
+          {
+            "node": "Is Urgent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Urgent?": {
+      "main": [
+        [
+          {
+            "node": "Send Notification (Configurar)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "pinData": {},
+  "meta": {
+    "instanceId": "INTERASIA_EMAIL_INTELLIGENCE"
+  }
+}

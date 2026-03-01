@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
+import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
 
 const EMPTY_SUPPLIER = { name: "", address: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" };
 
-function SupplierModal({ supplier, onClose, onSaved }) {
+function SupplierDrawer({ supplier, onClose, onSaved }) {
   const [form, setForm] = useState(supplier ? { ...supplier } : { ...EMPTY_SUPPLIER });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("details");
 
   const isNew = !supplier?.id;
 
@@ -55,15 +57,15 @@ function SupplierModal({ supplier, onClose, onSaved }) {
   ];
 
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
       <div
-        className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-lg mx-4"
+        className="bg-white dark:bg-darkblack-600 rounded-t-2xl sm:rounded-2xl shadow-2xl w-full sm:max-w-4xl sm:mx-4 max-h-[90vh] flex flex-col"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-bgray-200 dark:border-darkblack-400">
           <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">
-            {isNew ? "New Supplier" : "Edit Supplier"}
+            {isNew ? "New Supplier" : supplier.name}
           </h2>
           <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -72,57 +74,91 @@ function SupplierModal({ supplier, onClose, onSaved }) {
           </button>
         </div>
 
-        {/* Form */}
-        <div className="p-6 space-y-4">
-          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+        {/* Tabs */}
+        <div className="flex items-center gap-1 px-6 border-b border-bgray-200 dark:border-darkblack-400">
+          <button
+            onClick={() => setActiveTab("details")}
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+              activeTab === "details"
+                ? "border-primary text-primary"
+                : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+            }`}
+          >
+            Details
+          </button>
+          {!isNew && (
+            <button
+              onClick={() => setActiveTab("documents")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "documents"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Documents
+            </button>
+          )}
+        </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {fields.map(({ key, label, placeholder, type }) => (
-              <div key={key} className={key === "name" || key === "address" ? "col-span-2" : ""}>
-                <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
-                  {label}
-                </label>
-                <input
-                  type={type}
-                  value={form[key]}
-                  onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                  placeholder={placeholder}
-                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                />
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === "details" ? (
+            <div className="p-6 space-y-4">
+              {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+
+              <div className="grid grid-cols-2 gap-4">
+                {fields.map(({ key, label, placeholder, type }) => (
+                  <div key={key} className={key === "name" || key === "address" ? "col-span-2" : ""}>
+                    <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
+                      {label}
+                    </label>
+                    <input
+                      type={type}
+                      value={form[key]}
+                      onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
+                      placeholder={placeholder}
+                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                    />
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ) : (
+            <SupplierDocumentsTab supplierId={supplier.id} />
+          )}
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between p-6 border-t border-bgray-200 dark:border-darkblack-400">
-          <div>
-            {!isNew && (
+        {/* Footer - only show for details tab */}
+        {activeTab === "details" && (
+          <div className="flex items-center justify-between p-6 border-t border-bgray-200 dark:border-darkblack-400">
+            <div>
+              {!isNew && (
+                <button
+                  onClick={handleDelete}
+                  disabled={busy}
+                  className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+            <div className="flex gap-3">
               <button
-                onClick={handleDelete}
-                disabled={busy}
-                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition disabled:opacity-50"
+                onClick={onClose}
+                className="px-4 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-bgray-600 dark:text-bgray-300 hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition"
               >
-                Delete
+                Cancel
               </button>
-            )}
+              <button
+                onClick={handleSave}
+                disabled={!form.name.trim() || busy}
+                className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition"
+              >
+                {busy ? "Saving..." : isNew ? "Add Supplier" : "Save Changes"}
+              </button>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-bgray-600 dark:text-bgray-300 hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!form.name.trim() || busy}
-              className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition"
-            >
-              {busy ? "Saving..." : isNew ? "Add Supplier" : "Save Changes"}
-            </button>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );
@@ -326,9 +362,9 @@ export default function SuppliersPage() {
         </div>
       )}
 
-      {/* Modal */}
+      {/* Drawer */}
       {modalSupplier !== undefined && (
-        <SupplierModal
+        <SupplierDrawer
           supplier={modalSupplier}
           onClose={() => setModalSupplier(undefined)}
           onSaved={handleSaved}

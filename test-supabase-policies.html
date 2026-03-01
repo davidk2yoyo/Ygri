@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Supabase Policies</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+    <h1>Supabase Policies Test</h1>
+    <div id="result"></div>
+
+    <script>
+        const supabaseUrl = 'https://axnulnpogemjrzwidtqe.supabase.co';
+        const supabaseKey = 'YOUR_ANON_KEY_HERE'; // Replace with your anon key from .env
+        const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+        async function testPolicies() {
+            const resultDiv = document.getElementById('result');
+
+            // Test 1: Check if table exists and can query
+            try {
+                const { data, error } = await supabase
+                    .from('supplier_documents')
+                    .select('*')
+                    .limit(1);
+
+                if (error) {
+                    resultDiv.innerHTML += `<p style="color: red;">❌ Error querying supplier_documents: ${error.message}</p>`;
+                    console.error('Error:', error);
+                } else {
+                    resultDiv.innerHTML += `<p style="color: green;">✅ Can query supplier_documents table</p>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML += `<p style="color: red;">❌ Exception: ${e.message}</p>`;
+            }
+
+            // Test 2: Check authentication status
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                resultDiv.innerHTML += `<p style="color: green;">✅ User is authenticated: ${user.email}</p>`;
+            } else {
+                resultDiv.innerHTML += `<p style="color: orange;">⚠️ User is NOT authenticated - this might be the issue!</p>`;
+            }
+        }
+
+        testPolicies();
+    </script>
+</body>
+</html>

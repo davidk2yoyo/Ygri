@@ -102,6 +102,15 @@ export default function Layout() {
       )
     },
     {
+      path: "/emails",
+      label: "Emails",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+        </svg>
+      )
+    },
+    {
       path: "/settings",
       label: t("settings"),
       icon: (
@@ -116,13 +125,13 @@ export default function Layout() {
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 font-urbanist">
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 z-30 h-full w-72 bg-white dark:bg-gray-800 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-200 dark:border-gray-700`}>
+      <aside className={`fixed top-0 left-0 z-30 h-full w-72 bg-white dark:bg-gray-800 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-200 dark:border-gray-700 flex flex-col`}>
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <img 
-              src={logoShort} 
-              alt="Ygri CRM" 
+            <img
+              src={logoShort}
+              alt="Ygri CRM"
               className="h-8 w-auto"
             />
             <span className="text-xl font-semibold text-gray-800 dark:text-white">{t("appName")}</span>
@@ -137,8 +146,8 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Navigation */}
-        <nav className="px-4 py-6 space-y-2">
+        {/* Navigation - Scrollable */}
+        <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
           <div className="mb-6">
             <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
               {t("menu")}
@@ -163,7 +172,7 @@ export default function Layout() {
         </nav>
 
         {/* User Section */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={handleSignOut}
             className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700 rounded-lg transition-all duration-200"
