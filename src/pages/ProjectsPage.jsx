@@ -559,6 +559,10 @@ export default function ProjectsPage() {
   const [remarksDraft, setRemarksDraft] = useState("");
   const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [savingRemarks, setSavingRemarks] = useState(false);
+  const [attachedEmails, setAttachedEmails] = useState([]);
+  const [loadingEmails, setLoadingEmails] = useState(false);
+  const [allComments, setAllComments] = useState([]);
+  const [loadingComments, setLoadingComments] = useState(false);
 
   // --- Resizable panels ---
   const [sidebarWidth, setSidebarWidth] = useState(30); // percentage, default 30%
@@ -665,11 +669,91 @@ export default function ProjectsPage() {
     setDetail(data);
   };
 
+  // --- Load attached emails ---
+  const loadAttachedEmails = async () => {
+    if (!activeTrackId) return;
+    setLoadingEmails(true);
+    try {
+      const { data, error } = await supabase
+        .from('email_threads')
+        .select('*')
+        .eq('project_id', activeTrackId)
+        .order('last_received_at', { ascending: false });
+
+      if (error) throw error;
+      setAttachedEmails(data || []);
+    } catch (err) {
+      console.error('Error loading attached emails:', err);
+    } finally {
+      setLoadingEmails(false);
+    }
+  };
+
+  // --- Load all comments from all stages ---
+  const loadAllComments = async () => {
+    if (!detail?.stages || detail.stages.length === 0) {
+      setAllComments([]);
+      return;
+    }
+    setLoadingComments(true);
+    try {
+      // Get all stage IDs
+      const stageIds = detail.stages.map(s => s.track_stage_id);
+
+      // Fetch all stage details with comments using the same RPC used by StageDrawer
+      const stageDetailsPromises = stageIds.map(stageId =>
+        supabase.rpc("get_stage_detail", { p_track_stage_id: stageId })
+      );
+
+      const results = await Promise.all(stageDetailsPromises);
+
+      // Collect all comments from all stages
+      const allStageComments = [];
+
+      results.forEach((result, index) => {
+        const stageData = result.data;
+        const stage = detail.stages[index];
+
+        if (stageData?.comments && stageData.comments.length > 0) {
+          stageData.comments.forEach(comment => {
+            allStageComments.push({
+              ...comment,
+              stage_name: stage.name,
+              stage_order: stage.order_index,
+              profile: {
+                full_name: comment.user_name || 'Unknown User',
+                avatar_url: null
+              }
+            });
+          });
+        }
+      });
+
+      // Sort by created_at descending (newest first)
+      allStageComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+      setAllComments(allStageComments);
+    } catch (err) {
+      console.error('Error loading comments:', err);
+      setAllComments([]);
+    } finally {
+      setLoadingComments(false);
+    }
+  };
+
   useEffect(() => {
     if (activeTrackId) {
       loadTrackDetail();
+      loadAttachedEmails();
     }
   }, [activeTrackId]);
+
+  // Load comments when detail is loaded
+  useEffect(() => {
+    if (detail) {
+      loadAllComments();
+    }
+  }, [detail]);
 
   // Update remarks draft when detail changes
   useEffect(() => {
@@ -1164,6 +1248,8 @@ export default function ProjectsPage() {
                             const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
                             setDetail(data);
                             setCommentDraft("");
+                            // Refresh comments timeline
+                            await loadAllComments();
                           } catch (e) { setError(e.message); } finally { setBusy(false); }
                         }}
                         className="btn-primary"
@@ -1260,6 +1346,209 @@ export default function ProjectsPage() {
                     )}
                   </div>
                 )}
+
+                {/* Attached Email Threads */}
+                {detail && (
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">
+                        📧 Attached Email Threads
+                      </h3>
+                      <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
+                        {attachedEmails.length} {attachedEmails.length === 1 ? 'email' : 'emails'}
+                      </span>
+                    </div>
+
+                    {loadingEmails ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                        <span className="text-sm text-bgray-600 dark:text-bgray-300">Loading emails...</span>
+                      </div>
+                    ) : attachedEmails.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-bgray-400 dark:text-bgray-500 mb-2">
+                          <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-bgray-500 dark:text-bgray-400">
+                          No emails attached to this project yet
+                        </p>
+                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
+                          Go to Email Timeline to attach emails
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {attachedEmails.map((email) => (
+                          <div
+                            key={email.id}
+                            className="p-4 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:shadow-sm transition-shadow bg-white dark:bg-darkblack-600"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h4 className="font-medium text-darkblack-700 dark:text-white truncate">
+                                    {email.subject}
+                                  </h4>
+                                  {email.priority === 'urgent' && (
+                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
+                                      URGENT
+                                    </span>
+                                  )}
+                                  {email.priority === 'high' && (
+                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
+                                      HIGH
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-3 text-xs text-bgray-600 dark:text-bgray-300 mb-2">
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                    </svg>
+                                    {email.from_name || email.from_email}
+                                  </span>
+                                  <span className="text-bgray-400">•</span>
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    {new Date(email.last_received_at).toLocaleDateString()}
+                                  </span>
+                                  <span className="text-bgray-400">•</span>
+                                  <span className="flex items-center gap-1">
+                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                                    </svg>
+                                    {email.message_count} message{email.message_count > 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                                {email.last_message && (
+                                  <p className="text-sm text-bgray-600 dark:text-bgray-300 line-clamp-2">
+                                    {email.last_message}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="ml-4">
+                                <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
+                                  email.type === 'client'
+                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
+                                }`}>
+                                  {email.type === 'client' ? 'Client' : 'Supplier'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Comments Timeline - All comments from all stages */}
+                {detail && (
+                  <div className="card p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">
+                        💬 Project Comments Timeline
+                      </h3>
+                      <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
+                        {allComments.length} {allComments.length === 1 ? 'comment' : 'comments'}
+                      </span>
+                    </div>
+
+                    {loadingComments ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
+                        <span className="text-sm text-bgray-600 dark:text-bgray-300">Loading comments...</span>
+                      </div>
+                    ) : allComments.length === 0 ? (
+                      <div className="text-center py-8">
+                        <div className="text-bgray-400 dark:text-bgray-500 mb-2">
+                          <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-bgray-500 dark:text-bgray-400">
+                          No comments yet
+                        </p>
+                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
+                          Click on a stage to add comments
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {allComments.map((comment) => (
+                          <div
+                            key={comment.id}
+                            className="flex gap-4 p-4 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:shadow-sm transition-shadow bg-white dark:bg-darkblack-600"
+                          >
+                            {/* Avatar */}
+                            <div className="flex-shrink-0">
+                              {comment.profile?.avatar_url ? (
+                                <img
+                                  src={comment.profile.avatar_url}
+                                  alt={comment.profile.full_name}
+                                  className="w-10 h-10 rounded-full"
+                                />
+                              ) : (
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold">
+                                  {comment.profile?.full_name?.charAt(0) || 'U'}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Comment Content */}
+                            <div className="flex-1 min-w-0">
+                              {/* Header */}
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="font-medium text-darkblack-700 dark:text-white">
+                                  {comment.profile?.full_name || 'Unknown User'}
+                                </span>
+                                <span className="text-xs text-bgray-500 dark:text-bgray-400">
+                                  {new Date(comment.created_at).toLocaleString()}
+                                </span>
+                                {/* Stage badge */}
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium rounded-full">
+                                  {comment.stage_order}. {comment.stage_name}
+                                </span>
+                              </div>
+
+                              {/* Comment body */}
+                              <div className="text-sm text-bgray-700 dark:text-bgray-200 whitespace-pre-wrap">
+                                {comment.body}
+                              </div>
+
+                              {/* Metadata */}
+                              {(comment.mentioned_files?.length > 0 || comment.reply_to) && (
+                                <div className="mt-2 flex items-center gap-3 text-xs text-bgray-500">
+                                  {comment.mentioned_files?.length > 0 && (
+                                    <span className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                                      </svg>
+                                      {comment.mentioned_files.length} file{comment.mentioned_files.length > 1 ? 's' : ''}
+                                    </span>
+                                  )}
+                                  {comment.reply_to && (
+                                    <span className="flex items-center gap-1">
+                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                                      </svg>
+                                      Reply
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             </main>
           )}
@@ -1308,6 +1597,7 @@ export default function ProjectsPage() {
           onClose={() => setSelectedStageId(null)}
           onUpdate={() => {
             loadTrackDetail(); // Refresh track detail when stage is updated
+            loadAllComments(); // Refresh comments timeline
           }}
           projectName={detail?.track?.track_name || detail?.track?.name}
           clientName={detail?.client?.company_name || detail?.client?.name}

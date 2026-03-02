@@ -10,7 +10,9 @@ import {
   ChevronUp,
   Clock,
   Tag,
-  MessageSquare
+  MessageSquare,
+  Link,
+  X
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 
@@ -20,6 +22,12 @@ const EmailThreadsPage = () => {
   const [expandedThreads, setExpandedThreads] = useState(new Set());
   const [filterStatus, setFilterStatus] = useState('all'); // all, urgent, active
   const [filterType, setFilterType] = useState('all'); // all, client, supplier
+  const [showAttachModal, setShowAttachModal] = useState(false);
+  const [selectedThread, setSelectedThread] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const [attaching, setAttaching] = useState(false);
+  const [projectSearchQuery, setProjectSearchQuery] = useState('');
 
   useEffect(() => {
     fetchThreads();
@@ -30,7 +38,13 @@ const EmailThreadsPage = () => {
     try {
       let query = supabase
         .from('email_threads')
-        .select('*')
+        .select(`
+          *,
+          project:project_id (
+            id,
+            name
+          )
+        `)
         .order('last_received_at', { ascending: false });
 
       if (filterStatus === 'urgent') {
@@ -145,6 +159,87 @@ const EmailThreadsPage = () => {
     if (thread.priority === 'high') return 'border-orange-500 bg-orange-50';
     if (thread.sentiment === 'negative') return 'border-indigo-500 bg-indigo-50';
     return 'border-emerald-500 bg-emerald-50';
+  };
+
+  const handleAttachToProject = async (thread) => {
+    setSelectedThread(thread);
+    setShowAttachModal(true);
+    setLoadingProjects(true);
+    setProjectSearchQuery('');
+
+    try {
+      const { data, error } = await supabase
+        .from('v_tracks_overview')
+        .select('track_id, track_name, client_name')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setProjects(data || []);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    } finally {
+      setLoadingProjects(false);
+    }
+  };
+
+  const filteredProjects = projects.filter(project => {
+    if (!projectSearchQuery.trim()) return true;
+    const query = projectSearchQuery.toLowerCase();
+    return (
+      project.track_name?.toLowerCase().includes(query) ||
+      project.client_name?.toLowerCase().includes(query)
+    );
+  });
+
+  const attachEmailToProject = async (projectId) => {
+    if (!selectedThread || !projectId) return;
+
+    setAttaching(true);
+    try {
+      console.log('Attempting to update:', {
+        threadId: selectedThread.id,
+        projectId: projectId
+      });
+
+      const { data, error } = await supabase
+        .from('email_threads')
+        .update({ project_id: projectId })
+        .eq('id', selectedThread.id)
+        .select();
+
+      console.log('Update result:', { data, error });
+
+      if (error) throw error;
+
+      // Refresh threads to show updated data
+      await fetchThreads();
+
+      setShowAttachModal(false);
+      setSelectedThread(null);
+    } catch (err) {
+      console.error('Full error attaching email to project:', err);
+      console.error('Error details:', JSON.stringify(err, null, 2));
+      alert('Failed to attach email to project: ' + err.message);
+    } finally {
+      setAttaching(false);
+    }
+  };
+
+  const detachEmailFromProject = async (thread) => {
+    try {
+      const { error } = await supabase
+        .from('email_threads')
+        .update({ project_id: null })
+        .eq('id', thread.id);
+
+      if (error) throw error;
+
+      // Refresh threads
+      await fetchThreads();
+    } catch (err) {
+      console.error('Error detaching email from project:', err);
+      alert('Failed to detach email: ' + err.message);
+    }
   };
 
   return (
@@ -345,6 +440,32 @@ const EmailThreadsPage = () => {
                                 <ChevronDown className="w-5 h-5 text-slate-400" />
                               )}
                             </div>
+
+                            {/* Project attachment indicator/button */}
+                            <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                              {thread.project ? (
+                                <div className="flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs">
+                                  <Link className="w-3 h-3" />
+                                  <span>{thread.project.name}</span>
+                                  <button
+                                    onClick={() => detachEmailFromProject(thread)}
+                                    className="ml-1 hover:bg-green-200 rounded-full p-0.5"
+                                    title="Detach from project"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  onClick={() => handleAttachToProject(thread)}
+                                  className="flex items-center gap-1 px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full text-xs transition-colors"
+                                  title="Attach to project"
+                                >
+                                  <Link className="w-3 h-3" />
+                                  <span>Attach</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -386,6 +507,93 @@ const EmailThreadsPage = () => {
           </div>
         )}
       </div>
+
+      {/* Attach to Project Modal */}
+      {showAttachModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900">Attach to Project</h3>
+                <button
+                  onClick={() => {
+                    setShowAttachModal(false);
+                    setSelectedThread(null);
+                  }}
+                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+              {selectedThread && (
+                <p className="text-sm text-slate-600 mt-2">
+                  {selectedThread.subject}
+                </p>
+              )}
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto flex-1">
+              {loadingProjects ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                </div>
+              ) : (
+                <>
+                  {/* Search Input */}
+                  <div className="mb-4">
+                    <input
+                      type="text"
+                      placeholder="Search projects..."
+                      value={projectSearchQuery}
+                      onChange={(e) => setProjectSearchQuery(e.target.value)}
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 placeholder-slate-400"
+                    />
+                  </div>
+
+                  {/* Projects List */}
+                  {filteredProjects.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-slate-500">
+                        {projectSearchQuery ? 'No projects match your search' : 'No active projects found'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {filteredProjects.map((project) => (
+                        <button
+                          key={project.track_id}
+                          onClick={() => attachEmailToProject(project.track_id)}
+                          disabled={attaching}
+                          className="w-full text-left p-4 border border-slate-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <div className="font-medium text-slate-900">{project.track_name}</div>
+                          <div className="text-sm text-slate-500">{project.client_name}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-slate-200">
+              <button
+                onClick={() => {
+                  setShowAttachModal(false);
+                  setSelectedThread(null);
+                }}
+                disabled={attaching}
+                className="w-full px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

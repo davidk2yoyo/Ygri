@@ -301,13 +301,14 @@ function LatestTodosWidget({ todos, projects, clients, assignees, onTodoClick, o
           return (
             <div
               key={todo.id}
-              className={`group flex items-start gap-2 p-3 rounded-xl transition-all duration-200 border ${
+              className={`group flex items-start gap-3 p-4 rounded-xl transition-all duration-200 border cursor-pointer ${
                 todo.is_done
                   ? "bg-bgray-50/50 dark:bg-darkblack-500/50 border-transparent opacity-60"
                   : isOverdue
-                  ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800"
-                  : "bg-bgray-50 dark:bg-darkblack-500 border-transparent hover:border-violet-200 dark:hover:border-violet-800 hover:bg-violet-50 dark:hover:bg-violet-900/20"
+                  ? "bg-gradient-to-r from-red-50 to-rose-50 dark:from-red-900/10 dark:to-rose-900/10 border-red-200 dark:border-red-800 shadow-sm"
+                  : "bg-white dark:bg-darkblack-500 border-bgray-200 dark:border-darkblack-400 hover:border-violet-300 dark:hover:border-violet-700 hover:shadow-md hover:scale-[1.01]"
               }`}
+              onClick={() => onTodoClick?.(todo)}
             >
               {/* Checkbox */}
               <button
@@ -329,10 +330,7 @@ function LatestTodosWidget({ todos, projects, clients, assignees, onTodoClick, o
                 )}
               </button>
 
-              <div
-                className="flex-1 min-w-0 cursor-pointer"
-                onClick={() => onTodoClick?.(todo)}
-              >
+              <div className="flex-1 min-w-0">
                 <p className={`font-semibold text-sm truncate ${todo.is_done ? "line-through text-bgray-400 dark:text-bgray-500" : "text-darkblack-700 dark:text-white"}`}>
                   {todo.title}
                 </p>
@@ -401,20 +399,31 @@ function LatestCommentsWidget({ comments, projects, onCommentClick }) {
             <div
               key={comment.id}
               onClick={() => onCommentClick?.(comment)}
-              className="group flex items-start gap-3 p-3 rounded-xl bg-bgray-50 dark:bg-darkblack-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border border-transparent hover:border-emerald-200 dark:hover:border-emerald-800 transition-all duration-200 cursor-pointer"
+              className="group flex items-start gap-3 p-4 rounded-xl bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 dark:hover:from-emerald-900/20 dark:hover:to-teal-900/20 hover:border-emerald-300 dark:hover:border-emerald-700 hover:shadow-md hover:scale-[1.01] transition-all duration-200 cursor-pointer"
             >
               {/* Avatar */}
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white text-xs font-bold shadow-sm">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-500 flex items-center justify-center text-white text-sm font-bold shadow-md ring-2 ring-white dark:ring-darkblack-600">
                 {initials}
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold text-xs text-darkblack-700 dark:text-white">{comment.user_name || "Unknown"}</p>
-                  <p className="text-[10px] text-bgray-400">{new Date(comment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-bold text-sm text-darkblack-700 dark:text-white">{comment.user_name || "Unknown"}</p>
+                  <p className="text-xs text-bgray-500 dark:text-bgray-400">{new Date(comment.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
                 </div>
-                <p className="text-xs text-bgray-600 dark:text-bgray-300 mt-0.5 line-clamp-2">{comment.body}</p>
-                {project && <p className="text-[10px] text-bgray-400 mt-1">{project.track_name} • {project.client_name}</p>}
+                <p className="text-sm text-bgray-700 dark:text-bgray-200 mt-1 line-clamp-2 leading-relaxed">{comment.body}</p>
+                {project && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                      </svg>
+                      {project.track_name}
+                    </span>
+                    <span className="text-xs text-bgray-400">•</span>
+                    <span className="text-xs text-bgray-500 dark:text-bgray-400">{project.client_name}</span>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -623,12 +632,29 @@ export default function DashboardPage() {
   const handleProjectClick = () => navigate("/projects");
   const handleClientClick = () => navigate("/clients");
   const handleTodoClick = (todo) => {
-    if (todo.track_id && todo.track_stage_id) navigate("/projects", { state: { activeTrackId: todo.track_id, selectedStageId: todo.track_stage_id } });
-    else navigate("/projects");
+    // Navigate to Tasks page
+    navigate("/tasks");
   };
+
   const handleCommentClick = (comment) => {
-    if (comment.track_id && comment.track_stage_id) navigate("/projects", { state: { activeTrackId: comment.track_id, selectedStageId: comment.track_stage_id } });
-    else navigate("/projects");
+    // Navigate to Projects page and open the specific stage
+    if (comment.track_id && comment.track_stage_id) {
+      navigate("/projects", {
+        state: {
+          activeTrackId: comment.track_id,
+          selectedStageId: comment.track_stage_id
+        }
+      });
+    } else if (comment.track_id) {
+      // Just open the project if we don't have stage info
+      navigate("/projects", {
+        state: {
+          activeTrackId: comment.track_id
+        }
+      });
+    } else {
+      navigate("/projects");
+    }
   };
   const handleToggleTodo = async (todoId, currentDone) => {
     try {
