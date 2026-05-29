@@ -639,6 +639,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       min="1"
                       value={item.quantity}
                       onChange={e => updateItem(idx, "quantity", e.target.value)}
+                      onWheel={e => e.target.blur()}
                       className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
                     />
                   </div>
@@ -651,6 +652,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       step="0.01"
                       value={item.price}
                       onChange={e => updateItem(idx, "price", e.target.value)}
+                      onWheel={e => e.target.blur()}
                       placeholder="0.00"
                       className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
                     />
@@ -674,6 +676,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                         step="0.01"
                         value={item.supplier_price}
                         onChange={e => updateItem(idx, "supplier_price", e.target.value)}
+                        onWheel={e => e.target.blur()}
                         placeholder="0.00"
                         className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
                       />
@@ -830,6 +833,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
               step="0.5"
               value={commissionPct}
               onChange={e => setCommissionPct(e.target.value)}
+              onWheel={e => e.target.blur()}
               placeholder="0"
               className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
             />
