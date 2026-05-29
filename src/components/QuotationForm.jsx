@@ -152,11 +152,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setShowSupplierModal(true);
   };
 
+  const withTimeout = (promise, ms = 15000) =>
+    Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("Request timed out. Check your connection or try again.")), ms))
+    ]);
+
   const saveNewSupplier = async () => {
     if (!newSupplier.name.trim()) return;
     setBusy(true);
+    setError("");
     try {
-      const { data, error } = await supabase.from("suppliers").insert(newSupplier).select().single();
+      const { data, error } = await withTimeout(
+        supabase.from("suppliers").insert(newSupplier).select().single()
+      );
       if (error) throw error;
       setSuppliers(prev => [...prev, data]);
       if (supplierItemIndex !== null) {
@@ -185,6 +194,10 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     if (items.length === 0) { setError("Add at least one item."); return; }
     setBusy(true);
     setError("");
+    const timeoutId = setTimeout(() => {
+      setBusy(false);
+      setError("Save is taking too long. Check your internet connection and try again.");
+    }, 30000);
     try {
       // 1. Upsert quotation header
       const quotPayload = {
@@ -282,6 +295,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     } catch (e) {
       setError(e.message);
     } finally {
+      clearTimeout(timeoutId);
       setBusy(false);
     }
   };
