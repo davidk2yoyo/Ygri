@@ -39,7 +39,7 @@ export default function InvoicesPage() {
       if (trackIds.length > 0) {
         const { data: tracksData } = await supabase
           .from("v_tracks_overview")
-          .select("track_name, company_name, track_id")
+          .select("track_name, client_name, track_id")
           .in("track_id", trackIds);
         tracksMap = Object.fromEntries((tracksData || []).map(t => [t.track_id, t]));
       }
@@ -47,7 +47,7 @@ export default function InvoicesPage() {
       const enriched = (data || []).map(q => ({
         ...q,
         track_name: tracksMap[q.track_id]?.track_name || "—",
-        company_name: tracksMap[q.track_id]?.company_name || "—",
+        company_name: tracksMap[q.track_id]?.client_name || "—",
       }));
       setQuotations(enriched);
     } catch (e) {
