@@ -1,0 +1,109 @@
+{
+  "name": "YgriFLowiseTelegram",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "b3fbb6ff-69bf-4fa0-a2c0-54e61f6aebb7",
+      "name": "Telegram Trigger",
+      "webhookId": "90761455-8728-4e2e-9545-443951160a2b",
+      "credentials": {
+        "telegramApi": {
+          "id": "HLiEFjQtpQ3Yc8Sx",
+          "name": "Ygri-interasia_bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://flowise.heruba.guru/api/v1/prediction/6f481b22-c059-47a7-a421-3ca1c81d6ed3",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"question\": \"{{ $json.message.text }}\",\n  \"overrideConfig\": {\n    \"sessionId\": \"telegram_{{ $json.message.chat.id }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "d15829fb-abdd-44b4-8376-50f0590668bf",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.text }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "00e8b9f3-7c12-4529-8de4-61b3ade2a81f",
+      "name": "Send a text message",
+      "webhookId": "50eb59af-1ae6-40a0-b564-ba2352d3844f",
+      "credentials": {
+        "telegramApi": {
+          "id": "HLiEFjQtpQ3Yc8Sx",
+          "name": "Ygri-interasia_bot"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "94b1e857-bfc1-4d3a-8c38-4edffe33dea5",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "4aa13fb6f34addcb6657e4f3a4efab48ccc2b475ceb4e80559df58b0ae0950a2"
+  },
+  "id": "tdOC7Y0B1xlOJ1cL",
+  "tags": []
+}

@@ -236,25 +236,43 @@ export default function TasksPage() {
   const loadStagesForProject = useCallback(async (trackId) => {
     if (!trackId) { setStages([]); setSelectedStageId(""); return; }
     // track_stages has no name; join with stage_templates for the name
-    const { data: tsData } = await supabase
+    const { data: tsData, error: tsError } = await supabase
       .from("track_stages")
-      .select("id, stage_template_id, order_index")
-      .eq("track_id", trackId)
-      .order("order_index");
+      .select("id, stage_template_id")
+      .eq("track_id", trackId);
+
+    if (tsError) {
+      console.error("Error loading track stages:", tsError);
+      setStages([]);
+      setSelectedStageId("");
+      return;
+    }
 
     if (!tsData?.length) { setStages([]); setSelectedStageId(""); return; }
 
     const templateIds = tsData.map((s) => s.stage_template_id).filter(Boolean);
-    const { data: tplData } = await supabase
+    const { data: tplData, error: tplError } = await supabase
       .from("stage_templates")
-      .select("id, name")
-      .in("id", templateIds);
+      .select("id, name, order_index")
+      .in("id", templateIds)
+      .order("order_index");
+
+    if (tplError) {
+      console.error("Error loading stage templates:", tplError);
+      setStages([]);
+      setSelectedStageId("");
+      return;
+    }
 
     const tplMap = Object.fromEntries((tplData || []).map((t) => [t.id, t]));
-    const merged = tsData.map((s) => ({
-      id: s.id,
-      name: tplMap[s.stage_template_id]?.name ?? `Stage ${s.order_index}`,
-    }));
+    const merged = tsData
+      .map((s) => ({
+        id: s.id,
+        name: tplMap[s.stage_template_id]?.name ?? "Unknown Stage",
+        order_index: tplMap[s.stage_template_id]?.order_index ?? 999,
+      }))
+      .sort((a, b) => a.order_index - b.order_index);
+
     setStages(merged);
     setSelectedStageId("");
   }, []);
@@ -280,7 +298,7 @@ export default function TasksPage() {
     if (!newTask.title.trim() || !selectedStageId) return;
     try {
       setBusy(true);
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       await supabase.rpc("add_stage_todo", {
         p_track_stage_id: selectedStageId,
         p_title: newTask.title.trim(),
@@ -373,11 +391,13 @@ export default function TasksPage() {
             <select
               value={selectedStageId}
               onChange={(e) => setSelectedStageId(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
               required
               disabled={!stages.length}
             >
-              <option value="">Select stage...</option>
+              <option value="">
+                {!selectedProjectId ? "Select project first..." : stages.length === 0 ? "No stages available" : "Select stage..."}
+              </option>
               {stages.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}

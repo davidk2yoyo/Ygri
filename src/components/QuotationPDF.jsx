@@ -20,7 +20,7 @@ const COMPANY_INFO = {
   website: "www.interasia.com.co",
 };
 
-export default function QuotationPDF({ quotation, items, clientName, projectName, totalAmount, onClose }) {
+export default function QuotationPDF({ quotation, items, clientName, projectName, totalAmount, commissionPct = 0, showCommission = false, onClose }) {
   const printRef = useRef(null);
 
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
@@ -29,24 +29,57 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
   const formatMoney = (amount) =>
     new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount || 0);
 
+  const commissionAmount = totalAmount * (commissionPct / 100);
+  const grandTotal = totalAmount + commissionAmount;
+
   const handleDownloadPDF = async () => {
     const el = printRef.current;
     if (!el) return;
-    const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
-    const imgData = canvas.toDataURL("image/png");
+
+    // Remove minHeight so canvas only captures actual content (avoids blank trailing page)
+    const prevMinH = el.style.minHeight;
+    el.style.minHeight = "auto";
+    await new Promise(r => setTimeout(r, 50));
+
+    const canvas = await html2canvas(el, { scale: 1.5, useCORS: true, backgroundColor: "#ffffff" });
+
+    el.style.minHeight = prevMinH;
+
+    // JPEG at 85% quality keeps file small (~1-2 MB instead of 10 MB)
+    const imgData = canvas.toDataURL("image/jpeg", 0.85);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfW = pdf.internal.pageSize.getWidth();
-    const pdfH = (canvas.height * pdfW) / canvas.width;
-    pdf.addImage(imgData, "PNG", 0, 0, pdfW, pdfH);
+    const pdfPageH = pdf.internal.pageSize.getHeight();
+    const imgTotalH = (canvas.height * pdfW) / canvas.width;
+
+    let yOffset = 0;
+    while (yOffset < imgTotalH) {
+      pdf.addImage(imgData, "JPEG", 0, -yOffset, pdfW, imgTotalH);
+      yOffset += pdfPageH;
+      if (yOffset < imgTotalH) pdf.addPage();
+    }
+
     pdf.save(`Quotation_${quotation.quote_number || "draft"}_${clientName?.replace(/\s+/g, "_") || "client"}.pdf`);
   };
 
   const handlePrint = () => {
-    window.print();
+    const el = printRef.current;
+    if (!el) return;
+    // Open a new window — avoids fighting with the fixed-position modal container.
+    // All styles are inline so outerHTML preserves full fidelity.
+    const win = window.open("", "_blank");
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+      * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+      body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; }
+      img { max-width: 100%; }
+      @page { size: letter; margin: 0.5in; }
+    </style></head><body>${el.outerHTML}</body></html>`);
+    win.document.close();
+    win.onload = () => { win.print(); };
   };
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex flex-col items-center z-[200] overflow-y-auto py-6">
+    <div className="fixed inset-0 bg-black/95 flex flex-col items-center z-[9999] overflow-y-auto py-6">
       {/* Action bar */}
       <div className="flex items-center gap-3 mb-4 no-print">
         <button
@@ -174,7 +207,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
                 <tr>
                   <td style={{ color: "#777" }}>Amount Due ({currency}):</td>
                   <td style={{ fontWeight: "900", fontSize: "14px", color: "#1a1a1a" }}>
-                    ${formatMoney(totalAmount)}
+                    ${formatMoney(grandTotal)}
                   </td>
                 </tr>
               </tbody>
@@ -261,8 +294,14 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
           <div style={{ minWidth: "260px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #e8eaed", fontSize: "13px" }}>
               <span style={{ color: "#555" }}>Subtotal:</span>
-              <span style={{ fontWeight: "600" }}>{currency} ${formatMoney(totalAmount)}</span>
+              <span style={{ fontWeight: "600" }}>{currency} {formatMoney(totalAmount)}</span>
             </div>
+            {showCommission && commissionPct > 0 && (
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #e8eaed", fontSize: "13px" }}>
+                <span style={{ color: "#555" }}>Commission ({commissionPct}%):</span>
+                <span style={{ fontWeight: "600" }}>{currency} {formatMoney(commissionAmount)}</span>
+              </div>
+            )}
             <div style={{
               display: "flex", justifyContent: "space-between",
               padding: "12px 16px",
@@ -271,7 +310,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
               marginTop: "8px",
             }}>
               <span style={{ color: "#fff", fontWeight: "700", fontSize: "14px" }}>Amount Due ({currency}):</span>
-              <span style={{ color: "#c9922a", fontWeight: "900", fontSize: "16px" }}>${formatMoney(totalAmount)}</span>
+              <span style={{ color: "#c9922a", fontWeight: "900", fontSize: "16px" }}>${formatMoney(grandTotal)}</span>
             </div>
           </div>
         </div>
@@ -322,14 +361,6 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
       </div>
 
       {/* Print styles */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          #quotation-pdf, #quotation-pdf * { visibility: visible; }
-          #quotation-pdf { position: fixed; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
     </div>
   );
 }

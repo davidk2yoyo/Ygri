@@ -14,6 +14,7 @@ const emptyItem = () => ({
   price: "",
   quantity: 1,
   supplier_id: null,
+  supplier_price: "",
   pictureFile: null,
   picturePreview: "",
 });
@@ -26,6 +27,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [deliveryTime, setDeliveryTime] = useState("");
   const [negotiationTerm, setNegotiationTerm] = useState("");
   const [notes, setNotes] = useState("");
+  const [commissionPct, setCommissionPct] = useState(0);
+  const [showCommission, setShowCommission] = useState(false);
   const [items, setItems] = useState([emptyItem()]);
   const [suppliers, setSuppliers] = useState([]);
   const [catalogItems, setCatalogItems] = useState([]);
@@ -39,6 +42,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [loading, setLoading] = useState(true);
   const [quoteNumber, setQuoteNumber] = useState("");
   const fileRefs = useRef({});
+  const [dragOver, setDragOver] = useState(null);
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -77,6 +81,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setDeliveryTime(quotData.delivery_time || "");
         setNegotiationTerm(quotData.negotiation_term || "");
         setNotes(quotData.notes || "");
+        setCommissionPct(parseFloat(quotData.commission_pct) || 0);
+        setShowCommission(quotData.show_commission || false);
         if (quotData.quotation_items?.length > 0) {
           setItems(quotData.quotation_items.map(qi => ({
             ...emptyItem(),
@@ -98,6 +104,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     const q = parseInt(it.quantity) || 1;
     return sum + p * q;
   }, 0);
+
+  const commissionAmount = totalAmount * (parseFloat(commissionPct) || 0) / 100;
+  const grandTotal = totalAmount + commissionAmount;
 
   // ---------- Item helpers ----------
   const updateItem = (idx, field, value) => {
@@ -179,7 +188,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         delivery_time: type === "product" ? deliveryTime : null,
         negotiation_term: negotiationTerm,
         notes,
-        total_amount: totalAmount,
+        commission_pct: parseFloat(commissionPct) || 0,
+        show_commission: showCommission,
+        total_amount: grandTotal,
       };
 
       let quotId;
@@ -246,6 +257,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           price: parseFloat(it.price) || 0,
           quantity: parseInt(it.quantity) || 1,
           supplier_id: type === "product" ? it.supplier_id : null,
+          supplier_price: type === "product" ? (parseFloat(it.supplier_price) || null) : null,
           sort_order: idx,
         };
       }));
@@ -253,7 +265,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { error: itemsError } = await supabase.from("quotation_items").insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
-      if (onSaved) onSaved(totalAmount, currency);
+      if (onSaved) onSaved(grandTotal, currency);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -276,6 +288,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         clientName={clientName}
         projectName={projectName}
         totalAmount={totalAmount}
+        commissionPct={parseFloat(commissionPct) || 0}
+        showCommission={showCommission}
         onClose={() => setShowPDF(false)}
       />
     );
@@ -452,10 +466,24 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   <label className="block text-xs text-bgray-500 mb-1">Picture</label>
                   <div
                     onClick={() => fileRefs.current[idx]?.click()}
-                    className="w-full h-20 border-2 border-dashed border-bgray-300 dark:border-darkblack-400 rounded-lg flex items-center justify-center cursor-pointer hover:border-primary transition overflow-hidden"
+                    onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
+                    onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
+                    onDrop={e => {
+                      e.preventDefault();
+                      setDragOver(null);
+                      const file = e.dataTransfer.files[0];
+                      if (file?.type.startsWith("image/")) handleItemPicture(idx, file);
+                    }}
+                    className={`w-full h-20 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition overflow-hidden ${
+                      dragOver === idx
+                        ? "border-primary bg-primary/10 scale-[1.02]"
+                        : "border-bgray-300 dark:border-darkblack-400 hover:border-primary"
+                    }`}
                   >
                     {item.picturePreview ? (
                       <img src={item.picturePreview} alt="" className="w-full h-full object-cover rounded-lg" />
+                    ) : dragOver === idx ? (
+                      <span className="text-xs text-primary font-semibold">Drop image here</span>
                     ) : (
                       <svg className="w-6 h-6 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -557,11 +585,47 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     />
                   </div>
 
-                  {/* Subtotal display */}
-                  <div className="flex items-end">
+                  {/* Supplier Cost — internal only, never shown in PDF */}
+                  {type === "product" && (
+                    <div>
+                      <label className="block text-xs text-bgray-500 mb-1 flex items-center gap-1">
+                        Supplier Cost ({currency})
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
+                          </svg>
+                          Internal
+                        </span>
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.supplier_price}
+                        onChange={e => updateItem(idx, "supplier_price", e.target.value)}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
+                      />
+                    </div>
+                  )}
+
+                  {/* Subtotal + margin display */}
+                  <div className={`flex flex-col justify-end gap-0.5 ${type === "product" ? "" : "col-span-1"}`}>
                     <p className="text-sm font-semibold text-darkblack-700 dark:text-white">
                       Subtotal: <span className="text-primary">{currency} {((parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                     </p>
+                    {type === "product" && item.supplier_price && item.price && (() => {
+                      const clientTotal = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
+                      const supplierTotal = (parseFloat(item.supplier_price) || 0) * (parseInt(item.quantity) || 1);
+                      const marginAmt = clientTotal - supplierTotal;
+                      const marginPct = clientTotal > 0 ? (marginAmt / clientTotal * 100) : 0;
+                      const color = marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-500";
+                      return (
+                        <p className={`text-xs font-medium ${color}`}>
+                          Margin: {currency} {marginAmt.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({marginPct.toFixed(1)}%)
+                        </p>
+                      );
+                    })()}
                   </div>
 
                   {/* Supplier — product only, hidden badge */}
@@ -615,12 +679,56 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         />
       </div>
 
+      {/* Commission */}
+      <div className="border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4 bg-bgray-50 dark:bg-darkblack-500">
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-xs font-semibold text-bgray-600 dark:text-bgray-300 uppercase tracking-wide">Commission</label>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <span className="text-xs text-bgray-500 dark:text-bgray-400">Show in invoice</span>
+            <div
+              onClick={() => setShowCommission(v => !v)}
+              className={`relative w-9 h-5 rounded-full transition-colors ${showCommission ? "bg-primary" : "bg-bgray-300 dark:bg-darkblack-400"}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${showCommission ? "translate-x-4" : "translate-x-0"}`} />
+            </div>
+          </label>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 flex-1 max-w-[180px]">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={commissionPct}
+              onChange={e => setCommissionPct(e.target.value)}
+              placeholder="0"
+              className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+            />
+            <span className="text-sm font-semibold text-bgray-600 dark:text-bgray-300">%</span>
+          </div>
+          {commissionPct > 0 && (
+            <div className="text-sm text-bgray-600 dark:text-bgray-300">
+              = <span className="font-semibold text-darkblack-700 dark:text-white">
+                {currency} {commissionAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Total */}
       <div className="flex justify-end">
         <div className="bg-darkblack-700 dark:bg-darkblack-400 rounded-xl px-6 py-4 text-right">
+          {commissionPct > 0 && (
+            <p className="text-xs text-bgray-400 mb-1">
+              Subtotal: {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              {" · "}Commission ({commissionPct}%): {currency} {commissionAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          )}
           <p className="text-xs text-bgray-300 uppercase tracking-wider mb-1">Total Amount</p>
           <p className="text-2xl font-bold text-white">
-            {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {currency} {grandTotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
       </div>

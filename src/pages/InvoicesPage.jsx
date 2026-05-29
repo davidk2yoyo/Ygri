@@ -33,19 +33,21 @@ export default function InvoicesPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
 
-      // Enrich with track/client info via tracks table
-      const enriched = await Promise.all((data || []).map(async (q) => {
-        // Try to get track name and client name
-        const { data: trackData } = await supabase
+      // Collect unique track IDs and fetch all at once (1 query instead of N)
+      const trackIds = [...new Set((data || []).map(q => q.track_id).filter(Boolean))];
+      let tracksMap = {};
+      if (trackIds.length > 0) {
+        const { data: tracksData } = await supabase
           .from("v_tracks_overview")
           .select("track_name, company_name, track_id")
-          .eq("track_id", q.track_id)
-          .maybeSingle();
-        return {
-          ...q,
-          track_name: trackData?.track_name || "—",
-          company_name: trackData?.company_name || "—",
-        };
+          .in("track_id", trackIds);
+        tracksMap = Object.fromEntries((tracksData || []).map(t => [t.track_id, t]));
+      }
+
+      const enriched = (data || []).map(q => ({
+        ...q,
+        track_name: tracksMap[q.track_id]?.track_name || "—",
+        company_name: tracksMap[q.track_id]?.company_name || "—",
       }));
       setQuotations(enriched);
     } catch (e) {

@@ -228,7 +228,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
       setSubmitting(true);
       setSubmitError("");
 
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       if (!user) throw new Error("User not authenticated");
 
       const { data, error } = await supabase.rpc('create_track_rpc', {
@@ -1237,7 +1237,7 @@ export default function ProjectsPage() {
                           try {
                             setBusy(true);
                             // Get current user
-                            const { data: { user } } = await supabase.auth.getUser();
+                            const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
                             if (!user) throw new Error("User not authenticated");
 
                             await supabase.rpc("add_stage_comment", {

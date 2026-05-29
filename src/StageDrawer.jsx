@@ -48,7 +48,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   // Load current user + profiles
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       setCurrentUser(user);
       const { data } = await supabase.from("profiles").select("id, full_name").order("full_name");
       setProfiles(data || []);
@@ -189,7 +189,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       setBusy(true);
       
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       if (!user) throw new Error("User not authenticated");
       
       // Convert clean @filename mentions to UUID storage format
@@ -222,7 +222,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       setBusy(true);
       
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       if (!user) throw new Error("User not authenticated");
       
       // Convert clean @filename mentions to UUID storage format
@@ -264,7 +264,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       setBusy(true);
       
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       if (!user) throw new Error("User not authenticated");
       
       // Try to call the RPC function
@@ -457,7 +457,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       setBusy(true);
       
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
       if (!user) throw new Error("User not authenticated");
       
       await supabase.rpc("add_stage_todo", {

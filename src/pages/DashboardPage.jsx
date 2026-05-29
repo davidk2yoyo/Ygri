@@ -582,7 +582,7 @@ export default function DashboardPage() {
 
       let currentUser = null;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
         currentUser = user;
         if (currentUser) userMap[currentUser.id] = currentUser.email?.split("@")[0] || "You";
       } catch (err) {}
