@@ -39,7 +39,7 @@ export default function ItemsPage() {
         .from("quotation_items")
         .select(`
           id, item_number, description, picture_url, quantity, price, supplier_price,
-          quotations(id, quote_number, currency, document_type, track_id),
+          quotations(id, quote_number, currency, track_id),
           suppliers(id, name)
         `)
         .order("id", { ascending: false });
