@@ -43,6 +43,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [quoteNumber, setQuoteNumber] = useState("");
   const fileRefs = useRef({});
   const [dragOver, setDragOver] = useState(null);
+  const [previewImage, setPreviewImage] = useState(null);
   const [supplierSearches, setSupplierSearches] = useState({});
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
 
@@ -483,7 +484,18 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     }`}
                   >
                     {item.picturePreview ? (
-                      <img src={item.picturePreview} alt="" className="w-full h-full object-cover rounded-lg" />
+                      <div className="relative w-full h-full group/img">
+                        <img src={item.picturePreview} alt="" className="w-full h-full object-cover rounded-lg" />
+                        <button
+                          type="button"
+                          onClick={e => { e.stopPropagation(); setPreviewImage(item.picturePreview); }}
+                          className="absolute top-1 right-1 p-1 bg-black/50 rounded-md opacity-0 group-hover/img:opacity-100 transition-opacity"
+                        >
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                          </svg>
+                        </button>
+                      </div>
                     ) : dragOver === idx ? (
                       <span className="text-xs text-primary font-semibold">Drop image here</span>
                     ) : (
@@ -791,6 +803,29 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           </p>
         </div>
       </div>
+
+      {/* Image Lightbox */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200] p-4"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition"
+            onClick={() => setPreviewImage(null)}
+          >
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={previewImage}
+            alt="Preview"
+            className="max-w-full max-h-full object-contain rounded-xl shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* New Supplier Modal */}
       {showSupplierModal && (
