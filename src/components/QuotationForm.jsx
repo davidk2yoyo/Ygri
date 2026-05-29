@@ -20,6 +20,7 @@ const emptyItem = () => ({
 });
 
 export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved }) {
+  const [documentType, setDocumentType] = useState("quotation");
   const [type, setType] = useState("product");
   const [currency, setCurrency] = useState("USD");
   const [incoterm, setIncoterm] = useState("");
@@ -77,6 +78,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       if (quotData) {
         setSavedQuotation(quotData);
         setQuoteNumber(quotData.quote_number || "");
+        setDocumentType(quotData.document_type || "quotation");
         setType(quotData.type || "product");
         setCurrency(quotData.currency || "USD");
         setIncoterm(quotData.incoterm || "");
@@ -194,6 +196,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         commission_pct: parseFloat(commissionPct) || 0,
         show_commission: showCommission,
         total_amount: grandTotal,
+        document_type: documentType,
       };
 
       let quotId;
@@ -286,7 +289,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   if (showPDF && savedQuotation) {
     return (
       <QuotationPDF
-        quotation={{ ...savedQuotation, type, currency, incoterm, incoterm_location: incotermLocation, delivery_time: deliveryTime, negotiation_term: negotiationTerm, notes, quote_number: quoteNumber }}
+        quotation={{ ...savedQuotation, type, currency, incoterm, incoterm_location: incotermLocation, delivery_time: deliveryTime, negotiation_term: negotiationTerm, notes, quote_number: quoteNumber, document_type: documentType }}
         items={items}
         clientName={clientName}
         projectName={projectName}
@@ -298,13 +301,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     );
   }
 
+  const DOC_STEPS = [
+    { key: "quotation", label: "Quotation", short: "Quote" },
+    { key: "proforma",  label: "Proforma Invoice", short: "Proforma" },
+    { key: "invoice",   label: "Commercial Invoice", short: "Invoice" },
+  ];
+  const currentStepIdx = DOC_STEPS.findIndex(s => s.key === documentType);
+
   return (
     <div className="space-y-6">
       {/* Header bar */}
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-bold text-darkblack-700 dark:text-white">
-            {savedQuotation ? `Quotation ${quoteNumber}` : "New Quotation"}
+            {savedQuotation ? `${DOC_STEPS[currentStepIdx].label} ${quoteNumber}` : "New Quotation"}
           </h3>
           <p className="text-xs text-bgray-500">{projectName} · {clientName}</p>
         </div>
@@ -336,6 +346,51 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             {busy ? "Saving..." : savedQuotation ? "Update" : "Save"}
           </button>
         </div>
+      </div>
+
+      {/* Document type stepper */}
+      <div className="flex items-center gap-1">
+        {DOC_STEPS.map((step, i) => {
+          const isDone = i < currentStepIdx;
+          const isActive = i === currentStepIdx;
+          return (
+            <React.Fragment key={step.key}>
+              <button
+                onClick={() => setDocumentType(step.key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                  isActive
+                    ? "bg-primary text-white shadow"
+                    : isDone
+                    ? "bg-green-100 text-green-700 hover:bg-green-200"
+                    : "bg-bgray-100 dark:bg-darkblack-500 text-bgray-400 dark:text-bgray-400 hover:bg-bgray-200"
+                }`}
+              >
+                {isDone && (
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                  </svg>
+                )}
+                {step.short}
+              </button>
+              {i < DOC_STEPS.length - 1 && (
+                <svg className="w-3 h-3 text-bgray-300 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              )}
+            </React.Fragment>
+          );
+        })}
+        {currentStepIdx < DOC_STEPS.length - 1 && (
+          <button
+            onClick={() => setDocumentType(DOC_STEPS[currentStepIdx + 1].key)}
+            className="ml-2 flex items-center gap-1 px-3 py-1.5 bg-darkblack-700 dark:bg-white text-white dark:text-darkblack-700 rounded-full text-xs font-semibold hover:opacity-80 transition"
+          >
+            Promote to {DOC_STEPS[currentStepIdx + 1].short}
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {error && (

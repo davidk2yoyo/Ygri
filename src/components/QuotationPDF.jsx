@@ -20,11 +20,18 @@ const COMPANY_INFO = {
   website: "www.interasia.com.co",
 };
 
+const DOC_META = {
+  quotation: { title: "QUOTATION",          refLabel: "Quote Number",    amountLabel: "Total Amount" },
+  proforma:  { title: "PROFORMA INVOICE",   refLabel: "Proforma Number", amountLabel: "Amount Due"   },
+  invoice:   { title: "COMMERCIAL INVOICE", refLabel: "Invoice Number",  amountLabel: "Amount Due"   },
+};
+
 export default function QuotationPDF({ quotation, items, clientName, projectName, totalAmount, commissionPct = 0, showCommission = false, onClose }) {
   const printRef = useRef(null);
 
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const currency = quotation.currency || "USD";
+  const docMeta = DOC_META[quotation.document_type] || DOC_META.invoice;
 
   const formatMoney = (amount) =>
     new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount || 0);
@@ -148,7 +155,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
           {/* Company info + title */}
           <div style={{ textAlign: "right" }}>
             <div style={{ fontSize: "28px", fontWeight: "900", color: "#1a1a1a", letterSpacing: "-0.5px", marginBottom: "8px" }}>
-              COMMERCIAL INVOICE
+              {docMeta.title}
             </div>
             <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "4px" }}>
               {COMPANY_INFO.name}
@@ -183,7 +190,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
               <tbody>
                 <tr>
-                  <td style={{ color: "#777", paddingBottom: "4px", paddingRight: "16px" }}>Invoice Number:</td>
+                  <td style={{ color: "#777", paddingBottom: "4px", paddingRight: "16px" }}>{docMeta.refLabel}:</td>
                   <td style={{ fontWeight: "700", color: "#1a1a1a", paddingBottom: "4px" }}>{quotation.quote_number || "DRAFT"}</td>
                 </tr>
                 <tr>
@@ -205,7 +212,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
                   </tr>
                 )}
                 <tr>
-                  <td style={{ color: "#777" }}>Amount Due ({currency}):</td>
+                  <td style={{ color: "#777" }}>{docMeta.amountLabel} ({currency}):</td>
                   <td style={{ fontWeight: "900", fontSize: "14px", color: "#1a1a1a" }}>
                     ${formatMoney(grandTotal)}
                   </td>
@@ -309,7 +316,7 @@ export default function QuotationPDF({ quotation, items, clientName, projectName
               borderRadius: "6px",
               marginTop: "8px",
             }}>
-              <span style={{ color: "#fff", fontWeight: "700", fontSize: "14px" }}>Amount Due ({currency}):</span>
+              <span style={{ color: "#fff", fontWeight: "700", fontSize: "14px" }}>{docMeta.amountLabel} ({currency}):</span>
               <span style={{ color: "#c9922a", fontWeight: "900", fontSize: "16px" }}>${formatMoney(grandTotal)}</span>
             </div>
           </div>
