@@ -16,6 +16,7 @@ import SettingsPage from "./pages/SettingsPage";
 import TasksPage from "./pages/TasksPage";
 import EmailThreadsPage from "./pages/EmailThreadsPage";
 import ItemsPage from "./pages/ItemsPage";
+import PublicQuotationPage from "./pages/PublicQuotationPage";
 import "./index.css";
 import "./i18n";
 
@@ -23,6 +24,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/q/:quoteNumber" element={<PublicQuotationPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route element={
           <ProtectedRoute>

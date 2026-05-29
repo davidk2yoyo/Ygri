@@ -197,6 +197,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         show_commission: showCommission,
         total_amount: grandTotal,
         document_type: documentType,
+        client_name: clientName || null,
+        project_name: projectName || null,
       };
 
       let quotId;
