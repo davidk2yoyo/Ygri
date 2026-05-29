@@ -2,6 +2,13 @@ import React, { useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
+const formatDateLong = (iso) => {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-");
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}, ${y}`;
+};
+
 // Bank details — fixed for Interasia
 const BANK_DETAILS = {
   company: "INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED",
@@ -26,8 +33,9 @@ const DOC_META = {
   invoice:   { title: "COMMERCIAL INVOICE", refLabel: "Invoice Number",  amountLabel: "Amount Due",    titleEs: "Factura Comercial" },
 };
 
-function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectName, currency, grandTotal, deliveryTime, incoterm, shareUrl, formatMoney }) {
+function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectName, currency, grandTotal, deliveryTime, incoterm, validUntil, shareUrl, formatMoney }) {
   const total = `${currency} ${formatMoney(grandTotal)}`;
+  const validLine = validUntil ? formatDateLong(validUntil) : null;
 
   const en = [
     `Hello *${clientName || "there"}* 👋`,
@@ -37,6 +45,7 @@ function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectN
     `📦 *Total: ${total}*`,
     deliveryTime ? `📅 Delivery: ${deliveryTime}` : null,
     incoterm     ? `📋 Incoterm: ${incoterm}`      : null,
+    validLine    ? `⏳ Valid until: ${validLine}`   : null,
     ``,
     `You can view the full document anytime here:`,
     shareUrl,
@@ -53,6 +62,7 @@ function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectN
     `📦 *Total: ${total}*`,
     deliveryTime ? `📅 Entrega: ${deliveryTime}` : null,
     incoterm     ? `📋 Incoterm: ${incoterm}`     : null,
+    validLine    ? `⏳ Válido hasta: ${validLine}` : null,
     ``,
     `Puede ver el documento completo en cualquier momento aquí:`,
     shareUrl,
@@ -82,6 +92,7 @@ function WhatsAppModal({ onClose, quotation, clientName, projectName, grandTotal
     grandTotal,
     deliveryTime: quotation.delivery_time,
     incoterm: quotation.incoterm ? `${quotation.incoterm}${quotation.incoterm_location ? ` ${quotation.incoterm_location}` : ""}` : null,
+    validUntil: quotation.valid_until || null,
     shareUrl,
     formatMoney,
   });
@@ -309,6 +320,8 @@ export default function QuotationPDF({
     </div>
   );
 
+  const showMoq = quotation.document_type === "quotation" && items.some(it => it.moq);
+
   const document = (
     <div
       ref={printRef}
@@ -386,6 +399,12 @@ export default function QuotationPDF({
                 <td style={{ color: "#777", paddingBottom: "4px" }}>Invoice Date:</td>
                 <td style={{ fontWeight: "600", color: "#1a1a1a", paddingBottom: "4px" }}>{today}</td>
               </tr>
+              {quotation.document_type === "quotation" && quotation.valid_until && (
+                <tr>
+                  <td style={{ color: "#777", paddingBottom: "4px" }}>Valid Until:</td>
+                  <td style={{ fontWeight: "600", color: "#c9922a", paddingBottom: "4px" }}>{formatDateLong(quotation.valid_until)}</td>
+                </tr>
+              )}
               {quotation.type === "product" && quotation.incoterm && (
                 <tr>
                   <td style={{ color: "#777", paddingBottom: "4px" }}>Incoterm:</td>
@@ -419,6 +438,7 @@ export default function QuotationPDF({
             <th style={{ padding: "10px 12px", textAlign: "left", color: "#fff", fontSize: "12px", fontWeight: "700", width: "70px" }}>Image</th>
             <th style={{ padding: "10px 12px", textAlign: "left", color: "#fff", fontSize: "12px", fontWeight: "700" }}>Description</th>
             <th style={{ padding: "10px 12px", textAlign: "center", color: "#fff", fontSize: "12px", fontWeight: "700", width: "60px" }}>Qty</th>
+            {showMoq && <th style={{ padding: "10px 12px", textAlign: "center", color: "#fff", fontSize: "12px", fontWeight: "700", width: "60px" }}>MOQ</th>}
             <th style={{ padding: "10px 12px", textAlign: "right", color: "#fff", fontSize: "12px", fontWeight: "700", width: "90px" }}>Price</th>
             <th style={{ padding: "10px 12px", textAlign: "right", color: "#fff", fontSize: "12px", fontWeight: "700", width: "100px" }}>Amount</th>
           </tr>
@@ -461,6 +481,11 @@ export default function QuotationPDF({
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", textAlign: "center", verticalAlign: "top" }}>
                   {qty}
                 </td>
+                {showMoq && (
+                  <td style={{ padding: "12px", fontSize: "12px", color: "#555", textAlign: "center", verticalAlign: "top" }}>
+                    {item.moq || "—"}
+                  </td>
+                )}
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top" }}>
                   ${formatMoney(price)}
                 </td>

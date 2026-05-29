@@ -13,6 +13,7 @@ const emptyItem = () => ({
   picture_url: "",
   price: "",
   quantity: 1,
+  moq: "",
   supplier_id: null,
   supplier_price: "",
   pictureFile: null,
@@ -26,6 +27,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
   const [deliveryTime, setDeliveryTime] = useState("");
+  const [validUntil, setValidUntil] = useState("");
   const [negotiationTerm, setNegotiationTerm] = useState("");
   const [notes, setNotes] = useState("");
   const [commissionPct, setCommissionPct] = useState(0);
@@ -84,6 +86,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setIncoterm(quotData.incoterm || "");
         setIncotermLocation(quotData.incoterm_location || "");
         setDeliveryTime(quotData.delivery_time || "");
+        setValidUntil(quotData.valid_until || "");
         setNegotiationTerm(quotData.negotiation_term || "");
         setNotes(quotData.notes || "");
         setCommissionPct(parseFloat(quotData.commission_pct) || 0);
@@ -199,6 +202,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         document_type: documentType,
         client_name: clientName || null,
         project_name: projectName || null,
+        valid_until: documentType === "quotation" ? (validUntil || null) : null,
       };
 
       let quotId;
@@ -266,6 +270,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           quantity: parseInt(it.quantity) || 1,
           supplier_id: type === "product" ? it.supplier_id : null,
           supplier_price: type === "product" ? (parseFloat(it.supplier_price) || null) : null,
+          moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
           sort_order: idx,
         };
       }));
@@ -291,7 +296,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   if (showPDF && savedQuotation) {
     return (
       <QuotationPDF
-        quotation={{ ...savedQuotation, type, currency, incoterm, incoterm_location: incotermLocation, delivery_time: deliveryTime, negotiation_term: negotiationTerm, notes, quote_number: quoteNumber, document_type: documentType }}
+        quotation={{ ...savedQuotation, type, currency, incoterm, incoterm_location: incotermLocation, delivery_time: deliveryTime, negotiation_term: negotiationTerm, notes, quote_number: quoteNumber, document_type: documentType, valid_until: validUntil || null }}
         items={items}
         clientName={clientName}
         projectName={projectName}
@@ -478,6 +483,21 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         </div>
       )}
 
+      {/* Offer validity — quotation only */}
+      {documentType === "quotation" && (
+        <div className="max-w-xs">
+          <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
+            Offer Valid Until
+          </label>
+          <input
+            type="date"
+            value={validUntil}
+            onChange={e => setValidUntil(e.target.value)}
+            className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+          />
+        </div>
+      )}
+
       {/* Shared: Negotiation Term */}
       <div>
         <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Negotiation Term</label>
@@ -642,6 +662,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       onWheel={e => e.target.blur()}
                       className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
                     />
+                    {documentType === "quotation" && (
+                      <div className="mt-2">
+                        <label className="block text-xs text-bgray-500 mb-1">MOQ</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={item.moq || ""}
+                          onChange={e => updateItem(idx, "moq", e.target.value)}
+                          onWheel={e => e.target.blur()}
+                          placeholder="e.g. 50"
+                          className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div>
