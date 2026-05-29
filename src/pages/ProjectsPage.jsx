@@ -151,20 +151,30 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
   const [showNewClientForm, setShowNewClientForm] = useState(false);
   const [newClientName, setNewClientName] = useState("");
   const [creatingClient, setCreatingClient] = useState(false);
+  const [clientSearch, setClientSearch] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const clientDropdownRef = useRef(null);
 
   useEffect(() => {
     if (isOpen) {
       fetchClients();
-      setFormData({
-        clientId: "",
-        projectName: "",
-        workflowKind: "Service",
-        remarks: ""
-      });
+      setFormData({ clientId: "", projectName: "", workflowKind: "Service", remarks: "" });
       setErrors({});
       setSubmitError("");
+      setClientSearch("");
+      setShowClientDropdown(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (clientDropdownRef.current && !clientDropdownRef.current.contains(e.target)) {
+        setShowClientDropdown(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const fetchClients = async () => {
     try {
@@ -299,19 +309,65 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
                 ) : (
                   <>
                     {clients.length > 0 ? (
-                      <select
-                        value={formData.clientId}
-                        onChange={(e) => setFormData({ ...formData, clientId: e.target.value })}
-                        disabled={submitting}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
-                      >
-                        <option value="">{t("selectClient")}</option>
-                        {clients.map((client) => (
-                          <option key={client.id} value={client.id}>
-                            {client.company_name}
-                          </option>
-                        ))}
-                      </select>
+                      <div ref={clientDropdownRef} className="relative">
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={clientSearch}
+                            onChange={e => {
+                              setClientSearch(e.target.value);
+                              setFormData(f => ({ ...f, clientId: "" }));
+                              setShowClientDropdown(true);
+                            }}
+                            onFocus={() => setShowClientDropdown(true)}
+                            disabled={submitting}
+                            placeholder={formData.clientId
+                              ? clients.find(c => c.id === formData.clientId)?.company_name
+                              : "Search client..."}
+                            className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 text-gray-900 bg-white"
+                          />
+                          {formData.clientId ? (
+                            <button
+                              type="button"
+                              onClick={() => { setFormData(f => ({ ...f, clientId: "" })); setClientSearch(""); setShowClientDropdown(true); }}
+                              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          ) : (
+                            <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        {showClientDropdown && (
+                          <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            {clients
+                              .filter(c => c.company_name.toLowerCase().includes(clientSearch.toLowerCase()))
+                              .map(c => (
+                                <button
+                                  key={c.id}
+                                  type="button"
+                                  onMouseDown={() => {
+                                    setFormData(f => ({ ...f, clientId: c.id }));
+                                    setClientSearch(c.company_name);
+                                    setShowClientDropdown(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-2 text-sm hover:bg-blue-50 hover:text-blue-700 transition-colors ${
+                                    formData.clientId === c.id ? "bg-blue-50 text-blue-700 font-medium" : "text-gray-900"
+                                  }`}
+                                >
+                                  {c.company_name}
+                                </button>
+                              ))}
+                            {clients.filter(c => c.company_name.toLowerCase().includes(clientSearch.toLowerCase())).length === 0 && (
+                              <p className="px-3 py-2 text-sm text-gray-400">No clients found</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     ) : null}
 
                     {/* Create New Client Button */}
