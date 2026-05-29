@@ -43,6 +43,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [quoteNumber, setQuoteNumber] = useState("");
   const fileRefs = useRef({});
   const [dragOver, setDragOver] = useState(null);
+  const [supplierSearches, setSupplierSearches] = useState({});
+  const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -641,16 +643,73 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                         </span>
                       </label>
                       <div className="flex gap-2">
-                        <select
-                          value={item.supplier_id || ""}
-                          onChange={e => updateItem(idx, "supplier_id", e.target.value || null)}
-                          className="flex-1 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-                        >
-                          <option value="">Select supplier...</option>
-                          {suppliers.map(s => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
+                        <div className="relative flex-1">
+                          {(() => {
+                            const selectedName = item.supplier_id ? suppliers.find(s => s.id === item.supplier_id)?.name ?? "" : "";
+                            const inputVal = showSupplierDropdown === idx
+                              ? (supplierSearches[item.tempId] ?? selectedName)
+                              : selectedName;
+                            const filterText = showSupplierDropdown === idx ? (supplierSearches[item.tempId] ?? "") : "";
+                            const filtered = suppliers.filter(s => s.name.toLowerCase().includes(filterText.toLowerCase()));
+                            return (
+                              <>
+                                <input
+                                  type="text"
+                                  value={inputVal}
+                                  onChange={e => {
+                                    setSupplierSearches(p => ({ ...p, [item.tempId]: e.target.value }));
+                                    updateItem(idx, "supplier_id", null);
+                                    setShowSupplierDropdown(idx);
+                                  }}
+                                  onFocus={() => {
+                                    setSupplierSearches(p => ({ ...p, [item.tempId]: selectedName }));
+                                    setShowSupplierDropdown(idx);
+                                  }}
+                                  onBlur={() => setTimeout(() => setShowSupplierDropdown(null), 150)}
+                                  placeholder="Search supplier..."
+                                  className="w-full px-3 py-2 pr-7 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                                />
+                                {item.supplier_id ? (
+                                  <button
+                                    type="button"
+                                    onMouseDown={() => { updateItem(idx, "supplier_id", null); setSupplierSearches(p => ({ ...p, [item.tempId]: "" })); }}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-bgray-400 hover:text-red-500 transition"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                    </svg>
+                                  </button>
+                                ) : (
+                                  <svg className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-bgray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                  </svg>
+                                )}
+                                {showSupplierDropdown === idx && (
+                                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                                    {filtered.map(s => (
+                                      <button
+                                        key={s.id}
+                                        onMouseDown={() => {
+                                          updateItem(idx, "supplier_id", s.id);
+                                          setSupplierSearches(p => ({ ...p, [item.tempId]: s.name }));
+                                          setShowSupplierDropdown(null);
+                                        }}
+                                        className={`w-full text-left px-3 py-2 text-sm hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition ${
+                                          item.supplier_id === s.id ? "font-semibold text-primary" : "text-darkblack-700 dark:text-white"
+                                        }`}
+                                      >
+                                        {s.name}
+                                      </button>
+                                    ))}
+                                    {filtered.length === 0 && (
+                                      <p className="px-3 py-2 text-xs text-bgray-400">No suppliers found</p>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
+                        </div>
                         <button
                           onClick={() => openSupplierModal(idx)}
                           className="px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-bgray-600 dark:text-bgray-300 hover:bg-bgray-100 dark:hover:bg-darkblack-500 transition whitespace-nowrap"
