@@ -135,7 +135,7 @@ function KanbanView({ stages, onStageClick }) {
   );
 }
 
-function NewProjectModal({ isOpen, onClose, onSuccess }) {
+function NewProjectModal({ isOpen, onClose, onSuccess, initialClientId, initialClientName }) {
   const { t } = useTranslation();
   const [clients, setClients] = useState([]);
   const [loadingClients, setLoadingClients] = useState(false);
@@ -158,13 +158,13 @@ function NewProjectModal({ isOpen, onClose, onSuccess }) {
   useEffect(() => {
     if (isOpen) {
       fetchClients();
-      setFormData({ clientId: "", projectName: "", workflowKind: "Service", remarks: "" });
+      setFormData({ clientId: initialClientId || "", projectName: "", workflowKind: "Service", remarks: "" });
       setErrors({});
       setSubmitError("");
-      setClientSearch("");
+      setClientSearch(initialClientName || "");
       setShowClientDropdown(false);
     }
-  }, [isOpen]);
+  }, [isOpen, initialClientId, initialClientName]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -604,6 +604,7 @@ export default function ProjectsPage() {
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [newProjectInitialClient, setNewProjectInitialClient] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -701,6 +702,14 @@ export default function ProjectsPage() {
   useEffect(() => {
     fetchTracksOverview();
   }, []);
+
+  // Handle "New Project" navigation from ClientsPage
+  useEffect(() => {
+    if (location.state?.newProjectClientId) {
+      setNewProjectInitialClient({ id: location.state.newProjectClientId, name: location.state.newProjectClientName || "" });
+      setShowNewProjectModal(true);
+    }
+  }, [location.state?.newProjectClientId]);
 
   // Handle navigation from dashboard
   useEffect(() => {
@@ -1613,7 +1622,9 @@ export default function ProjectsPage() {
         {/* New Project Modal */}
         <NewProjectModal
           isOpen={showNewProjectModal}
-          onClose={() => setShowNewProjectModal(false)}
+          initialClientId={newProjectInitialClient?.id}
+          initialClientName={newProjectInitialClient?.name}
+          onClose={() => { setShowNewProjectModal(false); setNewProjectInitialClient(null); }}
           onSuccess={async (newTrackId) => {
             // Refresh the sidebar list
             await fetchTracksOverview();

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 
@@ -266,6 +267,7 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
 
 export default function ClientsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -604,6 +606,16 @@ export default function ClientsPage() {
                           <div className="text-gray-900 max-w-xs truncate">{client.remark || "-"}</div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <button
+                            onClick={() => navigate("/projects", { state: { newProjectClientId: client.id, newProjectClientName: client.company_name } })}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-green-50 text-green-700 hover:bg-green-100 font-medium mr-2 transition-colors"
+                            title="Create project for this client"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                            </svg>
+                            Project
+                          </button>
                           <button
                             onClick={() => openEditModal(client)}
                             className="text-blue-600 hover:text-blue-900 mr-3"
