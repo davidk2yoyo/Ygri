@@ -16,6 +16,8 @@ const emptyItem = () => ({
   moq: "",
   supplier_id: null,
   supplier_price: "",
+  supplier_currency: "",
+  supplier_exchange_rate: "",
   pictureFile: null,
   picturePreview: "",
 });
@@ -283,6 +285,10 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           quantity: parseInt(it.quantity) || 1,
           supplier_id: type === "product" ? it.supplier_id : null,
           supplier_price: type === "product" ? (parseFloat(it.supplier_price) || null) : null,
+          supplier_currency: type === "product" ? (it.supplier_currency || null) : null,
+          supplier_exchange_rate: type === "product" && it.supplier_currency && it.supplier_currency !== currency
+            ? (parseFloat(it.supplier_exchange_rate) || null)
+            : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
           sort_order: idx,
         };
@@ -707,48 +713,100 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   </div>
 
                   {/* Supplier Cost — internal only, never shown in PDF */}
-                  {type === "product" && (
-                    <div>
-                      <label className="block text-xs text-bgray-500 mb-1 flex items-center gap-1">
-                        Supplier Cost ({currency})
-                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
-                          </svg>
-                          Internal
-                        </span>
-                      </label>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={item.supplier_price}
-                        onChange={e => updateItem(idx, "supplier_price", e.target.value)}
-                        onWheel={e => e.target.blur()}
-                        placeholder="0.00"
-                        className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
-                      />
-                    </div>
-                  )}
+                  {type === "product" && (() => {
+                    const supplierCurr = item.supplier_currency || "";
+                    const isFx = supplierCurr && supplierCurr !== currency;
+                    const rate = parseFloat(item.supplier_exchange_rate) || 0;
+                    const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
+                    const supplierPriceInDocCurrency = isFx && rate > 0
+                      ? supplierPriceRaw / rate
+                      : supplierPriceRaw;
+                    return (
+                      <div>
+                        <label className="block text-xs text-bgray-500 mb-1 flex items-center gap-1 flex-wrap">
+                          Supplier Cost
+                          {/* Currency picker */}
+                          <select
+                            value={supplierCurr || currency}
+                            onChange={e => updateItem(idx, "supplier_currency", e.target.value === currency ? "" : e.target.value)}
+                            className="px-1.5 py-0.5 border border-amber-200 rounded text-xs bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-1 focus:ring-amber-400 cursor-pointer"
+                          >
+                            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 text-amber-700 text-xs rounded-full font-medium">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 4.411m0 0L21 21" />
+                            </svg>
+                            Internal
+                          </span>
+                        </label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.supplier_price}
+                          onChange={e => updateItem(idx, "supplier_price", e.target.value)}
+                          onWheel={e => e.target.blur()}
+                          placeholder="0.00"
+                          className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
+                        />
+                        {/* Exchange rate row — only shown when supplier currency ≠ doc currency */}
+                        {isFx && (
+                          <div className="mt-1.5 flex items-center gap-1.5">
+                            <span className="text-xs text-bgray-500 whitespace-nowrap">1 {currency} =</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.0001"
+                              value={item.supplier_exchange_rate || ""}
+                              onChange={e => updateItem(idx, "supplier_exchange_rate", e.target.value)}
+                              onWheel={e => e.target.blur()}
+                              placeholder="rate"
+                              className="w-20 px-2 py-1 border border-amber-200 rounded-lg text-xs bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-1 focus:ring-amber-400"
+                            />
+                            <span className="text-xs text-bgray-500">{supplierCurr}</span>
+                          </div>
+                        )}
+                        {/* Converted cost display */}
+                        {isFx && supplierPriceRaw > 0 && rate > 0 && (
+                          <p className="text-xs text-bgray-400 mt-1">
+                            = {currency} {supplierPriceInDocCurrency.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Subtotal + margin display */}
-                  <div className={`flex flex-col justify-end gap-0.5 ${type === "product" ? "" : "col-span-1"}`}>
-                    <p className="text-sm font-semibold text-darkblack-700 dark:text-white">
-                      Subtotal: <span className="text-primary">{currency} {((parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
-                    </p>
-                    {type === "product" && item.supplier_price && item.price && (() => {
-                      const clientTotal = (parseFloat(item.price) || 0) * (parseInt(item.quantity) || 1);
-                      const supplierTotal = (parseFloat(item.supplier_price) || 0) * (parseInt(item.quantity) || 1);
-                      const marginAmt = clientTotal - supplierTotal;
-                      const marginPct = clientTotal > 0 ? (marginAmt / clientTotal * 100) : 0;
-                      const color = marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-500";
-                      return (
-                        <p className={`text-xs font-medium ${color}`}>
-                          Margin: {currency} {marginAmt.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({marginPct.toFixed(1)}%)
+                  {(() => {
+                    const supplierCurr = item.supplier_currency || "";
+                    const isFx = type === "product" && supplierCurr && supplierCurr !== currency;
+                    const rate = parseFloat(item.supplier_exchange_rate) || 0;
+                    const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
+                    const supplierPriceInDocCurrency = isFx && rate > 0
+                      ? supplierPriceRaw / rate
+                      : supplierPriceRaw;
+                    const qty = parseInt(item.quantity) || 1;
+                    const clientTotal = (parseFloat(item.price) || 0) * qty;
+                    const supplierTotal = supplierPriceInDocCurrency * qty;
+                    const marginAmt = clientTotal - supplierTotal;
+                    const marginPct = clientTotal > 0 ? (marginAmt / clientTotal * 100) : 0;
+                    const marginColor = marginPct >= 20 ? "text-green-600" : marginPct >= 10 ? "text-amber-600" : "text-red-500";
+                    const showMargin = type === "product" && supplierPriceRaw > 0 && item.price &&
+                      (!isFx || (isFx && rate > 0));
+                    return (
+                      <div className={`flex flex-col justify-end gap-0.5 ${type === "product" ? "" : "col-span-1"}`}>
+                        <p className="text-sm font-semibold text-darkblack-700 dark:text-white">
+                          Subtotal: <span className="text-primary">{currency} {clientTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                         </p>
-                      );
-                    })()}
-                  </div>
+                        {showMargin && (
+                          <p className={`text-xs font-medium ${marginColor}`}>
+                            Margin: {currency} {marginAmt.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({marginPct.toFixed(1)}%)
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Supplier — product only, hidden badge */}
                   {type === "product" && (
