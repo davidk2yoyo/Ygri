@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import QuotationPDF from "./QuotationPDF";
+import AIQuotationImporter from "./AIQuotationImporter";
 
 const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
 const CURRENCIES = ["USD", "COP", "EUR", "CNY", "HKD"];
@@ -43,6 +44,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [supplierItemIndex, setSupplierItemIndex] = useState(null);
   const [showCatalogDropdown, setShowCatalogDropdown] = useState(null);
   const [showPDF, setShowPDF] = useState(false);
+  const [showAIImporter, setShowAIImporter] = useState(false);
   const [savedQuotation, setSavedQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quoteNumber, setQuoteNumber] = useState("");
@@ -126,6 +128,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const addItem = () => setItems(prev => [...prev, emptyItem()]);
 
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx));
+
+  const handleAIImport = (importedItems) => {
+    setItems(prev => {
+      const existing = prev.filter(it => it.description || it.item_number);
+      return existing.length > 0 ? [...existing, ...importedItems] : importedItems;
+    });
+    setShowAIImporter(false);
+  };
 
   const handleItemPicture = async (idx, file) => {
     if (!file) return;
@@ -534,15 +544,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       <div>
         <div className="flex items-center justify-between mb-3">
           <h4 className="text-sm font-bold text-darkblack-700 dark:text-white uppercase tracking-wide">Items</h4>
-          <button
-            onClick={addItem}
-            className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            Add Item
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowAIImporter(true)}
+              className="flex items-center gap-1.5 text-xs border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-medium rounded-lg px-2.5 py-1.5 transition"
+            >
+              🤖 AI Import
+            </button>
+            <button
+              onClick={addItem}
+              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Item
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -995,6 +1013,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       )}
 
       {/* New Supplier Modal */}
+      {showAIImporter && (
+        <AIQuotationImporter
+          currency={currency}
+          onImport={handleAIImport}
+          onClose={() => setShowAIImporter(false)}
+        />
+      )}
+
       {showSupplierModal && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100]">
           <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-md p-6">
