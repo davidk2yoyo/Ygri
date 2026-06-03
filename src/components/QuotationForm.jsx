@@ -578,9 +578,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowAIImporter(true)}
-              className="flex items-center gap-1.5 text-xs border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-medium rounded-lg px-2.5 py-1.5 transition"
+              className="flex items-center gap-1.5 text-sm border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-semibold rounded-lg px-4 py-2 transition"
             >
-              🤖 AI Import
+              AI Import
             </button>
             <button
               onClick={addItem}
