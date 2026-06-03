@@ -1030,6 +1030,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       {showAIImporter && (
         <AIQuotationImporter
           currency={currency}
+          suppliers={suppliers}
+          supabase={supabase}
+          onSupplierCreated={(newSup) => setSuppliers(prev => [...prev, newSup])}
           onImport={handleAIImport}
           onClose={() => setShowAIImporter(false)}
         />

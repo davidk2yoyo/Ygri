@@ -36,7 +36,36 @@ const toBase64 = (file) =>
     reader.readAsDataURL(file);
   });
 
-export default function AIQuotationImporter({ currency, onImport, onClose }) {
+// Simple fuzzy match: check if significant words from detected name appear in supplier name
+function fuzzyMatch(detected, suppliers) {
+  if (!detected) return null;
+  const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
+  const detectedNorm = normalize(detected);
+  const detectedWords = detectedNorm.split(/\s+/).filter(w => w.length > 3);
+
+  let best = null;
+  let bestScore = 0;
+
+  for (const sup of suppliers) {
+    const supNorm = normalize(sup.name || "");
+    let score = 0;
+    for (const word of detectedWords) {
+      if (supNorm.includes(word)) score++;
+    }
+    // Also check if detected name includes significant words from supplier
+    const supWords = supNorm.split(/\s+/).filter(w => w.length > 3);
+    for (const word of supWords) {
+      if (detectedNorm.includes(word)) score++;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = sup;
+    }
+  }
+  return bestScore >= 2 ? best : null;
+}
+
+export default function AIQuotationImporter({ currency, suppliers = [], supabase, onSupplierCreated, onImport, onClose }) {
   const [step, setStep] = useState("pick"); // pick | loading | review | error
   const [dragOver, setDragOver] = useState(false);
   const [editItems, setEditItems] = useState([]);
@@ -44,6 +73,14 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
   const [detectedCurrency, setDetectedCurrency] = useState(currency);
   const [errorMsg, setErrorMsg] = useState("");
   const [imagePreview, setImagePreview] = useState("");
+
+  // Supplier resolution state
+  const [resolvedSupplier, setResolvedSupplier] = useState(null); // matched DB supplier object
+  const [supplierStatus, setSupplierStatus] = useState("idle"); // idle | matched | no_match | creating | created
+  const [showSupplierSearch, setShowSupplierSearch] = useState(false);
+  const [supplierSearchText, setSupplierSearchText] = useState("");
+  const [createError, setCreateError] = useState("");
+
   const fileRef = useRef(null);
 
   const processFile = useCallback(async (file) => {
@@ -78,7 +115,8 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
       const text = data.choices[0].message.content;
       const jsonStr = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
       const extracted = JSON.parse(jsonStr);
-      setSupplierInfo(extracted.supplier || null);
+      const info = extracted.supplier || null;
+      setSupplierInfo(info);
       setDetectedCurrency(extracted.currency || currency);
       setEditItems(
         (extracted.items || []).map((item, i) => ({
@@ -90,12 +128,25 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
           unit_price: Number(item.unit_price) || 0,
         }))
       );
+      // Auto-match supplier
+      if (info?.name) {
+        const match = fuzzyMatch(info.name, suppliers);
+        if (match) {
+          setResolvedSupplier(match);
+          setSupplierStatus("matched");
+        } else {
+          setResolvedSupplier(null);
+          setSupplierStatus("no_match");
+        }
+      } else {
+        setSupplierStatus("idle");
+      }
       setStep("review");
     } catch (e) {
       setErrorMsg(e.message);
       setStep("error");
     }
-  }, [currency]);
+  }, [currency, suppliers]);
 
   // Global paste listener (Ctrl+V) — active only on pick step
   useEffect(() => {
@@ -138,6 +189,36 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
   const checkedCount = editItems.filter(it => it.checked).length;
   const isFx = detectedCurrency && detectedCurrency !== currency;
 
+  // Create supplier in DB from AI-detected info
+  const handleCreateSupplier = async () => {
+    if (!supplierInfo?.name) return;
+    setSupplierStatus("creating");
+    setCreateError("");
+    try {
+      const payload = {
+        name: supplierInfo.name,
+        address: supplierInfo.address || "",
+        email: supplierInfo.email || "",
+        sales_person: supplierInfo.contact_person || "",
+        wechat_or_whatsapp: supplierInfo.phone || "",
+        website: "",
+      };
+      const { data, error } = await supabase.from("suppliers").insert(payload).select().single();
+      if (error) throw error;
+      setResolvedSupplier(data);
+      setSupplierStatus("created");
+      onSupplierCreated?.(data);
+    } catch (e) {
+      setCreateError(e.message);
+      setSupplierStatus("no_match");
+    }
+  };
+
+  // Filtered supplier list for override search
+  const filteredSuppliers = suppliers.filter(s =>
+    s.name.toLowerCase().includes(supplierSearchText.toLowerCase())
+  );
+
   const handleImport = () => {
     const items = editItems
       .filter(it => it.checked)
@@ -150,7 +231,7 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
         price: "",
         quantity: it.quantity,
         moq: "",
-        supplier_id: null,
+        supplier_id: resolvedSupplier?.id || null,
         supplier_price: it.unit_price.toString(),
         supplier_currency: isFx ? detectedCurrency : "",
         supplier_exchange_rate: "",
@@ -205,7 +286,6 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
                 }
               `}
             >
-              {/* Paste hint */}
               <div className="flex flex-col items-center gap-2 text-center">
                 <div className="w-14 h-14 rounded-2xl bg-bgray-50 dark:bg-darkblack-500 flex items-center justify-center text-2xl border border-bgray-100 dark:border-darkblack-400">
                   📋
@@ -221,14 +301,12 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
                 </p>
               </div>
 
-              {/* Divider */}
               <div className="flex items-center gap-3 w-full max-w-xs">
                 <div className="flex-1 h-px bg-bgray-200 dark:bg-darkblack-400" />
                 <span className="text-xs text-bgray-400 dark:text-bgray-500">or</span>
                 <div className="flex-1 h-px bg-bgray-200 dark:bg-darkblack-400" />
               </div>
 
-              {/* Upload button */}
               <div className="flex flex-col items-center gap-2">
                 <button
                   onClick={() => fileRef.current?.click()}
@@ -242,7 +320,6 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
                 <p className="text-xs text-bgray-400 dark:text-bgray-500">or drag & drop here</p>
               </div>
 
-              {/* Drag overlay hint */}
               {dragOver && (
                 <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-primary/5">
                   <p className="text-primary font-semibold text-sm">Drop to analyze</p>
@@ -285,7 +362,7 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
           {/* ── Review ── */}
           {step === "review" && (
             <>
-              {/* Image + supplier side by side */}
+              {/* Image + supplier card */}
               <div className="flex gap-3">
                 {imagePreview && (
                   <img
@@ -295,17 +372,111 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
                   />
                 )}
                 {supplierInfo?.name && (
-                  <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl p-3">
-                    <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-1">Supplier Detected</p>
-                    <p className="font-semibold text-sm text-darkblack-700 dark:text-white leading-tight">{supplierInfo.name}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                      {supplierInfo.contact_person && <span className="text-xs text-bgray-500 dark:text-bgray-400">👤 {supplierInfo.contact_person}</span>}
-                      {supplierInfo.phone && <span className="text-xs text-bgray-500 dark:text-bgray-400">📞 {supplierInfo.phone}</span>}
-                      {supplierInfo.email && <span className="text-xs text-bgray-500 dark:text-bgray-400">✉️ {supplierInfo.email}</span>}
+                  <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl p-3 space-y-2">
+                    <div>
+                      <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-0.5">Supplier Detected</p>
+                      <p className="font-semibold text-sm text-darkblack-700 dark:text-white leading-tight">{supplierInfo.name}</p>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                        {supplierInfo.contact_person && <span className="text-xs text-bgray-500 dark:text-bgray-400">👤 {supplierInfo.contact_person}</span>}
+                        {supplierInfo.phone && <span className="text-xs text-bgray-500 dark:text-bgray-400">📞 {supplierInfo.phone}</span>}
+                        {supplierInfo.email && <span className="text-xs text-bgray-500 dark:text-bgray-400">✉️ {supplierInfo.email}</span>}
+                      </div>
+                      {supplierInfo.address && (
+                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-0.5 leading-tight">{supplierInfo.address}</p>
+                      )}
                     </div>
-                    {supplierInfo.address && (
-                      <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1 leading-tight">{supplierInfo.address}</p>
-                    )}
+
+                    {/* Supplier resolution widget */}
+                    <div className="border-t border-blue-100 dark:border-blue-800/50 pt-2">
+                      {/* Matched */}
+                      {(supplierStatus === "matched" || supplierStatus === "created") && resolvedSupplier && (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${supplierStatus === "created" ? "bg-blue-500" : "bg-green-500"}`} />
+                            <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                              {supplierStatus === "created" ? "Created:" : "Matched:"}&nbsp;
+                              <span className="text-darkblack-700 dark:text-white">{resolvedSupplier.name}</span>
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => { setShowSupplierSearch(v => !v); setSupplierSearchText(""); }}
+                            className="text-[10px] text-bgray-400 hover:text-primary underline underline-offset-2 transition shrink-0"
+                          >
+                            {showSupplierSearch ? "Cancel" : "Change"}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* No match */}
+                      {supplierStatus === "no_match" && (
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
+                            <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Not in your database</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => { setShowSupplierSearch(v => !v); setSupplierSearchText(""); }}
+                              className="text-[10px] text-bgray-400 hover:text-primary underline underline-offset-2 transition"
+                            >
+                              {showSupplierSearch ? "Cancel" : "Pick existing"}
+                            </button>
+                            <button
+                              onClick={handleCreateSupplier}
+                              className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 transition"
+                            >
+                              + Create supplier
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Creating spinner */}
+                      {supplierStatus === "creating" && (
+                        <div className="flex items-center gap-2">
+                          <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs text-bgray-500">Creating supplier…</span>
+                        </div>
+                      )}
+
+                      {createError && (
+                        <p className="text-xs text-red-500 mt-1">{createError}</p>
+                      )}
+
+                      {/* Override search dropdown */}
+                      {showSupplierSearch && (
+                        <div className="mt-2 relative">
+                          <input
+                            type="text"
+                            autoFocus
+                            value={supplierSearchText}
+                            onChange={e => setSupplierSearchText(e.target.value)}
+                            placeholder="Search your suppliers…"
+                            className="w-full px-2.5 py-1.5 border border-blue-200 dark:border-blue-700 rounded-lg text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-1 focus:ring-primary placeholder-bgray-300"
+                          />
+                          {filteredSuppliers.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-darkblack-500 border border-gray-200 dark:border-darkblack-400 rounded-lg shadow-lg z-10 max-h-36 overflow-y-auto">
+                              {filteredSuppliers.map(s => (
+                                <button
+                                  key={s.id}
+                                  onClick={() => {
+                                    setResolvedSupplier(s);
+                                    setSupplierStatus("matched");
+                                    setShowSupplierSearch(false);
+                                  }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-darkblack-700 dark:text-white border-b border-gray-100 dark:border-darkblack-400 last:border-0"
+                                >
+                                  {s.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {filteredSuppliers.length === 0 && supplierSearchText && (
+                            <p className="text-xs text-bgray-400 mt-1.5 px-1">No match — try creating instead.</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -319,7 +490,7 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
                       Currency detected: <strong>{detectedCurrency}</strong> — your document is {currency}
                     </p>
                     <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
-                      Prices imported in {detectedCurrency}. Set exchange rate per item after importing.
+                      Prices imported in {detectedCurrency}. Set the exchange rate in the document header after importing.
                     </p>
                   </div>
                 </div>
@@ -403,6 +574,9 @@ export default function AIQuotationImporter({ currency, onImport, onClose }) {
           <div className="flex items-center justify-between px-6 py-4 border-t border-gray-100 dark:border-darkblack-400 shrink-0">
             <p className="text-xs text-bgray-400 dark:text-bgray-500">
               {checkedCount} of {editItems.length} selected
+              {resolvedSupplier && (
+                <span className="ml-2 text-green-600 dark:text-green-400">· supplier linked</span>
+              )}
             </p>
             <div className="flex items-center gap-3">
               <button
