@@ -30,6 +30,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [incoterm, setIncoterm] = useState("");
   const [incotermLocation, setIncotermLocation] = useState("");
   const [deliveryTime, setDeliveryTime] = useState("");
+  const [supplierExchangeRate, setSupplierExchangeRate] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [negotiationTerm, setNegotiationTerm] = useState("");
   const [notes, setNotes] = useState("");
@@ -90,6 +91,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setIncoterm(quotData.incoterm || "");
         setIncotermLocation(quotData.incoterm_location || "");
         setDeliveryTime(quotData.delivery_time || "");
+        setSupplierExchangeRate(quotData.supplier_exchange_rate?.toString() || "");
         setValidUntil(quotData.valid_until || "");
         setNegotiationTerm(quotData.negotiation_term || "");
         setNotes(quotData.notes || "");
@@ -228,6 +230,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         client_name: clientName || null,
         project_name: projectName || null,
         valid_until: documentType === "quotation" ? (validUntil || null) : null,
+        supplier_exchange_rate: type === "product" ? (parseFloat(supplierExchangeRate) || null) : null,
       };
 
       let quotId;
@@ -297,7 +300,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           supplier_price: type === "product" ? (parseFloat(it.supplier_price) || null) : null,
           supplier_currency: type === "product" ? (it.supplier_currency || null) : null,
           supplier_exchange_rate: type === "product" && it.supplier_currency && it.supplier_currency !== currency
-            ? (parseFloat(it.supplier_exchange_rate) || null)
+            ? (parseFloat(supplierExchangeRate) || null)
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
           sort_order: idx,
@@ -528,6 +531,34 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         </div>
       )}
 
+      {/* Supplier exchange rate — product type only */}
+      {type === "product" && (
+        <div className="max-w-sm">
+          <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
+            Supplier Exchange Rate
+          </label>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-bgray-500 dark:text-bgray-400 whitespace-nowrap">1 {currency} =</span>
+            <input
+              type="number"
+              min="0"
+              step="0.0001"
+              value={supplierExchangeRate}
+              onChange={e => setSupplierExchangeRate(e.target.value)}
+              onWheel={e => e.target.blur()}
+              placeholder="e.g. 7.25"
+              className="w-32 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+            />
+            <span className="text-xs text-bgray-400 dark:text-bgray-500">supplier currency units</span>
+          </div>
+          {supplierExchangeRate && parseFloat(supplierExchangeRate) > 0 && (
+            <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
+              Used to convert supplier costs to {currency} for margin calculation
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Shared: Negotiation Term */}
       <div>
         <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Negotiation Term</label>
@@ -734,7 +765,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   {type === "product" && (() => {
                     const supplierCurr = item.supplier_currency || "";
                     const isFx = supplierCurr && supplierCurr !== currency;
-                    const rate = parseFloat(item.supplier_exchange_rate) || 0;
+                    const rate = parseFloat(supplierExchangeRate) || 0;
                     const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
                     const supplierPriceInDocCurrency = isFx && rate > 0
                       ? supplierPriceRaw / rate
@@ -768,23 +799,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                           placeholder="0.00"
                           className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
                         />
-                        {/* Exchange rate row — only shown when supplier currency ≠ doc currency */}
-                        {isFx && (
-                          <div className="mt-1.5 flex items-center gap-1.5">
-                            <span className="text-xs text-bgray-500 whitespace-nowrap">1 {currency} =</span>
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.0001"
-                              value={item.supplier_exchange_rate || ""}
-                              onChange={e => updateItem(idx, "supplier_exchange_rate", e.target.value)}
-                              onWheel={e => e.target.blur()}
-                              placeholder="rate"
-                              className="w-20 px-2 py-1 border border-amber-200 rounded-lg text-xs bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-1 focus:ring-amber-400"
-                            />
-                            <span className="text-xs text-bgray-500">{supplierCurr}</span>
-                          </div>
-                        )}
                         {/* Converted cost display */}
                         {isFx && supplierPriceRaw > 0 && rate > 0 && (
                           <p className="text-xs text-bgray-400 mt-1">
@@ -799,7 +813,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   {(() => {
                     const supplierCurr = item.supplier_currency || "";
                     const isFx = type === "product" && supplierCurr && supplierCurr !== currency;
-                    const rate = parseFloat(item.supplier_exchange_rate) || 0;
+                    const rate = parseFloat(supplierExchangeRate) || 0;
                     const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
                     const supplierPriceInDocCurrency = isFx && rate > 0
                       ? supplierPriceRaw / rate
