@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
+import AIClientScanner from "../components/AIClientScanner";
 
 // CSV utility functions
 const downloadCSV = (data, filename) => {
@@ -288,6 +289,7 @@ export default function ClientsPage() {
   const [formError, setFormError] = useState("");
   const [submitLoading, setSubmitLoading] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
   const itemsPerPage = 10;
 
@@ -698,9 +700,18 @@ export default function ClientsPage() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
             <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                {editingClient ? t("editClient") : t("addNewClient")}
-              </h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-medium text-gray-900">
+                  {editingClient ? t("editClient") : t("addNewClient")}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg text-xs font-semibold hover:bg-blue-100 transition"
+                >
+                  🤖 Scan photo
+                </button>
+              </div>
               <form onSubmit={handleSubmit} onKeyPress={handleKeyPress}>
                 <div className="space-y-4">
                   <div>
@@ -818,6 +829,14 @@ export default function ClientsPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* AI Client Scanner */}
+      {showScanner && (
+        <AIClientScanner
+          onFill={(data) => setFormData(prev => ({ ...prev, ...data }))}
+          onClose={() => setShowScanner(false)}
+        />
       )}
 
       {/* Bulk Import Modal */}
