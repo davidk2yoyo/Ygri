@@ -37,23 +37,40 @@ const toBase64 = (file) =>
   });
 
 // Simple fuzzy match: check if significant words from detected name appear in supplier name
+// Generic words common in company names that shouldn't count as a match
+const STOPWORDS = new Set([
+  "technology","technologies","tech","group","co","ltd","limited","company",
+  "international","trading","industrial","china","chinese","manufacture",
+  "manufacturer","manufacturing","development","enterprise","enterprises",
+  "science","scientific","precision","solutions","services","service",
+  "products","product","import","export","supply","supplier","trade",
+  "corporation","corp","incorporated","inc","holding","holdings",
+  "beijing","shanghai","guangzhou","shenzhen","hangzhou","ningbo",
+  "zhejiang","jiangsu","guangdong","shandong","hebei","hunan",
+  "electronic","electronics","electrical","equipment","machinery",
+  "instrument","instruments","control","automation","system","systems",
+]);
+
 function fuzzyMatch(detected, suppliers) {
   if (!detected) return null;
   const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
   const detectedNorm = normalize(detected);
-  const detectedWords = detectedNorm.split(/\s+/).filter(w => w.length > 3);
+  // Only keep words that are meaningful (length > 3 and not stopwords)
+  const meaningful = (words) => words.filter(w => w.length > 3 && !STOPWORDS.has(w));
+  const detectedWords = meaningful(detectedNorm.split(/\s+/));
+
+  if (detectedWords.length === 0) return null;
 
   let best = null;
   let bestScore = 0;
 
   for (const sup of suppliers) {
     const supNorm = normalize(sup.name || "");
+    const supWords = meaningful(supNorm.split(/\s+/));
     let score = 0;
     for (const word of detectedWords) {
       if (supNorm.includes(word)) score++;
     }
-    // Also check if detected name includes significant words from supplier
-    const supWords = supNorm.split(/\s+/).filter(w => w.length > 3);
     for (const word of supWords) {
       if (detectedNorm.includes(word)) score++;
     }
@@ -62,6 +79,7 @@ function fuzzyMatch(detected, suppliers) {
       best = sup;
     }
   }
+  // Require at least 2 meaningful word matches to avoid false positives
   return bestScore >= 2 ? best : null;
 }
 
@@ -387,65 +405,71 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
                     </div>
 
                     {/* Supplier resolution widget */}
-                    <div className="border-t border-blue-100 dark:border-blue-800/50 pt-2">
-                      {/* Matched */}
-                      {(supplierStatus === "matched" || supplierStatus === "created") && resolvedSupplier && (
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full shrink-0 ${supplierStatus === "created" ? "bg-blue-500" : "bg-green-500"}`} />
-                            <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                              {supplierStatus === "created" ? "Created:" : "Matched:"}&nbsp;
-                              <span className="text-darkblack-700 dark:text-white">{resolvedSupplier.name}</span>
-                            </span>
-                          </div>
-                          <button
-                            onClick={() => { setShowSupplierSearch(v => !v); setSupplierSearchText(""); }}
-                            className="text-[10px] text-bgray-400 hover:text-primary underline underline-offset-2 transition shrink-0"
-                          >
-                            {showSupplierSearch ? "Cancel" : "Change"}
-                          </button>
-                        </div>
-                      )}
+                    <div className="border-t border-blue-100 dark:border-blue-800/50 pt-2 space-y-2">
 
-                      {/* No match */}
-                      {supplierStatus === "no_match" && (
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="w-2 h-2 rounded-full bg-amber-400 shrink-0" />
-                            <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Not in your database</span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              onClick={() => { setShowSupplierSearch(v => !v); setSupplierSearchText(""); }}
-                              className="text-[10px] text-bgray-400 hover:text-primary underline underline-offset-2 transition"
-                            >
-                              {showSupplierSearch ? "Cancel" : "Pick existing"}
-                            </button>
-                            <button
-                              onClick={handleCreateSupplier}
-                              className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 transition"
-                            >
-                              + Create supplier
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Creating spinner */}
+                      {/* Current resolution status */}
                       {supplierStatus === "creating" && (
                         <div className="flex items-center gap-2">
                           <div className="w-3.5 h-3.5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                           <span className="text-xs text-bgray-500">Creating supplier…</span>
                         </div>
                       )}
-
-                      {createError && (
-                        <p className="text-xs text-red-500 mt-1">{createError}</p>
+                      {supplierStatus === "created" && resolvedSupplier && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                          <span className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                            Created: <span className="text-darkblack-700 dark:text-white">{resolvedSupplier.name}</span>
+                          </span>
+                        </div>
+                      )}
+                      {supplierStatus === "matched" && resolvedSupplier && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+                          <span className="text-xs font-medium text-green-700 dark:text-green-400">
+                            Linked: <span className="text-darkblack-700 dark:text-white">{resolvedSupplier.name}</span>
+                          </span>
+                        </div>
+                      )}
+                      {supplierStatus === "no_match" && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full bg-bgray-300 shrink-0" />
+                          <span className="text-xs text-bgray-500 dark:text-bgray-400">No supplier linked</span>
+                        </div>
                       )}
 
-                      {/* Override search dropdown */}
+                      {createError && (
+                        <p className="text-xs text-red-500">{createError}</p>
+                      )}
+
+                      {/* Action buttons — always visible */}
+                      {supplierStatus !== "creating" && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <button
+                            onClick={handleCreateSupplier}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 transition"
+                          >
+                            + Create new
+                          </button>
+                          <button
+                            onClick={() => { setShowSupplierSearch(v => !v); setSupplierSearchText(""); }}
+                            className="px-2.5 py-1 border border-bgray-200 dark:border-darkblack-400 text-xs text-bgray-600 dark:text-bgray-300 rounded-lg hover:border-primary hover:text-primary transition"
+                          >
+                            {showSupplierSearch ? "Cancel search" : "Pick existing"}
+                          </button>
+                          {resolvedSupplier && (
+                            <button
+                              onClick={() => { setResolvedSupplier(null); setSupplierStatus("no_match"); setShowSupplierSearch(false); }}
+                              className="text-xs text-bgray-400 hover:text-red-500 underline underline-offset-2 transition"
+                            >
+                              Don't link
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Search dropdown */}
                       {showSupplierSearch && (
-                        <div className="mt-2 relative">
+                        <div className="relative">
                           <input
                             type="text"
                             autoFocus
@@ -472,7 +496,7 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
                             </div>
                           )}
                           {filteredSuppliers.length === 0 && supplierSearchText && (
-                            <p className="text-xs text-bgray-400 mt-1.5 px-1">No match — try creating instead.</p>
+                            <p className="text-xs text-bgray-400 mt-1.5 px-1">No match found.</p>
                           )}
                         </div>
                       )}
