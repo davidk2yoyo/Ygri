@@ -75,7 +75,7 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
                 onClick={() => setShowScanner(true)}
                 className="flex items-center gap-1.5 px-4 py-2 bg-bgray-50 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 border border-bgray-200 dark:border-darkblack-400 rounded-lg text-sm font-semibold hover:border-primary hover:text-primary transition"
               >
-                Scan photo
+                Scan with AI
               </button>
             )}
             <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
