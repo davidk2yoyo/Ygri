@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
+import AIClientScanner from "../components/AIClientScanner";
 
 const EMPTY_SUPPLIER = { name: "", address: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" };
 
@@ -9,6 +10,7 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("details");
+  const [showScanner, setShowScanner] = useState(false);
 
   const isNew = !supplier?.id;
 
@@ -67,12 +69,37 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
           <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">
             {isNew ? "New Supplier" : supplier.name}
           </h2>
-          <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-3">
+            {activeTab === "details" && (
+              <button
+                onClick={() => setShowScanner(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-bgray-50 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 border border-bgray-200 dark:border-darkblack-400 rounded-lg text-sm font-semibold hover:border-primary hover:text-primary transition"
+              >
+                Scan photo
+              </button>
+            )}
+            <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
+
+        {showScanner && (
+          <AIClientScanner
+            onFill={(data) => setForm(prev => ({
+              ...prev,
+              name: data.company_name || prev.name,
+              sales_person: data.contact_person || prev.sales_person,
+              email: data.email || prev.email,
+              wechat_or_whatsapp: data.phone || prev.wechat_or_whatsapp,
+              website: data.website || prev.website,
+              address: [data.address, data.country].filter(Boolean).join(", ") || prev.address,
+            }))}
+            onClose={() => setShowScanner(false)}
+          />
+        )}
 
         {/* Tabs */}
         <div className="flex items-center gap-1 px-6 border-b border-bgray-200 dark:border-darkblack-400">
