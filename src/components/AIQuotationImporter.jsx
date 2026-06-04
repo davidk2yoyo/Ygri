@@ -1,33 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-const PROMPT = `You are extracting structured data from a supplier quotation document image.
-
-Return ONLY a valid JSON object — no markdown, no explanation:
-{
-  "supplier": {
-    "name": "exact company name",
-    "contact_person": "person name or null",
-    "phone": "phone number or null",
-    "email": "email address or null",
-    "address": "full address condensed to one line or null"
-  },
-  "currency": "ISO currency code — use CNY for RMB/yuan/人民币, USD for $, EUR for €",
-  "items": [
-    {
-      "item_number": "product code / SKU / model number or null",
-      "description": "complete product description — merge multi-line text into one string, include all specs, variants, notes",
-      "quantity": 1,
-      "unit_price": 0.00
-    }
-  ],
-  "total": 0.00
-}
-
-Rules:
-- Only include real product/service line items — skip header rows, empty rows, and totals rows
-- quantity and unit_price must be numbers (not strings)
-- If a cell spans multiple lines, merge into a single description string`;
-
 const toBase64 = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -107,32 +79,16 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
     setStep("loading");
     try {
       const base64 = await toBase64(file);
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/ai-scan", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          max_tokens: 1500,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:${file.type};base64,${base64}`, detail: "high" } },
-              { type: "text", text: PROMPT },
-            ],
-          }],
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64, mimeType: file.type, type: "quotation" }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `API error ${res.status}`);
+        throw new Error(err.error || `API error ${res.status}`);
       }
-      const data = await res.json();
-      const text = data.choices[0].message.content;
-      const jsonStr = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      const extracted = JSON.parse(jsonStr);
+      const extracted = await res.json();
       const info = extracted.supplier || null;
       setSupplierInfo(info);
       setDetectedCurrency(extracted.currency || currency);

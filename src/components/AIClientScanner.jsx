@@ -1,24 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-const PROMPT = `You are extracting contact information from a business card, email signature, website screenshot, or any document containing company/client details.
-
-Return ONLY a valid JSON object — no markdown, no explanation:
-{
-  "company_name": "company or organization name, or null",
-  "contact_person": "full name of the contact person, or null",
-  "email": "email address, or null",
-  "phone": "phone number including country code if present, or null",
-  "website": "website URL, or null",
-  "address": "full address on one line, or null",
-  "country": "country name in English, or null"
-}
-
-Rules:
-- Extract what is visible — leave fields null if not present
-- For country: infer from address if not explicitly stated
-- website should include https:// if present, otherwise just the domain
-- phone: prefer mobile/direct line over main office if multiple are shown`;
-
 const toBase64 = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -41,32 +22,16 @@ export default function AIClientScanner({ onFill, onClose }) {
     setStep("loading");
     try {
       const base64 = await toBase64(file);
-      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      const res = await fetch("/api/ai-scan", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "gpt-4o-mini",
-          max_tokens: 500,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image_url", image_url: { url: `data:${file.type};base64,${base64}`, detail: "high" } },
-              { type: "text", text: PROMPT },
-            ],
-          }],
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64, mimeType: file.type, type: "client" }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error?.message || `API error ${res.status}`);
+        throw new Error(err.error || `API error ${res.status}`);
       }
-      const data = await res.json();
-      const text = data.choices[0].message.content;
-      const jsonStr = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-      const result = JSON.parse(jsonStr);
+      const result = await res.json();
       setExtracted({
         company_name: result.company_name || "",
         contact_person: result.contact_person || "",
