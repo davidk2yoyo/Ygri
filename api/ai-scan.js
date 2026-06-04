@@ -47,20 +47,51 @@ Rules:
 - phone: prefer mobile/direct line over main office if multiple are shown`,
 };
 
+const parseBody = (req) =>
+  new Promise((resolve, reject) => {
+    if (req.body && typeof req.body === "object") {
+      resolve(req.body);
+      return;
+    }
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      try { resolve(JSON.parse(raw)); } catch (e) { reject(e); }
+    });
+    req.on("error", reject);
+  });
+
 export default async function handler(req, res) {
+  res.setHeader("Content-Type", "application/json");
+
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    res.statusCode = 405;
+    res.end(JSON.stringify({ error: "Method not allowed" }));
+    return;
   }
 
-  const { image, mimeType, type } = req.body;
+  let body;
+  try {
+    body = await parseBody(req);
+  } catch {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "Invalid JSON body" }));
+    return;
+  }
+
+  const { image, mimeType, type } = body;
 
   if (!image || !mimeType || !PROMPTS[type]) {
-    return res.status(400).json({ error: "Missing required fields: image, mimeType, type" });
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "Missing required fields: image, mimeType, type" }));
+    return;
   }
 
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
-    return res.status(500).json({ error: "OpenAI API key not configured on server" });
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: "OpenAI API key not configured on server" }));
+    return;
   }
 
   try {
@@ -85,7 +116,9 @@ export default async function handler(req, res) {
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      return res.status(response.status).json({ error: err.error?.message || `OpenAI error ${response.status}` });
+      res.statusCode = response.status;
+      res.end(JSON.stringify({ error: err.error?.message || `OpenAI error ${response.status}` }));
+      return;
     }
 
     const data = await response.json();
@@ -93,8 +126,10 @@ export default async function handler(req, res) {
     const jsonStr = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     const result = JSON.parse(jsonStr);
 
-    return res.status(200).json(result);
+    res.statusCode = 200;
+    res.end(JSON.stringify(result));
   } catch (e) {
-    return res.status(500).json({ error: e.message });
+    res.statusCode = 500;
+    res.end(JSON.stringify({ error: e.message }));
   }
 }
