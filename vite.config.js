@@ -157,7 +157,15 @@ export default defineConfig(({ mode }) => {
                 const data = await response.json();
                 const rawContent = data.choices[0].message.content;
                 const jsonStr = rawContent.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-                const result = JSON.parse(jsonStr);
+                let result;
+                try {
+                  result = JSON.parse(jsonStr);
+                } catch {
+                  const fixed = jsonStr.replace(/"((?:[^"\\]|\\.)*)"/g, (match) =>
+                    match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+                  );
+                  result = JSON.parse(fixed);
+                }
                 res.setHeader("Content-Type", "application/json");
                 res.end(JSON.stringify(result));
               } catch (e) {

@@ -99,6 +99,18 @@ Rules:
 - Include every line — do not skip any content`,
 };
 
+function parseAIJson(str) {
+  try {
+    return JSON.parse(str);
+  } catch {
+    // GPT sometimes returns literal newlines/tabs inside JSON strings — escape them
+    const fixed = str.replace(/"((?:[^"\\]|\\.)*)"/g, (match) =>
+      match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+    );
+    return JSON.parse(fixed);
+  }
+}
+
 const parseBody = (req) =>
   new Promise((resolve, reject) => {
     if (req.body && typeof req.body === "object") {
@@ -187,7 +199,7 @@ export default async function handler(req, res) {
     const data = await response.json();
     const text = data.choices[0].message.content;
     const jsonStr = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const result = JSON.parse(jsonStr);
+    const result = parseAIJson(jsonStr);
 
     res.statusCode = 200;
     res.end(JSON.stringify(result));
