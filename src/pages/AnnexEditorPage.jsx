@@ -175,15 +175,15 @@ function TextBlockEditor({ block, onChange }) {
       <textarea
         value={block.content.content}
         onChange={e => onChange({ ...block.content, content: e.target.value })}
-        rows={5}
-        placeholder="Enter technical description here, or use 'Scan with AI' to generate from a product image…"
+        rows={6}
+        placeholder="Enter text here, use 'Scan with AI' to extract text verbatim from a document, or 'Retouch with AI' to professionally rephrase existing text…"
         className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none leading-relaxed"
       />
       {retouchError && <p className="text-xs text-red-500">{retouchError}</p>}
       {scanning && (
         <AIScanModal
-          type="description"
-          onResult={result => onChange({ ...block.content, title: result.title || block.content.title, content: result.description || "" })}
+          type="extract"
+          onResult={result => onChange({ ...block.content, title: result.title || block.content.title, content: result.content || "" })}
           onClose={() => setScanning(false)}
         />
       )}
@@ -372,16 +372,48 @@ function DiagramBlockEditor({ block, onChange, annexId }) {
 }
 
 // ─── Main block card ──────────────────────────────────────────────────────────
-function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, annexId }) {
+function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, annexId, quotationItems }) {
+  const linkedItem = block.content._linked_item;
+
+  const handleItemSelect = (e) => {
+    const val = e.target.value;
+    if (!val) {
+      const { _linked_item, ...rest } = block.content;
+      onChange({ ...block, content: rest });
+    } else {
+      const item = quotationItems.find(i => i.id === val);
+      if (item) onChange({ ...block, content: { ...block.content, _linked_item: { id: item.id, item_number: item.item_number, description: item.description } } });
+    }
+  };
+
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
       {/* Block header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[block.type]}</svg>
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{BLOCK_LABELS[block.type]}</span>
+        <div className="flex items-center gap-2 min-w-0">
+          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[block.type]}</svg>
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">{BLOCK_LABELS[block.type]}</span>
+          {quotationItems.length > 0 && (
+            <select
+              value={linkedItem?.id || ""}
+              onChange={handleItemSelect}
+              className="ml-2 text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-500 bg-white focus:ring-1 focus:ring-blue-400 focus:border-blue-400 max-w-[220px] truncate"
+            >
+              <option value="">— Link to item —</option>
+              {quotationItems.map(it => (
+                <option key={it.id} value={it.id}>
+                  {[it.item_number, it.description].filter(Boolean).join(" · ").slice(0, 50)}
+                </option>
+              ))}
+            </select>
+          )}
+          {linkedItem && (
+            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium shrink-0">
+              {linkedItem.item_number || linkedItem.description?.slice(0, 20)}
+            </span>
+          )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 shrink-0">
           <button onClick={onMoveUp} disabled={index === 0} className="p-1 rounded text-gray-400 hover:text-gray-600 disabled:opacity-20 transition">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
           </button>
@@ -412,6 +444,7 @@ export default function AnnexEditorPage() {
   const [annex, setAnnex] = useState(null);
   const [blocks, setBlocks] = useState([]);
   const [quotation, setQuotation] = useState(null);
+  const [quotationItems, setQuotationItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -428,9 +461,13 @@ export default function AnnexEditorPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Load quotation info
-      const { data: quot } = await supabase.from("quotations").select("id, quote_number, client_name, project_name, document_type").eq("id", quotationId).single();
+      // Load quotation info and items
+      const [{ data: quot }, { data: qItems }] = await Promise.all([
+        supabase.from("quotations").select("id, quote_number, client_name, project_name, document_type").eq("id", quotationId).single(),
+        supabase.from("quotation_items").select("id, item_number, description").eq("quotation_id", quotationId).order("id"),
+      ]);
       setQuotation(quot);
+      setQuotationItems(qItems || []);
 
       // Check for existing annex
       const { data: existing } = await supabase.from("technical_annexes").select("*").eq("quotation_id", quotationId).single();
@@ -576,6 +613,7 @@ export default function AnnexEditorPage() {
             onDelete={() => deleteBlock(block._localId)}
             onChange={updated => updateBlock(block._localId, updated)}
             annexId={annex?.id}
+            quotationItems={quotationItems}
           />
         ))}
 

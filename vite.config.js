@@ -78,6 +78,20 @@ Return ONLY a valid JSON object — no markdown, no explanation:
 {
   "content": "the improved text"
 }`,
+
+  extract: `You are a document transcription assistant. Copy ALL text from this document image exactly as it appears — preserving every specification, measurement, value, and detail verbatim. Do not summarize, rephrase, or omit anything.
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "title": "product name or document title shown in the image",
+  "content": "the full text exactly as written in the document, preserving line breaks with \\n"
+}
+
+Rules:
+- Copy text character-for-character including units, symbols, punctuation
+- Preserve the original line structure using \\n
+- If text is in another language, copy it as-is (do not translate)
+- Include every line — do not skip any content`,
 };
 
 export default defineConfig(({ mode }) => {

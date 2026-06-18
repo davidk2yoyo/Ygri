@@ -21,8 +21,14 @@ function SpecsTable({ content }) {
 
 function BlockRenderer({ block }) {
   const { type, content } = block;
+  const linkedItem = content._linked_item;
   return (
     <div className="mb-10">
+      {linkedItem && (
+        <p className="text-xs font-semibold text-blue-500 uppercase tracking-widest mb-2">
+          {[linkedItem.item_number, linkedItem.description].filter(Boolean).join(" · ")}
+        </p>
+      )}
       {type === "text" && (
         <>
           <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
