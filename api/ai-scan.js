@@ -45,6 +45,31 @@ Rules:
 - For country: infer from address if not explicitly stated
 - website should include https:// if present, otherwise just the domain
 - phone: prefer mobile/direct line over main office if multiple are shown`,
+
+  specs: `You are extracting technical specifications from a product datasheet, catalog page, or technical document image.
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "product_name": "full product name or model number",
+  "rows": [
+    { "label": "specification name", "value": "specification value with units" }
+  ]
+}
+
+Rules:
+- Extract ALL visible technical parameters: dimensions, weight, voltage, current, pressure, temperature range, accuracy, material, protection rating, certifications, etc.
+- Keep labels concise (2-4 words max)
+- Include units in the value field (mm, kg, V, A, bar, °C, etc.)
+- Skip marketing text, descriptions, and non-technical content
+- Aim for 8-20 rows`,
+
+  description: `You are a technical writer for an international trade company. Write a professional technical product description in English based on the image provided (product photo, datasheet, or catalog page).
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "title": "Product name / model",
+  "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
+}`,
 };
 
 const parseBody = (req) =>

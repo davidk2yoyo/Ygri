@@ -17,6 +17,8 @@ import TasksPage from "./pages/TasksPage";
 import EmailThreadsPage from "./pages/EmailThreadsPage";
 import ItemsPage from "./pages/ItemsPage";
 import PublicQuotationPage from "./pages/PublicQuotationPage";
+import AnnexEditorPage from "./pages/AnnexEditorPage";
+import AnnexPublicPage from "./pages/AnnexPublicPage";
 import "./index.css";
 import "./i18n";
 
@@ -25,6 +27,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/q/:quoteNumber" element={<PublicQuotationPage />} />
+        <Route path="/a/:annexNumber" element={<AnnexPublicPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route element={
           <ProtectedRoute>
@@ -42,6 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/emails" element={<EmailThreadsPage />} />
           <Route path="/items" element={<ItemsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
         </Route>
       </Routes>
     </BrowserRouter>
