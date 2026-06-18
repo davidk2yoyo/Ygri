@@ -1,6 +1,7 @@
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { supabase } from "../supabaseClient";
 
 const formatDateLong = (iso) => {
   if (!iso) return "";
@@ -33,7 +34,7 @@ const DOC_META = {
   invoice:   { title: "COMMERCIAL INVOICE", refLabel: "Invoice Number",  amountLabel: "Amount Due",    titleEs: "Factura Comercial" },
 };
 
-function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectName, currency, grandTotal, deliveryTime, incoterm, validUntil, shareUrl, formatMoney }) {
+function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectName, currency, grandTotal, deliveryTime, incoterm, validUntil, shareUrl, annexUrl, formatMoney }) {
   const total = `${currency} ${formatMoney(grandTotal)}`;
   const validLine = validUntil ? formatDateLong(validUntil) : null;
 
@@ -49,6 +50,9 @@ function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectN
     ``,
     `You can view the full document anytime here:`,
     shareUrl,
+    annexUrl ? `` : null,
+    annexUrl ? `📋 *Technical Specifications:*` : null,
+    annexUrl ? annexUrl : null,
     ``,
     `Thank you for your business!`,
     `_Interasia SAS (HK) Trade Company_`,
@@ -66,6 +70,9 @@ function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectN
     ``,
     `Puede ver el documento completo en cualquier momento aquí:`,
     shareUrl,
+    annexUrl ? `` : null,
+    annexUrl ? `📋 *Especificaciones Técnicas:*` : null,
+    annexUrl ? annexUrl : null,
     ``,
     `¡Gracias por su confianza!`,
     `_Interasia SAS (HK) Trade Company_`,
@@ -79,9 +86,18 @@ function buildWhatsAppMessage(lang, { docMeta, quoteNumber, clientName, projectN
 function WhatsAppModal({ onClose, quotation, clientName, projectName, grandTotal, formatMoney }) {
   const [lang, setLang] = useState("en");
   const [copied, setCopied] = useState(false);
+  const [annexUrl, setAnnexUrl] = useState(null);
 
   const shareUrl = `${window.location.origin}/q/${quotation.quote_number}`;
   const docMeta = DOC_META[quotation.document_type] || DOC_META.quotation;
+
+  useEffect(() => {
+    if (!quotation?.id) return;
+    supabase.from("technical_annexes").select("annex_number").eq("quotation_id", quotation.id).maybeSingle()
+      .then(({ data }) => {
+        if (data?.annex_number) setAnnexUrl(`${window.location.origin}/a/${data.annex_number}`);
+      });
+  }, [quotation?.id]);
 
   const message = buildWhatsAppMessage(lang, {
     docMeta,
@@ -94,6 +110,7 @@ function WhatsAppModal({ onClose, quotation, clientName, projectName, grandTotal
     incoterm: quotation.incoterm ? `${quotation.incoterm}${quotation.incoterm_location ? ` ${quotation.incoterm_location}` : ""}` : null,
     validUntil: quotation.valid_until || null,
     shareUrl,
+    annexUrl,
     formatMoney,
   });
 
