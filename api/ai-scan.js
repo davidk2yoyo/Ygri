@@ -70,6 +70,11 @@ Return ONLY a valid JSON object — no markdown, no explanation:
   "title": "Product name / model",
   "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
 }`,
+
+  retouch: `You are a technical writer for an international trade company. Rephrase the following product description in a professional, formal B2B tone. Keep all technical facts exactly as they are — only improve the language, clarity, and professionalism. Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "content": "the improved text"
+}`,
 };
 
 const parseBody = (req) =>
@@ -104,11 +109,21 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { image, mimeType, type } = body;
+  const { image, mimeType, type, text } = body;
 
-  if (!image || !mimeType || !PROMPTS[type]) {
+  if (!PROMPTS[type]) {
     res.statusCode = 400;
-    res.end(JSON.stringify({ error: "Missing required fields: image, mimeType, type" }));
+    res.end(JSON.stringify({ error: `Unknown type: ${type}` }));
+    return;
+  }
+  if (type === "retouch" && !text) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "Missing required field: text" }));
+    return;
+  }
+  if (type !== "retouch" && (!image || !mimeType)) {
+    res.statusCode = 400;
+    res.end(JSON.stringify({ error: "Missing required fields: image, mimeType" }));
     return;
   }
 
@@ -119,6 +134,13 @@ export default async function handler(req, res) {
     return;
   }
 
+  const messages = type === "retouch"
+    ? [{ role: "user", content: `${PROMPTS.retouch}\n\nText to rephrase:\n${text}` }]
+    : [{ role: "user", content: [
+        { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
+        { type: "text", text: PROMPTS[type] },
+      ]}];
+
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -128,14 +150,8 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 1500 : 500,
-        messages: [{
-          role: "user",
-          content: [
-            { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
-            { type: "text", text: PROMPTS[type] },
-          ],
-        }],
+        max_tokens: type === "quotation" ? 1500 : 600,
+        messages,
       }),
     });
 

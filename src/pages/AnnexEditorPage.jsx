@@ -119,6 +119,30 @@ function AIScanModal({ type, onResult, onClose }) {
 // ─── Block editors ───────────────────────────────────────────────────────────
 function TextBlockEditor({ block, onChange }) {
   const [scanning, setScanning] = useState(false);
+  const [retouching, setRetouching] = useState(false);
+  const [retouchError, setRetouchError] = useState("");
+
+  const handleRetouch = async () => {
+    const currentText = block.content.content?.trim();
+    if (!currentText) return;
+    setRetouching(true);
+    setRetouchError("");
+    try {
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "retouch", text: currentText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      if (data.content) onChange({ ...block.content, content: data.content });
+    } catch (e) {
+      setRetouchError(e.message);
+    } finally {
+      setRetouching(false);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -128,20 +152,34 @@ function TextBlockEditor({ block, onChange }) {
           placeholder="Section title"
           className="flex-1 text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
         />
-        <button
-          onClick={() => setScanning(true)}
-          className="ml-3 flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition shrink-0"
-        >
-          Generate with AI
-        </button>
+        <div className="flex items-center gap-2 ml-3 shrink-0">
+          <button
+            onClick={handleRetouch}
+            disabled={retouching || !block.content.content?.trim()}
+            className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-purple-400 hover:text-purple-600 disabled:opacity-40 transition"
+          >
+            {retouching ? <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin inline-block" /> : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
+            )}
+            Retouch with AI
+          </button>
+          <button
+            onClick={() => setScanning(true)}
+            className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+            Scan with AI
+          </button>
+        </div>
       </div>
       <textarea
         value={block.content.content}
         onChange={e => onChange({ ...block.content, content: e.target.value })}
         rows={5}
-        placeholder="Enter technical description here, or use 'Generate with AI' to scan a product image…"
+        placeholder="Enter technical description here, or use 'Scan with AI' to generate from a product image…"
         className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none leading-relaxed"
       />
+      {retouchError && <p className="text-xs text-red-500">{retouchError}</p>}
       {scanning && (
         <AIScanModal
           type="description"
