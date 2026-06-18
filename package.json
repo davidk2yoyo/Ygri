@@ -18,6 +18,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
+    "@tiptap/extension-color": "^3.27.0",
+    "@tiptap/extension-text-style": "^3.27.0",
+    "@tiptap/extension-underline": "^3.27.0",
+    "@tiptap/pm": "^3.27.0",
+    "@tiptap/react": "^3.27.0",
+    "@tiptap/starter-kit": "^3.27.0",
     "date-fns": "^4.1.0",
     "elkjs": "^0.10.0",
     "flowise-embed-react": "^3.0.5",

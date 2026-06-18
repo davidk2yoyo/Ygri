@@ -71,18 +71,12 @@ Return ONLY a valid JSON object — no markdown, no explanation:
   "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
 }`,
 
-  retouch: `You are a technical writer for an international trade company. Rephrase the following product description in a professional, formal B2B tone. Keep all technical facts exactly as they are — only improve the language, clarity, and structure.
+  retouch: `You are a technical writer for an international trade company. Rephrase the following product description in a professional, formal B2B tone. Keep all technical facts exactly as they are — only improve the language, clarity, and flow.
 
-Format the output using markdown:
-- Use **bold** for parameter names and key technical terms (e.g. **Effective volume**, **Heating area**)
-- Use bullet points (- ) for lists of specifications or features
-- Use short paragraphs separated by blank lines if there are distinct sections
-- Do NOT use headers (no # or ##)
+Return plain text only — no markdown symbols (no **, no *, no #, no - bullets). Use blank lines to separate paragraphs. Keep distinct specification items on separate lines.
 
-Return ONLY a valid JSON object — no explanation:
-{
-  "content": "the improved markdown-formatted text"
-}`,
+Return ONLY a valid JSON object on a single line — no literal line breaks in the JSON itself, use \\n for line breaks:
+{"content": "paragraph one\\n\\nparagraph two\\nspec item one\\nspec item two"}`,
 
   extract: `You are a document transcription assistant. Copy ALL text from this document image exactly as it appears — preserving every specification, measurement, value, and detail verbatim. Do not summarize, rephrase, or omit anything.
 

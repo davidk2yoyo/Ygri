@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
-import ReactMarkdown from "react-markdown";
 
 function SpecsTable({ content }) {
   return (
@@ -45,9 +44,10 @@ function BlockRenderer({ block }) {
       {type === "text" && (
         <>
           <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
-          <div className="text-gray-600 leading-relaxed [&_strong]:font-semibold [&_strong]:text-gray-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_p]:mb-2">
-            <ReactMarkdown>{content.content}</ReactMarkdown>
-          </div>
+          <div
+            className="text-gray-600 leading-relaxed [&_strong]:font-semibold [&_strong]:text-gray-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_p]:mb-2 [&_h3]:font-bold [&_h3]:text-gray-800 [&_h3]:mb-1"
+            dangerouslySetInnerHTML={{ __html: content.content || "" }}
+          />
         </>
       )}
       {type === "specs" && (

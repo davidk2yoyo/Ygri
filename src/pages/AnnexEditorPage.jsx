@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import RichTextEditor from "../components/RichTextEditor";
 
 // ─── AI helpers ────────────────────────────────────────────────────────────────
 const toBase64 = (file) =>
@@ -228,20 +229,34 @@ function TextBlockEditor({ block, onChange }) {
   const [retouching, setRetouching] = useState(false);
   const [retouchError, setRetouchError] = useState("");
 
+  const stripHtml = (html) => {
+    const div = document.createElement("div");
+    div.innerHTML = html;
+    return div.textContent || div.innerText || "";
+  };
+
   const handleRetouch = async () => {
-    const currentText = block.content.content?.trim();
-    if (!currentText) return;
+    const plainText = stripHtml(block.content.content || "").trim();
+    if (!plainText) return;
     setRetouching(true);
     setRetouchError("");
     try {
       const res = await fetch("/api/ai-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "retouch", text: currentText }),
+        body: JSON.stringify({ type: "retouch", text: plainText }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
-      if (data.content) onChange({ ...block.content, content: data.content });
+      if (data.content) {
+        // Convert returned text (may have \n) into HTML paragraphs
+        const html = data.content
+          .replace(/\\n/g, "\n")
+          .split(/\n{2,}/)
+          .map(p => `<p>${p.replace(/\n/g, "<br>").replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\*(.*?)\*/g, "<em>$1</em>")}</p>`)
+          .join("");
+        onChange({ ...block.content, content: html });
+      }
     } catch (e) {
       setRetouchError(e.message);
     } finally {
@@ -261,7 +276,7 @@ function TextBlockEditor({ block, onChange }) {
         <div className="flex items-center gap-2 ml-3 shrink-0">
           <button
             onClick={handleRetouch}
-            disabled={retouching || !block.content.content?.trim()}
+            disabled={retouching || !stripHtml(block.content.content || "").trim()}
             className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-purple-400 hover:text-purple-600 disabled:opacity-40 transition"
           >
             {retouching ? <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin inline-block" /> : (
@@ -278,18 +293,20 @@ function TextBlockEditor({ block, onChange }) {
           </button>
         </div>
       </div>
-      <textarea
-        value={block.content.content}
-        onChange={e => onChange({ ...block.content, content: e.target.value })}
-        rows={6}
-        placeholder="Enter text here, use 'Scan with AI' to extract text verbatim from a document, or 'Retouch with AI' to professionally rephrase existing text…"
-        className="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none leading-relaxed"
+      <RichTextEditor
+        content={block.content.content || ""}
+        onChange={html => onChange({ ...block.content, content: html })}
+        placeholder="Enter text here, use 'Scan with AI' to extract text from a document, or 'Retouch with AI' to improve the writing…"
       />
       {retouchError && <p className="text-xs text-red-500">{retouchError}</p>}
       {scanning && (
         <AIScanModal
           type="extract"
-          onResult={result => onChange({ ...block.content, title: result.title || block.content.title, content: result.content || "" })}
+          onResult={result => {
+            const text = (result.content || "").replace(/\\n/g, "\n");
+            const html = text.split(/\n{2,}/).map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+            onChange({ ...block.content, title: result.title || block.content.title, content: html });
+          }}
           onClose={() => setScanning(false)}
         />
       )}
