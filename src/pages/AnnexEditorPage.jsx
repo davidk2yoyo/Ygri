@@ -24,14 +24,22 @@ async function aiScan(file, type) {
 
 // ─── Block defaults ─────────────────────────────────────────────────────────
 const BLOCK_DEFAULTS = {
+  item:    { label: "", item_number: "", description: "" },
   text:    { title: "Overview", content: "" },
   specs:   { title: "Technical Specifications", rows: [{ label: "", value: "" }] },
   images:  { title: "Product Photos", images: [] },
   diagram: { title: "Dimensions / Drawing", url: "", caption: "" },
 };
 
-const BLOCK_LABELS = { text: "Text Block", specs: "Specs Table", images: "Image Gallery", diagram: "Diagram / Drawing" };
-const BLOCK_ICONS  = {
+const BLOCK_LABELS = {
+  item:    "Item Header",
+  text:    "Text Block",
+  specs:   "Specs Table",
+  images:  "Image Gallery",
+  diagram: "Diagram / Drawing",
+};
+const BLOCK_ICONS = {
+  item:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a2 2 0 012-2z" />,
   text:    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h16M4 10h16M4 14h10" />,
   specs:   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18M10 3v18" />,
   images:  <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4-4 3 3 4-5 5 6" /><rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5} /></>,
@@ -66,7 +74,7 @@ function AIScanModal({ type, onResult, onClose }) {
     return () => window.removeEventListener("paste", fn);
   }, [step, processFile]);
 
-  const label = type === "specs" ? "Extract specs from catalog / datasheet" : "Generate description from product photo";
+  const label = type === "specs" ? "Extract specs from catalog / datasheet" : "Extract text verbatim from document";
 
   return (
     <div className="fixed inset-0 z-[10002] bg-black/70 flex items-center justify-center p-4">
@@ -116,7 +124,105 @@ function AIScanModal({ type, onResult, onClose }) {
   );
 }
 
+// ─── Upload dropzone (shared by Images and Diagram) ──────────────────────────
+function UploadDropzone({ onFiles, uploading, multiple, children }) {
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef(null);
+
+  useEffect(() => {
+    const fn = (e) => {
+      const files = Array.from(e.clipboardData?.items || [])
+        .filter(it => it.type.startsWith("image/"))
+        .map(it => it.getAsFile());
+      if (files.length) onFiles(multiple ? files : [files[0]]);
+    };
+    window.addEventListener("paste", fn);
+    return () => window.removeEventListener("paste", fn);
+  }, [onFiles, multiple]);
+
+  return (
+    <div
+      onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+      onDragLeave={() => setDragOver(false)}
+      onDrop={e => {
+        e.preventDefault(); setDragOver(false);
+        const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/"));
+        if (files.length) onFiles(multiple ? files : [files[0]]);
+      }}
+      onClick={() => !uploading && fileRef.current?.click()}
+      className={`w-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 cursor-pointer transition-all
+        ${dragOver ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-blue-400 hover:text-blue-500 text-gray-400"}
+        ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+    >
+      {children}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        multiple={multiple}
+        className="hidden"
+        onChange={e => onFiles(multiple ? Array.from(e.target.files) : [e.target.files[0]])}
+      />
+      {dragOver && <p className="text-xs text-blue-500 font-medium">Drop image here</p>}
+      {!dragOver && <p className="text-xs text-gray-400">Paste · Drag & drop · Click to browse</p>}
+    </div>
+  );
+}
+
 // ─── Block editors ───────────────────────────────────────────────────────────
+
+function ItemBlockEditor({ block, onChange, quotationItems }) {
+  const handleItemSelect = (e) => {
+    const item = quotationItems.find(i => i.id === e.target.value);
+    if (item) {
+      onChange({ ...block.content, label: item.description || "", item_number: item.item_number || "", description: item.description || "", _linked_item: { id: item.id, item_number: item.item_number, description: item.description } });
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      {quotationItems.length > 0 && (
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Link to quotation item</label>
+          <select
+            value={block.content._linked_item?.id || ""}
+            onChange={handleItemSelect}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 text-gray-600 bg-gray-50 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+          >
+            <option value="">— Select item to auto-fill —</option>
+            {quotationItems.map(it => (
+              <option key={it.id} value={it.id}>
+                {[it.item_number, it.description].filter(Boolean).join(" · ").slice(0, 70)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Item number / SKU</label>
+        <input
+          value={block.content.item_number || ""}
+          onChange={e => onChange({ ...block.content, item_number: e.target.value })}
+          placeholder="e.g. BK-150L"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+      </div>
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Section heading</label>
+        <input
+          value={block.content.label || ""}
+          onChange={e => onChange({ ...block.content, label: e.target.value })}
+          placeholder="e.g. Brew Kettle / Cooking Train"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-xl font-bold text-gray-800 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+      </div>
+      <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+        This block appears as a bold section divider in the document, linking content below it to a specific product.
+      </p>
+    </div>
+  );
+}
+
 function TextBlockEditor({ block, onChange }) {
   const [scanning, setScanning] = useState(false);
   const [retouching, setRetouching] = useState(false);
@@ -252,13 +358,13 @@ function SpecsBlockEditor({ block, onChange }) {
 function ImagesBlockEditor({ block, onChange, annexId }) {
   const [uploading, setUploading] = useState(false);
   const images = block.content.images || [];
-  const fileRef = useRef(null);
 
-  const handleUpload = async (files) => {
+  const handleUpload = useCallback(async (files) => {
     setUploading(true);
     try {
       const newImgs = [];
       for (const file of files) {
+        if (!file?.type.startsWith("image/")) continue;
         const path = `${annexId}/${Date.now()}-${file.name}`;
         const { error } = await supabase.storage.from("annex-images").upload(path, file, { upsert: true });
         if (!error) {
@@ -268,7 +374,7 @@ function ImagesBlockEditor({ block, onChange, annexId }) {
       }
       onChange({ ...block.content, images: [...images, ...newImgs] });
     } finally { setUploading(false); }
-  };
+  }, [annexId, block.content, images, onChange]);
 
   const updateCaption = (i, val) => {
     const next = images.map((img, idx) => idx === i ? { ...img, caption: val } : img);
@@ -297,27 +403,26 @@ function ImagesBlockEditor({ block, onChange, annexId }) {
             />
           </div>
         ))}
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="h-28 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-1 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition disabled:opacity-50"
-        >
-          {uploading ? <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" /> : <>
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
-            <span className="text-xs">Add photo</span>
-          </>}
-        </button>
+        <UploadDropzone onFiles={handleUpload} uploading={uploading} multiple={true}>
+          <div className="py-6 flex flex-col items-center gap-1">
+            {uploading
+              ? <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              : <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" /></svg>
+            }
+            <span className="text-xs">{uploading ? "Uploading…" : "Add photos"}</span>
+          </div>
+        </UploadDropzone>
       </div>
-      <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={e => handleUpload(Array.from(e.target.files))} />
     </div>
   );
 }
 
 function DiagramBlockEditor({ block, onChange, annexId }) {
   const [uploading, setUploading] = useState(false);
-  const fileRef = useRef(null);
 
-  const handleUpload = async (file) => {
+  const handleUpload = useCallback(async (files) => {
+    const file = files[0];
+    if (!file?.type.startsWith("image/")) return;
     setUploading(true);
     try {
       const path = `${annexId}/diagram-${Date.now()}-${file.name}`;
@@ -327,7 +432,7 @@ function DiagramBlockEditor({ block, onChange, annexId }) {
         onChange({ ...block.content, url: publicUrl });
       }
     } finally { setUploading(false); }
-  };
+  }, [annexId, block.content, onChange]);
 
   return (
     <div className="space-y-3">
@@ -346,19 +451,15 @@ function DiagramBlockEditor({ block, onChange, annexId }) {
           >Remove</button>
         </div>
       ) : (
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="w-full h-40 border-2 border-dashed border-gray-200 rounded-xl flex flex-col items-center justify-center gap-2 text-gray-400 hover:border-blue-400 hover:text-blue-500 transition disabled:opacity-50"
-        >
-          {uploading
-            ? <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-            : <>
-                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-                <span className="text-sm">Upload drawing or diagram</span>
-              </>
-          }
-        </button>
+        <UploadDropzone onFiles={handleUpload} uploading={uploading} multiple={false}>
+          <div className="py-10 flex flex-col items-center gap-2">
+            {uploading
+              ? <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+              : <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            }
+            <span className="text-sm">{uploading ? "Uploading…" : "Upload drawing or diagram"}</span>
+          </div>
+        </UploadDropzone>
       )}
       <input
         value={block.content.caption}
@@ -366,50 +467,47 @@ function DiagramBlockEditor({ block, onChange, annexId }) {
         placeholder="Caption (optional)"
         className="w-full text-xs border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-0.5 bg-transparent text-gray-500"
       />
-      <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => handleUpload(e.target.files[0])} />
     </div>
   );
 }
 
 // ─── Main block card ──────────────────────────────────────────────────────────
 function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, annexId, quotationItems }) {
-  const linkedItem = block.content._linked_item;
-
-  const handleItemSelect = (e) => {
-    const val = e.target.value;
-    if (!val) {
-      const { _linked_item, ...rest } = block.content;
-      onChange({ ...block, content: rest });
-    } else {
-      const item = quotationItems.find(i => i.id === val);
-      if (item) onChange({ ...block, content: { ...block.content, _linked_item: { id: item.id, item_number: item.item_number, description: item.description } } });
-    }
-  };
+  const isItemBlock = block.type === "item";
 
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
+    <div className={`bg-white border rounded-2xl shadow-sm ${isItemBlock ? "border-blue-200 bg-blue-50/30" : "border-gray-200"}`}>
       {/* Block header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2 min-w-0">
-          <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[block.type]}</svg>
-          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide shrink-0">{BLOCK_LABELS[block.type]}</span>
-          {quotationItems.length > 0 && (
+          <svg className={`w-4 h-4 shrink-0 ${isItemBlock ? "text-blue-400" : "text-gray-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[block.type]}</svg>
+          <span className={`text-xs font-semibold uppercase tracking-wide shrink-0 ${isItemBlock ? "text-blue-500" : "text-gray-500"}`}>{BLOCK_LABELS[block.type]}</span>
+          {!isItemBlock && quotationItems.length > 0 && (
             <select
-              value={linkedItem?.id || ""}
-              onChange={handleItemSelect}
-              className="ml-2 text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-500 bg-white focus:ring-1 focus:ring-blue-400 focus:border-blue-400 max-w-[220px] truncate"
+              value={block.content._linked_item?.id || ""}
+              onChange={e => {
+                const val = e.target.value;
+                if (!val) {
+                  const { _linked_item, ...rest } = block.content;
+                  onChange({ ...block, content: rest });
+                } else {
+                  const item = quotationItems.find(i => i.id === val);
+                  if (item) onChange({ ...block, content: { ...block.content, _linked_item: { id: item.id, item_number: item.item_number, description: item.description } } });
+                }
+              }}
+              className="ml-2 text-xs border border-gray-200 rounded-lg px-2 py-1 text-gray-500 bg-white focus:ring-1 focus:ring-blue-400 max-w-[200px]"
             >
               <option value="">— Link to item —</option>
               {quotationItems.map(it => (
                 <option key={it.id} value={it.id}>
-                  {[it.item_number, it.description].filter(Boolean).join(" · ").slice(0, 50)}
+                  {[it.item_number, it.description].filter(Boolean).join(" · ").slice(0, 45)}
                 </option>
               ))}
             </select>
           )}
-          {linkedItem && (
+          {!isItemBlock && block.content._linked_item && (
             <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-medium shrink-0">
-              {linkedItem.item_number || linkedItem.description?.slice(0, 20)}
+              {block.content._linked_item.item_number || block.content._linked_item.description?.slice(0, 20)}
             </span>
           )}
         </div>
@@ -427,9 +525,10 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChan
       </div>
       {/* Block content */}
       <div className="p-4">
-        {block.type === "text"    && <TextBlockEditor   block={block} onChange={content => onChange({ ...block, content })} />}
-        {block.type === "specs"   && <SpecsBlockEditor  block={block} onChange={content => onChange({ ...block, content })} />}
-        {block.type === "images"  && <ImagesBlockEditor block={block} onChange={content => onChange({ ...block, content })} annexId={annexId} />}
+        {block.type === "item"    && <ItemBlockEditor    block={block} onChange={content => onChange({ ...block, content })} quotationItems={quotationItems} />}
+        {block.type === "text"    && <TextBlockEditor    block={block} onChange={content => onChange({ ...block, content })} />}
+        {block.type === "specs"   && <SpecsBlockEditor   block={block} onChange={content => onChange({ ...block, content })} />}
+        {block.type === "images"  && <ImagesBlockEditor  block={block} onChange={content => onChange({ ...block, content })} annexId={annexId} />}
         {block.type === "diagram" && <DiagramBlockEditor block={block} onChange={content => onChange({ ...block, content })} annexId={annexId} />}
       </div>
     </div>
@@ -447,11 +546,11 @@ export default function AnnexEditorPage() {
   const [quotationItems, setQuotationItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [saved, setSaved] = useState(false);
   const addMenuRef = useRef(null);
 
-  // Close add menu on outside click
   useEffect(() => {
     const fn = (e) => { if (addMenuRef.current && !addMenuRef.current.contains(e.target)) setShowAddMenu(false); };
     document.addEventListener("mousedown", fn);
@@ -461,7 +560,6 @@ export default function AnnexEditorPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      // Load quotation info and items
       const [{ data: quot }, { data: qItems }] = await Promise.all([
         supabase.from("quotations").select("id, quote_number, client_name, project_name, document_type").eq("id", quotationId).single(),
         supabase.from("quotation_items").select("id, item_number, description").eq("quotation_id", quotationId).order("id"),
@@ -469,21 +567,18 @@ export default function AnnexEditorPage() {
       setQuotation(quot);
       setQuotationItems(qItems || []);
 
-      // Check for existing annex
       const { data: existing } = await supabase.from("technical_annexes").select("*").eq("quotation_id", quotationId).single();
       if (existing) {
         setAnnex(existing);
         const { data: blks } = await supabase.from("annex_blocks").select("*").eq("annex_id", existing.id).order("sort_order");
         setBlocks((blks || []).map(b => ({ ...b, _localId: Math.random().toString(36).slice(2) })));
       } else {
-        // Create new annex
-        const { data: newAnnex } = await supabase.from("technical_annexes").insert({
+        const { data: newAnnex, error } = await supabase.from("technical_annexes").insert({
           quotation_id: quotationId,
-          annex_number: "AX-0001",
           title: "Technical Annex",
         }).select().single();
-        setAnnex(newAnnex);
-        setBlocks([]);
+        if (error) { setSaveError(`Could not create annex: ${error.message}`); }
+        else { setAnnex(newAnnex); setBlocks([]); }
       }
     } finally { setLoading(false); }
   }, [quotationId]);
@@ -516,24 +611,30 @@ export default function AnnexEditorPage() {
   const handleSave = async () => {
     if (!annex) return;
     setSaving(true);
+    setSaveError("");
     try {
-      // Update annex title
-      await supabase.from("technical_annexes").update({ title: annex.title }).eq("id", annex.id);
+      const { error: titleErr } = await supabase.from("technical_annexes").update({ title: annex.title }).eq("id", annex.id);
+      if (titleErr) throw new Error(titleErr.message);
 
-      // Delete all existing blocks and re-insert (simple approach)
-      await supabase.from("annex_blocks").delete().eq("annex_id", annex.id);
+      const { error: delErr } = await supabase.from("annex_blocks").delete().eq("annex_id", annex.id);
+      if (delErr) throw new Error(delErr.message);
+
       if (blocks.length > 0) {
-        await supabase.from("annex_blocks").insert(
+        const { error: insErr } = await supabase.from("annex_blocks").insert(
           blocks.map((b, i) => ({ annex_id: annex.id, type: b.type, content: b.content, sort_order: i }))
         );
+        if (insErr) throw new Error(insErr.message);
       }
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setSaveError(e.message);
     } finally { setSaving(false); }
   };
 
   const publicUrl = annex ? `${window.location.origin}/a/${annex.annex_number}` : "";
   const copyLink = () => { navigator.clipboard.writeText(publicUrl); };
+  const openPreview = () => { window.open(publicUrl, "_blank"); };
 
   if (loading) return (
     <div className="flex items-center justify-center min-h-screen">
@@ -564,20 +665,36 @@ export default function AnnexEditorPage() {
           </div>
           <div className="flex items-center gap-2">
             {annex && (
-              <button onClick={copyLink} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
-                Copy link
-              </button>
+              <>
+                <button onClick={copyLink} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" /></svg>
+                  Copy link
+                </button>
+                <button onClick={openPreview} className="flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700 transition">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                  Preview
+                </button>
+              </>
             )}
             <button
               onClick={handleSave}
               disabled={saving}
               className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition"
             >
-              {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
+              {saving
+                ? <><span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" /> Saving…</>
+                : saved
+                  ? <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Saved</>
+                  : "Save"
+              }
             </button>
           </div>
         </div>
+        {saveError && (
+          <div className="max-w-4xl mx-auto px-6 pb-3">
+            <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{saveError}</p>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -632,10 +749,10 @@ export default function AnnexEditorPage() {
                 <button
                   key={type}
                   onClick={() => addBlock(type)}
-                  className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl hover:bg-gray-50 transition min-w-[80px]"
+                  className={`flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl transition min-w-[80px] ${type === "item" ? "hover:bg-blue-50" : "hover:bg-gray-50"}`}
                 >
-                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[type]}</svg>
-                  <span className="text-xs text-gray-600 font-medium text-center leading-tight">{BLOCK_LABELS[type]}</span>
+                  <svg className={`w-5 h-5 ${type === "item" ? "text-blue-400" : "text-gray-500"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">{BLOCK_ICONS[type]}</svg>
+                  <span className={`text-xs font-medium text-center leading-tight ${type === "item" ? "text-blue-500" : "text-gray-600"}`}>{BLOCK_LABELS[type]}</span>
                 </button>
               ))}
             </div>
@@ -645,7 +762,7 @@ export default function AnnexEditorPage() {
         {blocks.length === 0 && (
           <div className="text-center py-12 text-gray-400">
             <p className="text-sm">Add blocks above to build your technical annex.</p>
-            <p className="text-xs mt-1">Try: Specs Table to list technical parameters, or Text Block for a product overview.</p>
+            <p className="text-xs mt-1">Tip: Start with an <strong>Item Header</strong> block to organize sections by product.</p>
           </div>
         )}
       </div>
