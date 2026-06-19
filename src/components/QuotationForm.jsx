@@ -630,6 +630,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                 <div className="col-span-2">
                   <label className="block text-xs text-bgray-500 mb-1">Picture</label>
                   <div
+                    tabIndex={0}
                     onClick={() => fileRefs.current[idx]?.click()}
                     onDragOver={e => { e.preventDefault(); setDragOver(idx); }}
                     onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget)) setDragOver(null); }}
@@ -639,7 +640,11 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       const file = e.dataTransfer.files[0];
                       if (file?.type.startsWith("image/")) handleItemPicture(idx, file);
                     }}
-                    className={`w-full h-20 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition overflow-hidden ${
+                    onPaste={e => {
+                      const item = Array.from(e.clipboardData?.items || []).find(it => it.type.startsWith("image/"));
+                      if (item) { e.preventDefault(); handleItemPicture(idx, item.getAsFile()); }
+                    }}
+                    className={`w-full h-20 border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer transition overflow-hidden outline-none focus:border-primary ${
                       dragOver === idx
                         ? "border-primary bg-primary/10 scale-[1.02]"
                         : "border-bgray-300 dark:border-darkblack-400 hover:border-primary"
