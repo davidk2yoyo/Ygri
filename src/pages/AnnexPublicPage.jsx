@@ -122,7 +122,7 @@ function BlockRenderer({ block, newPage }) {
         <>
           <SectionHeading title={content.title} />
           <div style={{ textAlign: "center" }}>
-            <img src={content.url} alt={content.caption || "Diagram"} style={{ maxWidth: "100%", maxHeight: "440px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
+            <img src={content.url} alt={content.caption || "Diagram"} className="diagram-img" style={{ maxWidth: "100%", maxHeight: "440px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
             {content.caption && <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#9ca3af" }}>{content.caption}</p>}
           </div>
         </>
@@ -179,17 +179,20 @@ export default function AnnexPublicPage() {
   });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#f1f5f9" }}>
+    <div className="page-outer" style={{ minHeight: "100vh", background: "#f1f5f9" }}>
       <style>{`
         * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
         @media print {
           @page { size: A4; margin: 0; }
 
-          html, body { background: white !important; margin: 0 !important; }
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
 
           .screen-bar { display: none !important; }
           .print-cover { display: flex !important; }
+
+          /* Kill the gray outer background */
+          .page-outer { background: white !important; min-height: unset !important; padding: 0 !important; }
 
           .doc-shell {
             max-width: 100% !important;
@@ -197,15 +200,18 @@ export default function AnnexPublicPage() {
             padding: 0 !important;
             box-shadow: none !important;
             border-radius: 0 !important;
+            overflow: visible !important;
             background: white !important;
           }
           .doc-content {
-            padding: 12mm 18mm 16mm !important;
+            padding: 10mm 18mm 16mm !important;
           }
 
-          .page-break-item { break-before: page !important; padding-top: 0 !important; }
-          .first-item { padding-top: 0 !important; }
+          .page-break-item { break-before: page !important; }
           .content-block { break-inside: avoid; }
+
+          /* Diagrams: let them size naturally in print */
+          .diagram-img { max-height: 180mm !important; }
         }
 
         @media screen {
