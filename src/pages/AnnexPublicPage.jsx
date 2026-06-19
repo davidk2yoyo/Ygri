@@ -18,203 +18,215 @@ function renderContent(text) {
     .join("");
 }
 
-function fmtDate(iso) {
-  if (!iso) return "";
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", { year: "numeric", month: "long" });
-}
+const NAVY = "#1e3a5f";
+const BLUE = "#2563eb";
+const LIGHT = "#eef2f7";
 
-// ─── PDF template (hidden, rendered by html2canvas) ────────────────────────────
-function PdfTemplate({ annex, blocks, quotation }) {
-  const NAVY = "#1e3a5f";
-  const BLUE = "#2563eb";
-  const LIGHT = "#f0f4f8";
-
-  let itemCount = 0;
-
-  return (
-    <div style={{ width: "794px", fontFamily: "Arial, Helvetica, sans-serif", color: "#1a1a1a", background: "white" }}>
-
-      {/* ── Page header ── */}
+// ─── PDF sub-components ────────────────────────────────────────────────────────
+function PdfHeader({ annex, slim = false }) {
+  return slim ? (
+    <div style={{ background: NAVY, padding: "8px 40px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <img src={logoUrl} alt="Interasia" style={{ height: "26px", objectFit: "contain" }} />
+      <p style={{ margin: 0, fontSize: "8.5px", color: "#93c5fd", fontWeight: "600", letterSpacing: "0.05em" }}>
+        {annex.annex_number} · TECHNICAL SPECIFICATIONS
+      </p>
+    </div>
+  ) : (
+    <>
       <div style={{ background: NAVY, padding: "18px 40px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <img src={logoUrl} alt="Interasia" style={{ height: "44px", objectFit: "contain" }} />
+        <img src={logoUrl} alt="Interasia" style={{ height: "46px", objectFit: "contain" }} />
         <div style={{ textAlign: "right" }}>
-          <p style={{ margin: 0, color: "white", fontSize: "13px", fontWeight: "700", letterSpacing: "0.03em" }}>
+          <p style={{ margin: 0, color: "white", fontSize: "12.5px", fontWeight: "700", letterSpacing: "0.02em" }}>
             INTERASIA SAS (HK) TRADE COMPANY
           </p>
-          <p style={{ margin: "2px 0 0", color: "#93c5fd", fontSize: "10px" }}>
+          <p style={{ margin: "3px 0 0", color: "#93c5fd", fontSize: "9px" }}>
             www.interasia.com.co
           </p>
         </div>
       </div>
+      <div style={{ background: BLUE, height: "3px" }} />
+    </>
+  );
+}
 
-      {/* ── Accent bar ── */}
-      <div style={{ background: BLUE, height: "4px" }} />
-
-      {/* ── Title section ── */}
-      <div style={{ padding: "28px 40px 22px", borderBottom: `2px solid ${LIGHT}` }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px" }}>
-          <div>
-            <p style={{ margin: "0 0 4px", fontSize: "9px", fontWeight: "700", letterSpacing: "0.18em", textTransform: "uppercase", color: BLUE }}>
-              Technical Annex · {annex.annex_number}
-            </p>
-            <h1 style={{ margin: 0, fontSize: "22px", fontWeight: "800", color: NAVY, lineHeight: "1.2" }}>
-              {annex.title}
-            </h1>
-          </div>
-          <p style={{ margin: 0, fontSize: "10px", color: "#6b7280", textAlign: "right", flexShrink: 0, paddingLeft: "24px" }}>
-            {fmtDate(new Date().toISOString())}
-          </p>
-        </div>
-
-        {quotation && (
-          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-            {[
-              quotation.quote_number && `Ref: ${quotation.quote_number}`,
-              quotation.client_name,
-              quotation.project_name,
-            ].filter(Boolean).map((tag, i) => (
-              <span key={i} style={{ background: LIGHT, color: "#374151", fontSize: "10px", fontWeight: "600", padding: "3px 10px", borderRadius: "999px" }}>
-                {tag}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* ── Content blocks ── */}
-      <div style={{ padding: "0 40px 32px" }}>
-        {blocks.map((block) => {
-          const { type, content } = block;
-          const linkedItem = content._linked_item;
-          const isItem = type === "item";
-          const pageBreak = isItem && itemCount > 0;
-          if (isItem) itemCount++;
-
-          if (type === "item") {
-            return (
-              <div key={block.id} style={{ marginTop: pageBreak ? "0" : "28px", pageBreakBefore: pageBreak ? "always" : "auto" }}>
-                <div style={{ background: NAVY, margin: "0 -40px", padding: "14px 40px", display: "flex", alignItems: "center", gap: "12px" }}>
-                  {content.item_number && (
-                    <span style={{ background: BLUE, color: "white", fontSize: "9px", fontWeight: "800", letterSpacing: "0.14em", textTransform: "uppercase", padding: "3px 10px", borderRadius: "999px" }}>
-                      {content.item_number}
-                    </span>
-                  )}
-                  <h2 style={{ margin: 0, fontSize: "14px", fontWeight: "700", color: "white", letterSpacing: "0.02em" }}>
-                    {(content.label || content.description || "").toUpperCase()}
-                  </h2>
-                </div>
-              </div>
-            );
-          }
-
-          return (
-            <div key={block.id} style={{ marginTop: "22px" }}>
-              {linkedItem && (
-                <p style={{ margin: "0 0 4px", fontSize: "9px", fontWeight: "700", color: BLUE, textTransform: "uppercase", letterSpacing: "0.1em" }}>
-                  {[linkedItem.item_number, linkedItem.description].filter(Boolean).join(" · ")}
-                </p>
-              )}
-
-              {type === "text" && (
-                <>
-                  {content.title && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{ display: "inline-block", width: "3px", height: "14px", background: BLUE, borderRadius: "2px", flexShrink: 0 }} />
-                      <h3 style={{ margin: 0, fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "#111827" }}>
-                        {content.title}
-                      </h3>
-                    </div>
-                  )}
-                  <div
-                    style={{ fontSize: "12px", color: "#374151", lineHeight: "1.7" }}
-                    className="pdf-text"
-                    dangerouslySetInnerHTML={{ __html: renderContent(content.content) }}
-                  />
-                </>
-              )}
-
-              {type === "specs" && (
-                <>
-                  {content.title && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{ display: "inline-block", width: "3px", height: "14px", background: BLUE, borderRadius: "2px", flexShrink: 0 }} />
-                      <h3 style={{ margin: 0, fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "#111827" }}>
-                        {content.title}
-                      </h3>
-                    </div>
-                  )}
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
-                    <tbody>
-                      {(content.rows || []).filter(r => r.label || r.value).map((row, i) => (
-                        <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
-                          <td style={{ padding: "6px 12px", fontWeight: "600", color: "#4b5563", width: "38%", border: "1px solid #e2e8f0" }}>{row.label}</td>
-                          <td style={{ padding: "6px 12px", color: "#111827", border: "1px solid #e2e8f0" }}>{row.value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </>
-              )}
-
-              {type === "images" && (content.images || []).length > 0 && (
-                <>
-                  {content.title && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{ display: "inline-block", width: "3px", height: "14px", background: BLUE, borderRadius: "2px", flexShrink: 0 }} />
-                      <h3 style={{ margin: 0, fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "#111827" }}>
-                        {content.title}
-                      </h3>
-                    </div>
-                  )}
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
-                    {(content.images || []).map((img, i) => (
-                      <div key={i} style={{ textAlign: "center" }}>
-                        <img src={img.url} alt={img.caption || ""} crossOrigin="anonymous" style={{ width: "100%", height: "130px", objectFit: "cover", borderRadius: "6px", border: "1px solid #e2e8f0", display: "block" }} />
-                        {img.caption && <p style={{ margin: "4px 0 0", fontSize: "9px", color: "#9ca3af" }}>{img.caption}</p>}
-                      </div>
-                    ))}
-                  </div>
-                </>
-              )}
-
-              {type === "diagram" && content.url && (
-                <>
-                  {content.title && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                      <span style={{ display: "inline-block", width: "3px", height: "14px", background: BLUE, borderRadius: "2px", flexShrink: 0 }} />
-                      <h3 style={{ margin: 0, fontSize: "10px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "#111827" }}>
-                        {content.title}
-                      </h3>
-                    </div>
-                  )}
-                  <div style={{ textAlign: "center", background: "#f8fafc", borderRadius: "8px", padding: "12px", border: "1px solid #e2e8f0" }}>
-                    <img src={content.url} alt={content.caption || "Diagram"} crossOrigin="anonymous" style={{ maxWidth: "100%", maxHeight: "380px", objectFit: "contain", display: "block", margin: "0 auto" }} />
-                    {content.caption && <p style={{ margin: "6px 0 0", fontSize: "9px", color: "#9ca3af" }}>{content.caption}</p>}
-                  </div>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Footer ── */}
-      <div style={{ background: LIGHT, borderTop: `2px solid ${NAVY}`, padding: "10px 40px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <p style={{ margin: 0, fontSize: "9px", color: "#6b7280" }}>
-          {annex.annex_number} · Interasia SAS (HK) Trade Company
-        </p>
-        <p style={{ margin: 0, fontSize: "9px", color: "#9ca3af" }}>
-          Generated by Ygri CRM
-        </p>
-      </div>
+function PdfFooter({ annex }) {
+  return (
+    <div style={{ background: LIGHT, borderTop: `2px solid ${NAVY}`, padding: "9px 40px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <p style={{ margin: 0, fontSize: "8.5px", color: "#64748b", fontWeight: "600" }}>
+        {annex.annex_number} · Interasia SAS (HK) Trade Company
+      </p>
+      <p style={{ margin: 0, fontSize: "8px", color: "#9ca3af" }}>
+        Generated by Ygri CRM
+      </p>
     </div>
   );
 }
 
-// ─── Web block renderer (screen view) ─────────────────────────────────────────
-function renderContent2(text) { return renderContent(text); }
+function PdfBlockContent({ block }) {
+  const { type, content } = block;
+  const linkedItem = content._linked_item;
 
+  if (type === "item") {
+    return (
+      <div style={{ background: NAVY, margin: "0 -40px", padding: "13px 40px", display: "flex", alignItems: "center", gap: "12px" }}>
+        {content.item_number && (
+          <span style={{ background: BLUE, color: "white", fontSize: "8px", fontWeight: "800", letterSpacing: "0.15em", textTransform: "uppercase", padding: "3px 10px", borderRadius: "999px", flexShrink: 0 }}>
+            {content.item_number}
+          </span>
+        )}
+        <h2 style={{ margin: 0, fontSize: "13px", fontWeight: "800", color: "white", letterSpacing: "0.03em" }}>
+          {(content.label || content.description || "").toUpperCase()}
+        </h2>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: "20px" }}>
+      {linkedItem && (
+        <p style={{ margin: "0 0 4px", fontSize: "8px", fontWeight: "700", color: BLUE, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+          {[linkedItem.item_number, linkedItem.description].filter(Boolean).join(" · ")}
+        </p>
+      )}
+
+      {type === "text" && (
+        <>
+          {content.title && <SectionLabel title={content.title} />}
+          <div style={{ fontSize: "11.5px", color: "#374151", lineHeight: "1.7" }} className="pdf-text"
+            dangerouslySetInnerHTML={{ __html: renderContent(content.content) }}
+          />
+        </>
+      )}
+
+      {type === "specs" && (
+        <>
+          {content.title && <SectionLabel title={content.title} />}
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "11px" }}>
+            <tbody>
+              {(content.rows || []).filter(r => r.label || r.value).map((row, i) => (
+                <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+                  <td style={{ padding: "6px 12px", fontWeight: "600", color: "#4b5563", width: "38%", border: "1px solid #e2e8f0" }}>{row.label}</td>
+                  <td style={{ padding: "6px 12px", color: "#111827", border: "1px solid #e2e8f0" }}>{row.value}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {type === "images" && (content.images || []).length > 0 && (
+        <>
+          {content.title && <SectionLabel title={content.title} />}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+            {(content.images || []).map((img, i) => (
+              <div key={i} style={{ textAlign: "center" }}>
+                <img src={img.url} alt={img.caption || ""} crossOrigin="anonymous"
+                  style={{ width: "100%", height: "120px", objectFit: "cover", borderRadius: "5px", border: "1px solid #e2e8f0", display: "block" }} />
+                {img.caption && <p style={{ margin: "3px 0 0", fontSize: "8px", color: "#9ca3af" }}>{img.caption}</p>}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {type === "diagram" && content.url && (
+        <>
+          {content.title && <SectionLabel title={content.title} />}
+          <div style={{ textAlign: "center", background: "#f8fafc", borderRadius: "7px", padding: "12px", border: "1px solid #e2e8f0" }}>
+            <img src={content.url} alt={content.caption || "Diagram"} crossOrigin="anonymous"
+              style={{ maxWidth: "100%", maxHeight: "350px", objectFit: "contain", display: "block", margin: "0 auto" }} />
+            {content.caption && <p style={{ margin: "5px 0 0", fontSize: "8px", color: "#9ca3af" }}>{content.caption}</p>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SectionLabel({ title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "8px", margin: "14px 0 7px" }}>
+      <span style={{ display: "inline-block", width: "3px", height: "13px", background: BLUE, borderRadius: "2px", flexShrink: 0 }} />
+      <h3 style={{ margin: 0, fontSize: "9.5px", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.1em", color: "#111827" }}>
+        {title}
+      </h3>
+    </div>
+  );
+}
+
+// ─── PDF template: one .pdf-page per item-section ─────────────────────────────
+function PdfTemplate({ annex, blocks, quotation }) {
+  // Group blocks into sections split on each "item" block
+  const sections = [];
+  let current = [];
+  for (const block of blocks) {
+    if (block.type === "item" && current.length > 0) {
+      sections.push(current);
+      current = [];
+    }
+    current.push(block);
+  }
+  if (current.length > 0) sections.push(current);
+  if (sections.length === 0) sections.push([]);
+
+  return (
+    <div>
+      {/* ── Page 1: big header + cover + first section ── */}
+      <div className="pdf-page" style={{ width: "794px", background: "white" }}>
+        <PdfHeader annex={annex} slim={false} />
+
+        {/* Cover: annex title + metadata */}
+        <div style={{ padding: "22px 40px 18px", borderBottom: `2px solid ${LIGHT}` }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" }}>
+            <div>
+              <p style={{ margin: "0 0 4px", fontSize: "8px", fontWeight: "700", letterSpacing: "0.18em", textTransform: "uppercase", color: BLUE }}>
+                Technical Annex · {annex.annex_number}
+              </p>
+              <h1 style={{ margin: 0, fontSize: "20px", fontWeight: "800", color: NAVY, lineHeight: "1.2" }}>
+                {annex.title}
+              </h1>
+            </div>
+            <p style={{ margin: 0, fontSize: "9.5px", color: "#6b7280", textAlign: "right", flexShrink: 0, paddingLeft: "16px" }}>
+              {new Date().toLocaleDateString("en-US", { year: "numeric", month: "long" })}
+            </p>
+          </div>
+          {quotation && (
+            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+              {[
+                quotation.quote_number && `Ref: ${quotation.quote_number}`,
+                quotation.client_name,
+                quotation.project_name,
+              ].filter(Boolean).map((tag, i) => (
+                <span key={i} style={{ background: LIGHT, color: "#374151", fontSize: "9.5px", fontWeight: "600", padding: "3px 10px", borderRadius: "999px" }}>
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* First section */}
+        <div style={{ padding: "6px 40px 24px" }}>
+          {sections[0].map(block => <PdfBlockContent key={block.id} block={block} />)}
+        </div>
+        <PdfFooter annex={annex} />
+      </div>
+
+      {/* ── Pages 2+: slim header + section ── */}
+      {sections.slice(1).map((sectionBlocks, i) => (
+        <div key={i} className="pdf-page" style={{ width: "794px", background: "white" }}>
+          <PdfHeader annex={annex} slim={true} />
+          <div style={{ padding: "20px 40px 24px" }}>
+            {sectionBlocks.map(block => <PdfBlockContent key={block.id} block={block} />)}
+          </div>
+          <PdfFooter annex={annex} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Screen block renderer ─────────────────────────────────────────────────────
 function SectionHeading({ title }) {
   if (!title) return null;
   return (
@@ -239,7 +251,7 @@ function BlockRenderer({ block, newPage }) {
             {content.item_number}
           </span>
         )}
-        <h2 style={{ margin: "0 0 0", fontSize: "22px", fontWeight: "800", color: "#1e3a5f", lineHeight: "1.25", borderBottom: "2px solid #1e3a5f", paddingBottom: "12px" }}>
+        <h2 style={{ margin: "0", fontSize: "22px", fontWeight: "800", color: "#1e3a5f", lineHeight: "1.25", borderBottom: "2px solid #1e3a5f", paddingBottom: "12px" }}>
           {content.label || content.description}
         </h2>
       </div>
@@ -253,16 +265,14 @@ function BlockRenderer({ block, newPage }) {
           {[linkedItem.item_number, linkedItem.description].filter(Boolean).join(" · ")}
         </p>
       )}
-
       {type === "text" && (
         <>
           <SectionHeading title={content.title} />
           <div style={{ fontSize: "13.5px", color: "#374151", lineHeight: "1.75" }} className="annex-text"
-            dangerouslySetInnerHTML={{ __html: renderContent2(content.content) }}
+            dangerouslySetInnerHTML={{ __html: renderContent(content.content) }}
           />
         </>
       )}
-
       {type === "specs" && (
         <>
           <SectionHeading title={content.title} />
@@ -280,7 +290,6 @@ function BlockRenderer({ block, newPage }) {
           </div>
         </>
       )}
-
       {type === "images" && (
         <>
           <SectionHeading title={content.title} />
@@ -294,12 +303,11 @@ function BlockRenderer({ block, newPage }) {
           </div>
         </>
       )}
-
       {type === "diagram" && content.url && (
         <>
           <SectionHeading title={content.title} />
           <div style={{ textAlign: "center" }}>
-            <img src={content.url} alt={content.caption || "Diagram"} className="diagram-img" style={{ maxWidth: "100%", maxHeight: "440px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
+            <img src={content.url} alt={content.caption || "Diagram"} style={{ maxWidth: "100%", maxHeight: "440px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
             {content.caption && <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#9ca3af" }}>{content.caption}</p>}
           </div>
         </>
@@ -340,25 +348,35 @@ export default function AnnexPublicPage() {
     if (!pdfRef.current) return;
     setExporting(true);
     try {
-      await new Promise(r => setTimeout(r, 80)); // let images settle
-      const canvas = await html2canvas(pdfRef.current, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: false,
-        backgroundColor: "#ffffff",
-        logging: false,
-      });
-      const imgData = canvas.toDataURL("image/jpeg", 0.92);
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      await new Promise(r => setTimeout(r, 120));
+      const pages = pdfRef.current.querySelectorAll(".pdf-page");
+      const pdf = new jsPDF({ unit: "mm", format: "a4" });
       const pdfW = pdf.internal.pageSize.getWidth();
       const pdfH = pdf.internal.pageSize.getHeight();
-      const imgTotalH = (canvas.height * pdfW) / canvas.width;
-      let yOffset = 0;
-      while (yOffset < imgTotalH) {
-        pdf.addImage(imgData, "JPEG", 0, -yOffset, pdfW, imgTotalH);
-        yOffset += pdfH;
-        if (yOffset < imgTotalH) pdf.addPage();
+      let firstPage = true;
+
+      for (const page of pages) {
+        const canvas = await html2canvas(page, {
+          scale: 2,
+          useCORS: true,
+          allowTaint: false,
+          backgroundColor: "#ffffff",
+          logging: false,
+        });
+        const imgData = canvas.toDataURL("image/jpeg", 0.92);
+        const imgTotalH = (canvas.height * pdfW) / canvas.width;
+
+        if (!firstPage) pdf.addPage();
+        firstPage = false;
+
+        let yOffset = 0;
+        while (yOffset < imgTotalH) {
+          if (yOffset > 0) pdf.addPage();
+          pdf.addImage(imgData, "JPEG", 0, -yOffset, pdfW, imgTotalH);
+          yOffset += pdfH;
+        }
       }
+
       pdf.save(`${annex.annex_number}_${(annex.title || "annex").replace(/\s+/g, "_")}.pdf`);
     } finally {
       setExporting(false);
@@ -397,17 +415,18 @@ export default function AnnexPublicPage() {
         .annex-text li { margin-bottom: 3px; }
         .annex-text h3 { font-weight: 700; color: #111827; margin: 0 0 4px; }
         .pdf-text strong { font-weight: 700; }
-        .pdf-text p { margin: 0 0 6px; }
-        .pdf-text ul { list-style: disc; padding-left: 18px; margin: 4px 0; }
-        .pdf-text ol { list-style: decimal; padding-left: 18px; margin: 4px 0; }
+        .pdf-text p { margin: 0 0 5px; }
+        .pdf-text ul { list-style: disc; padding-left: 16px; margin: 3px 0; }
+        .pdf-text ol { list-style: decimal; padding-left: 16px; margin: 3px 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
-      {/* ── Hidden PDF template (rendered by html2canvas) ── */}
+      {/* Hidden PDF template */}
       <div ref={pdfRef} style={{ position: "absolute", top: 0, left: "-9999px", zIndex: -1 }}>
         {annex && <PdfTemplate annex={annex} blocks={blocks} quotation={quotation} />}
       </div>
 
-      {/* ── Screen top bar ── */}
+      {/* Screen top bar */}
       <div style={{ background: "#1e3a5f", color: "white" }}>
         <div style={{ maxWidth: "740px", margin: "0 auto", padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -445,7 +464,7 @@ export default function AnnexPublicPage() {
         </div>
       </div>
 
-      {/* ── Screen document view ── */}
+      {/* Screen document */}
       <div style={{ maxWidth: "740px", margin: "24px auto 48px", background: "white", borderRadius: "16px", boxShadow: "0 2px 24px rgba(0,0,0,0.08)", overflow: "hidden" }}>
         <div style={{ padding: "40px 48px" }}>
           {blocks.length === 0 ? (
@@ -464,8 +483,6 @@ export default function AnnexPublicPage() {
           </div>
         </div>
       </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }
