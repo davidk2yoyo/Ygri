@@ -2,6 +2,19 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
+// Handle both old markdown content and new HTML content
+function renderContent(text) {
+  if (!text) return "";
+  if (text.trimStart().startsWith("<")) return text; // already HTML
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*(.*?)\*/g, "<em>$1</em>")
+    .replace(/\\n/g, "\n")
+    .split(/\n{2,}/)
+    .map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
 function SpecsTable({ content }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200">
@@ -46,7 +59,7 @@ function BlockRenderer({ block }) {
           <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
           <div
             className="text-gray-600 leading-relaxed [&_strong]:font-semibold [&_strong]:text-gray-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_p]:mb-2 [&_h3]:font-bold [&_h3]:text-gray-800 [&_h3]:mb-1"
-            dangerouslySetInnerHTML={{ __html: content.content || "" }}
+            dangerouslySetInnerHTML={{ __html: renderContent(content.content) }}
           />
         </>
       )}
