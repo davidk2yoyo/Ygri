@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
@@ -36,6 +36,68 @@ function StatusBadge({ status }) {
 // ─── New Report Modal ────────────────────────────────────────────────────────
 
 const EMPTY_FORM = { title: "", supplier_name: "", visit_date: "", inspector_name: "" };
+
+function SupplierCombobox({ value, onChange }) {
+  const [suppliers, setSuppliers] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || "");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    supabase.from("suppliers").select("id,name").order("name")
+      .then(({ data }) => setSuppliers(data || []));
+  }, []);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  const filtered = query
+    ? suppliers.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
+    : suppliers;
+
+  const handleInput = (e) => {
+    setQuery(e.target.value);
+    onChange(e.target.value);
+    setOpen(true);
+  };
+
+  const handleSelect = (name) => {
+    setQuery(name);
+    onChange(name);
+    setOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={query}
+        onChange={handleInput}
+        onFocus={() => setOpen(true)}
+        placeholder="Search or type supplier name"
+        className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg shadow-lg max-h-48 overflow-auto">
+          {filtered.map(s => (
+            <li
+              key={s.id}
+              onMouseDown={() => handleSelect(s.name)}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-darkblack-700 dark:text-white"
+            >
+              {s.name}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 function NewReportModal({ onClose, onCreated }) {
   const [form, setForm] = useState({ ...EMPTY_FORM });
@@ -118,12 +180,9 @@ function NewReportModal({ onClose, onCreated }) {
             <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
               Supplier Name
             </label>
-            <input
-              type="text"
+            <SupplierCombobox
               value={form.supplier_name}
-              onChange={e => set("supplier_name", e.target.value)}
-              placeholder="Supplier Co. Ltd"
-              className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+              onChange={val => set("supplier_name", val)}
             />
           </div>
 
