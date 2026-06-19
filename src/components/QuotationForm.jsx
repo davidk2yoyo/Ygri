@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
@@ -25,6 +26,7 @@ const emptyItem = () => ({
 });
 
 export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved }) {
+  const navigate = useNavigate();
   const [documentType, setDocumentType] = useState("quotation");
   const [type, setType] = useState("product");
   const [currency, setCurrency] = useState("USD");
@@ -363,8 +365,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         <div className="flex gap-2 flex-wrap justify-end">
           {savedQuotation && (
             <>
-              <a
-                href={`/quotations/${savedQuotation.id}/annex`}
+              <button
+                onClick={() => navigate(`/quotations/${savedQuotation.id}/annex`, { state: { from: window.location.pathname + window.location.search } })}
                 title="Technical Annex"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-bgray-200 text-darkblack-700 rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition whitespace-nowrap"
               >
@@ -372,7 +374,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 Annex
-              </a>
+              </button>
               <button
                 onClick={() => setShowPDF(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-600 text-white rounded-lg text-sm font-medium hover:bg-navy-700 transition"
