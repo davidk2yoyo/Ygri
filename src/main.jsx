@@ -19,6 +19,9 @@ import ItemsPage from "./pages/ItemsPage";
 import PublicQuotationPage from "./pages/PublicQuotationPage";
 import AnnexEditorPage from "./pages/AnnexEditorPage";
 import AnnexPublicPage from "./pages/AnnexPublicPage";
+import InspectionReportsPage from "./pages/InspectionReportsPage";
+import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
+import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
 import "./index.css";
 import "./i18n";
 
@@ -28,6 +31,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
         <Route path="/login" element={<LoginPage />} />
         <Route path="/q/:quoteNumber" element={<PublicQuotationPage />} />
         <Route path="/a/:annexNumber" element={<AnnexPublicPage />} />
+        <Route path="/r/:reportNumber" element={<InspectionReportPublicPage />} />
         <Route path="/" element={<Navigate to="/dashboard" replace />} />
         <Route element={
           <ProtectedRoute>
@@ -44,9 +48,15 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="/emails" element={<EmailThreadsPage />} />
           <Route path="/items" element={<ItemsPage />} />
+          <Route path="/reports" element={<InspectionReportsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
         </Route>
+        <Route path="/reports/:reportId/edit" element={
+          <ProtectedRoute>
+            <InspectionReportEditorPage />
+          </ProtectedRoute>
+        } />
       </Routes>
     </BrowserRouter>
 );
