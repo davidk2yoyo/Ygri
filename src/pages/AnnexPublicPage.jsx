@@ -2,10 +2,9 @@ import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
-// Handle both old markdown content and new HTML content
 function renderContent(text) {
   if (!text) return "";
-  if (text.trimStart().startsWith("<")) return text; // already HTML
+  if (text.trimStart().startsWith("<")) return text;
   return text
     .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
     .replace(/\*(.*?)\*/g, "<em>$1</em>")
@@ -16,77 +15,116 @@ function renderContent(text) {
 }
 
 function SpecsTable({ content }) {
+  const rows = (content.rows || []).filter(r => r.label || r.value);
   return (
-    <div className="overflow-hidden rounded-2xl border border-gray-200">
-      <table className="w-full text-sm">
-        <tbody>
-          {(content.rows || []).filter(r => r.label || r.value).map((row, i) => (
-            <tr key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-              <td className="px-5 py-3 font-medium text-gray-600 w-2/5 border-r border-gray-100">{row.label}</td>
-              <td className="px-5 py-3 text-gray-800">{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i} style={{ backgroundColor: i % 2 === 0 ? "#ffffff" : "#f8fafc" }}>
+            <td style={{ padding: "7px 14px", fontWeight: "600", color: "#374151", width: "42%", borderBottom: "1px solid #e2e8f0", borderRight: "1px solid #e2e8f0" }}>
+              {row.label}
+            </td>
+            <td style={{ padding: "7px 14px", color: "#1f2937", borderBottom: "1px solid #e2e8f0" }}>
+              {row.value}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function SectionHeading({ title }) {
+  if (!title) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
+      <span style={{ display: "inline-block", width: "3px", height: "16px", backgroundColor: "#2563eb", borderRadius: "2px", flexShrink: 0 }} />
+      <h3 style={{ margin: 0, fontSize: "12px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.08em", color: "#111827" }}>
+        {title}
+      </h3>
     </div>
   );
 }
 
-function BlockRenderer({ block }) {
+function BlockRenderer({ block, newPage }) {
   const { type, content } = block;
   const linkedItem = content._linked_item;
 
   if (type === "item") {
     return (
-      <div className="mt-10 mb-6 border-t-2 border-gray-800 pt-5">
+      <div className={newPage ? "page-break-item" : "first-item"} style={{ marginBottom: "12px" }}>
         {content.item_number && (
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-1">{content.item_number}</p>
+          <span style={{
+            display: "inline-block",
+            background: "#1e3a5f",
+            color: "white",
+            fontSize: "10px",
+            fontWeight: "700",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            padding: "3px 10px",
+            borderRadius: "999px",
+            marginBottom: "8px",
+          }}>
+            {content.item_number}
+          </span>
         )}
-        <h2 className="text-2xl font-bold text-gray-900">{content.label || content.description}</h2>
+        <h2 style={{ margin: "0 0 0", fontSize: "22px", fontWeight: "800", color: "#1e3a5f", lineHeight: "1.25", borderBottom: "2px solid #1e3a5f", paddingBottom: "12px" }}>
+          {content.label || content.description}
+        </h2>
       </div>
     );
   }
 
   return (
-    <div className="mb-10">
+    <div className="content-block" style={{ marginBottom: "28px" }}>
       {linkedItem && (
-        <p className="text-xs font-semibold text-blue-500 uppercase tracking-widest mb-2">
+        <p style={{ margin: "0 0 6px", fontSize: "10px", fontWeight: "700", color: "#3b82f6", textTransform: "uppercase", letterSpacing: "0.1em" }}>
           {[linkedItem.item_number, linkedItem.description].filter(Boolean).join(" · ")}
         </p>
       )}
+
       {type === "text" && (
         <>
-          <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
+          <SectionHeading title={content.title} />
           <div
-            className="text-gray-600 leading-relaxed [&_strong]:font-semibold [&_strong]:text-gray-800 [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:space-y-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:space-y-1 [&_p]:mb-2 [&_h3]:font-bold [&_h3]:text-gray-800 [&_h3]:mb-1"
+            style={{ fontSize: "13.5px", color: "#374151", lineHeight: "1.75" }}
+            className="annex-text"
             dangerouslySetInnerHTML={{ __html: renderContent(content.content) }}
           />
         </>
       )}
+
       {type === "specs" && (
         <>
-          <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
-          <SpecsTable content={content} />
+          <SectionHeading title={content.title} />
+          <div style={{ border: "1px solid #e2e8f0", borderRadius: "8px", overflow: "hidden" }}>
+            <SpecsTable content={content} />
+          </div>
         </>
       )}
+
       {type === "images" && (
         <>
-          <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <SectionHeading title={content.title} />
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
             {(content.images || []).map((img, i) => (
-              <div key={i} className="text-center">
-                <img src={img.url} alt={img.caption || ""} className="w-full h-44 object-cover rounded-xl border border-gray-200" />
-                {img.caption && <p className="text-xs text-gray-400 mt-1.5">{img.caption}</p>}
+              <div key={i} style={{ textAlign: "center" }}>
+                <img src={img.url} alt={img.caption || ""} style={{ width: "100%", height: "140px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0", display: "block" }} />
+                {img.caption && <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#9ca3af" }}>{img.caption}</p>}
               </div>
             ))}
           </div>
         </>
       )}
+
       {type === "diagram" && content.url && (
         <>
-          <h3 className="text-lg font-bold text-gray-800 mb-3">{content.title}</h3>
-          <img src={content.url} alt={content.caption || "Diagram"} className="w-full rounded-xl border border-gray-200 object-contain max-h-[500px]" />
-          {content.caption && <p className="text-xs text-gray-400 text-center mt-2">{content.caption}</p>}
+          <SectionHeading title={content.title} />
+          <div style={{ textAlign: "center" }}>
+            <img src={content.url} alt={content.caption || "Diagram"} style={{ maxWidth: "100%", maxHeight: "440px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0" }} />
+            {content.caption && <p style={{ margin: "6px 0 0", fontSize: "11px", color: "#9ca3af" }}>{content.caption}</p>}
+          </div>
         </>
       )}
     </div>
@@ -132,66 +170,137 @@ export default function AnnexPublicPage() {
     </div>
   );
 
+  let itemCount = 0;
+  const processedBlocks = blocks.map(block => {
+    const isItem = block.type === "item";
+    const newPage = isItem && itemCount > 0;
+    if (isItem) itemCount++;
+    return { block, newPage };
+  });
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Print styles */}
+    <div style={{ minHeight: "100vh", background: "#f1f5f9" }}>
       <style>{`
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
         @media print {
-          .no-print { display: none !important; }
-          body { background: white; }
-          .print-page { background: white; box-shadow: none; }
+          @page { size: A4; margin: 0; }
+
+          html, body { background: white !important; margin: 0 !important; }
+
+          .screen-bar { display: none !important; }
+          .print-cover { display: flex !important; }
+
+          .doc-shell {
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+            background: white !important;
+          }
+          .doc-content {
+            padding: 12mm 18mm 16mm !important;
+          }
+
+          .page-break-item { break-before: page !important; padding-top: 0 !important; }
+          .first-item { padding-top: 0 !important; }
+          .content-block { break-inside: avoid; }
         }
+
+        @media screen {
+          .print-cover { display: none !important; }
+        }
+
+        .annex-text strong { font-weight: 600; color: #111827; }
+        .annex-text ul { list-style: disc; padding-left: 20px; margin: 6px 0; }
+        .annex-text ol { list-style: decimal; padding-left: 20px; margin: 6px 0; }
+        .annex-text p { margin: 0 0 8px; }
+        .annex-text li { margin-bottom: 3px; }
+        .annex-text h3 { font-weight: 700; color: #111827; margin: 0 0 4px; }
       `}</style>
 
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 print:border-0 print-page">
-        <div className="max-w-3xl mx-auto px-6 py-6">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs font-semibold text-blue-600 uppercase tracking-widest mb-1">Technical Annex · {annex.annex_number}</p>
-              <h1 className="text-2xl font-bold text-gray-900">{annex.title}</h1>
-              {quotation && (
-                <div className="flex items-center gap-3 mt-2 text-sm text-gray-500">
-                  <span>Ref: {quotation.quote_number}</span>
-                  {quotation.client_name && <><span>·</span><span>{quotation.client_name}</span></>}
-                  {quotation.project_name && <><span>·</span><span>{quotation.project_name}</span></>}
-                </div>
-              )}
-            </div>
-            <div className="flex items-start gap-4">
-              {/* Export PDF button */}
-              <button
-                onClick={() => window.print()}
-                className="no-print flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-gray-400 hover:text-gray-700 transition"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                </svg>
-                Export PDF
-              </button>
-              <div className="text-right shrink-0">
-                <p className="text-xs text-gray-400">Interasia SAS</p>
-                <p className="text-xs text-gray-400">Hong Kong Trade Co.</p>
-              </div>
+      {/* ── Screen top bar ── */}
+      <div className="screen-bar" style={{ background: "#1e3a5f", color: "white" }}>
+        <div style={{ maxWidth: "740px", margin: "0 auto", padding: "20px 24px", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <p style={{ margin: "0 0 4px", fontSize: "10px", fontWeight: "700", letterSpacing: "0.1em", textTransform: "uppercase", color: "#93c5fd" }}>
+              Technical Annex · {annex.annex_number}
+            </p>
+            <h1 style={{ margin: "0 0 6px", fontSize: "20px", fontWeight: "800", color: "white", lineHeight: "1.2" }}>
+              {annex.title}
+            </h1>
+            {quotation && (
+              <p style={{ margin: 0, fontSize: "12px", color: "#bfdbfe" }}>
+                {[quotation.quote_number, quotation.client_name, quotation.project_name].filter(Boolean).join("  ·  ")}
+              </p>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", flexShrink: 0 }}>
+            <button
+              onClick={() => window.print()}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "6px 12px", background: "rgba(255,255,255,0.12)", border: "1px solid rgba(255,255,255,0.25)", borderRadius: "8px", color: "white", fontSize: "12px", cursor: "pointer" }}
+            >
+              <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+              </svg>
+              Export PDF
+            </button>
+            <div style={{ textAlign: "right" }}>
+              <p style={{ margin: "0 0 1px", fontSize: "11px", fontWeight: "700", color: "white" }}>Interasia SAS</p>
+              <p style={{ margin: 0, fontSize: "10px", color: "#93c5fd" }}>HK Trade Company</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Blocks */}
-      <div className="max-w-3xl mx-auto px-6 py-10 print-page bg-white print:bg-white">
-        {blocks.length === 0 ? (
-          <p className="text-center text-gray-400 py-20 text-sm">This annex has no content yet.</p>
-        ) : (
-          blocks.map(block => <BlockRenderer key={block.id} block={block} />)
-        )}
+      {/* ── Print-only cover banner ── */}
+      <div className="print-cover" style={{
+        display: "none",
+        background: "#1e3a5f",
+        padding: "22mm 18mm 18mm",
+        justifyContent: "space-between",
+        alignItems: "flex-end",
+        minHeight: "55mm",
+      }}>
+        <div>
+          <p style={{ margin: "0 0 6px", fontSize: "8pt", fontWeight: "700", letterSpacing: "0.14em", textTransform: "uppercase", color: "#93c5fd" }}>
+            Technical Annex · {annex.annex_number}
+          </p>
+          <h1 style={{ margin: "0 0 8px", fontSize: "24pt", fontWeight: "800", color: "white", lineHeight: "1.15" }}>
+            {annex.title}
+          </h1>
+          {quotation && (
+            <p style={{ margin: 0, fontSize: "9pt", color: "#bfdbfe" }}>
+              {[quotation.quote_number, quotation.client_name, quotation.project_name].filter(Boolean).join("   ·   ")}
+            </p>
+          )}
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <p style={{ margin: "0 0 2px", fontSize: "10pt", fontWeight: "800", color: "white" }}>Interasia SAS</p>
+          <p style={{ margin: 0, fontSize: "8.5pt", color: "#bfdbfe" }}>HK Trade Company</p>
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="max-w-3xl mx-auto px-6 pb-10 border-t border-gray-100 pt-6 print-page">
-        <p className="text-xs text-gray-300 text-center">
-          {annex.annex_number} · Generated by Ygri CRM · Interasia SAS
-        </p>
+      {/* ── Document body ── */}
+      <div className="doc-shell" style={{ maxWidth: "740px", margin: "24px auto 48px", background: "white", borderRadius: "16px", boxShadow: "0 2px 24px rgba(0,0,0,0.08)", overflow: "hidden" }}>
+        <div className="doc-content" style={{ padding: "40px 48px" }}>
+          {blocks.length === 0 ? (
+            <p style={{ textAlign: "center", color: "#9ca3af", padding: "80px 0", fontSize: "14px" }}>
+              This annex has no content yet.
+            </p>
+          ) : (
+            processedBlocks.map(({ block, newPage }) => (
+              <BlockRenderer key={block.id} block={block} newPage={newPage} />
+            ))
+          )}
+
+          <div style={{ marginTop: "48px", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>
+            <p style={{ textAlign: "center", fontSize: "11px", color: "#d1d5db", margin: 0 }}>
+              {annex.annex_number} · Interasia SAS (HK) Trade Company · Generated by Ygri CRM
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
