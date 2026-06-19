@@ -160,28 +160,150 @@ function UploadDropzone({ onFiles, uploading, multiple, children }) {
 
 // ─── Block editors ────────────────────────────────────────────────────────────
 
+const COUNTRIES = [
+  "China", "Vietnam", "Bangladesh", "India", "Indonesia", "Cambodia", "Pakistan",
+  "Thailand", "Myanmar", "Sri Lanka", "Philippines", "Malaysia", "South Korea",
+  "Japan", "Taiwan", "Hong Kong", "Turkey", "Egypt", "Ethiopia", "Morocco",
+  "Colombia", "Mexico", "Brazil", "Peru", "United States", "United Kingdom",
+  "Germany", "France", "Spain", "Italy", "Netherlands", "Portugal", "Other",
+];
+
+function SupplierComboboxCover({ value, onSelect, onChangeText }) {
+  const [suppliers, setSuppliers] = useState([]);
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || "");
+  const ref = useRef(null);
+
+  useEffect(() => {
+    supabase.from("suppliers").select("id,name,address").order("name")
+      .then(({ data }) => setSuppliers(data || []));
+  }, []);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = query
+    ? suppliers.filter(s => s.name.toLowerCase().includes(query.toLowerCase()))
+    : suppliers;
+
+  return (
+    <div className="relative" ref={ref}>
+      <input
+        type="text"
+        value={query}
+        onChange={e => { setQuery(e.target.value); onChangeText(e.target.value); setOpen(true); }}
+        onFocus={() => setOpen(true)}
+        placeholder="Supplier Name"
+        className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-auto">
+          {filtered.map(s => (
+            <li
+              key={s.id}
+              onMouseDown={() => { onSelect(s); setQuery(s.name); setOpen(false); }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 text-gray-700"
+            >
+              <div className="font-medium">{s.name}</div>
+              {s.address && <div className="text-xs text-gray-400 truncate">{s.address}</div>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function CoverBlockEditor({ block, onChange }) {
-  const fields = [
-    { key: "inspector_name", label: "Inspector Name", type: "text" },
-    { key: "visit_date", label: "Visit Date", type: "date" },
-    { key: "supplier_name", label: "Supplier Name", type: "text" },
-    { key: "supplier_address", label: "Supplier Address", type: "text" },
-    { key: "client_name", label: "Client Name", type: "text" },
-    { key: "project_ref", label: "Project Reference", type: "text" },
-    { key: "po_number", label: "PO Number", type: "text" },
-    { key: "country", label: "Country", type: "text" },
-    { key: "report_type", label: "Report Type", type: "text" },
+  const c = block.content;
+  const set = (key, val) => onChange({ ...c, [key]: val });
+
+  const handleSupplierSelect = (supplier) => {
+    onChange({ ...c, supplier_name: supplier.name, supplier_address: supplier.address || c.supplier_address });
+  };
+
+  const simpleFields = [
+    { key: "client_name", label: "Client Name" },
+    { key: "project_ref", label: "Project Reference" },
+    { key: "po_number", label: "PO Number" },
+    { key: "report_type", label: "Report Type" },
   ];
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {fields.map(({ key, label, type }) => (
+      {/* Inspector Name */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Inspector Name</label>
+        <input
+          type="text"
+          value={c.inspector_name || ""}
+          onChange={e => set("inspector_name", e.target.value)}
+          placeholder="Inspector Name"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+      </div>
+
+      {/* Visit Date */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Visit Date</label>
+        <input
+          type="date"
+          value={c.visit_date || ""}
+          onChange={e => set("visit_date", e.target.value)}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+      </div>
+
+      {/* Supplier Name — combobox */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
+        <SupplierComboboxCover
+          value={c.supplier_name || ""}
+          onSelect={handleSupplierSelect}
+          onChangeText={val => set("supplier_name", val)}
+        />
+      </div>
+
+      {/* Supplier Address */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Supplier Address</label>
+        <input
+          type="text"
+          value={c.supplier_address || ""}
+          onChange={e => set("supplier_address", e.target.value)}
+          placeholder="Supplier Address"
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+      </div>
+
+      {/* Country — dropdown */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block">Country</label>
+        <select
+          value={c.country || ""}
+          onChange={e => set("country", e.target.value)}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
+        >
+          <option value="">— Select country —</option>
+          {COUNTRIES.map(co => (
+            <option key={co} value={co}>{co}</option>
+          ))}
+        </select>
+      </div>
+
+      {/* Simple text fields */}
+      {simpleFields.map(({ key, label }) => (
         <div key={key}>
           <label className="text-xs text-gray-400 mb-1 block">{label}</label>
           <input
-            type={type}
-            value={block.content[key] || ""}
-            onChange={(e) => onChange({ ...block.content, [key]: e.target.value })}
+            type="text"
+            value={c[key] || ""}
+            onChange={e => set(key, e.target.value)}
             placeholder={label}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
           />
