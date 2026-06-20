@@ -70,15 +70,15 @@ function buildPdfHtml({ report, blocks }) {
 
     if (type === "cover") {
       const pairs = [
+        ["Project", content.project_name],
+        ["Report Type", content.report_type],
         ["Inspector", content.inspector_name],
         ["Visit Date", content.visit_date],
-        ["Country", content.country],
-        ["Report Type", content.report_type],
+        ["PO Number", content.po_number],
+        ["Client", content.client_name],
         ["Supplier", content.supplier_name],
         ["Supplier Address", content.supplier_address],
-        ["Client", content.client_name],
-        ["Project Ref", content.project_ref],
-        ["PO Number", content.po_number],
+        ["Country", content.country],
       ].filter(([, v]) => v);
       const docs = content.attached_docs || [];
       return `
@@ -444,15 +444,15 @@ function BlockRenderer({ block }) {
 
   if (type === "cover") {
     const pairs = [
+      ["Project", content.project_name],
+      ["Report Type", content.report_type],
       ["Inspector", content.inspector_name],
       ["Visit Date", content.visit_date],
-      ["Country", content.country],
-      ["Report Type", content.report_type],
+      ["PO Number", content.po_number],
+      ["Client", content.client_name],
       ["Supplier", content.supplier_name],
       ["Supplier Address", content.supplier_address],
-      ["Client", content.client_name],
-      ["Project Ref", content.project_ref],
-      ["PO Number", content.po_number],
+      ["Country", content.country],
     ].filter(([, v]) => v);
     const docs = content.attached_docs || [];
 

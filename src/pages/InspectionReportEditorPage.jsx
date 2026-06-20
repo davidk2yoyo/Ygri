@@ -8,11 +8,13 @@ const BLOCK_DEFAULTS = {
   cover: {
     inspector_name: "",
     visit_date: "",
+    project_id: null,
+    project_name: "",
+    client_id: null,
+    client_name: "",
     supplier_id: null,
     supplier_name: "",
     supplier_address: "",
-    client_name: "",
-    project_ref: "",
     po_number: "",
     country: "",
     report_type: "",
@@ -162,6 +164,57 @@ function UploadDropzone({ onFiles, uploading, multiple, children }) {
 
 // ─── Block editors ────────────────────────────────────────────────────────────
 
+function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value || "");
+  const ref = useRef(null);
+
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const filtered = query
+    ? items.filter(it => it[labelKey]?.toLowerCase().includes(query.toLowerCase()))
+    : items;
+
+  return (
+    <div className="relative" ref={ref}>
+      <div className="flex gap-1">
+        <input
+          type="text"
+          value={query}
+          onChange={e => { setQuery(e.target.value); if (!e.target.value) onClear?.(); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder}
+          className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+        />
+        {value && (
+          <button type="button" onClick={() => { setQuery(""); onClear?.(); }} className="px-2 text-gray-400 hover:text-gray-600">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        )}
+      </div>
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-auto">
+          {filtered.map((it, i) => (
+            <li
+              key={it.id ?? i}
+              onMouseDown={() => { onSelect(it); setQuery(it[labelKey]); setOpen(false); }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 text-gray-700"
+            >
+              {it._label ?? it[labelKey]}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 const COUNTRIES = [
   "China", "Vietnam", "Bangladesh", "India", "Indonesia", "Cambodia", "Pakistan",
   "Thailand", "Myanmar", "Sri Lanka", "Philippines", "Malaysia", "South Korea",
@@ -229,25 +282,39 @@ const DOC_TYPE_LABELS = {
 function CoverBlockEditor({ block, onChange }) {
   const c = block.content;
   const set = (key, val) => onChange({ ...c, [key]: val });
+
+  const [projects, setProjects] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [supplierDocs, setSupplierDocs] = useState([]);
+
+  useEffect(() => {
+    supabase.from("v_tracks_overview").select("id,track_name,client_name,client_id").order("track_name")
+      .then(({ data }) => setProjects((data || []).map(p => ({ ...p, _label: p.track_name }))));
+    supabase.from("clients").select("id,company_name").order("company_name")
+      .then(({ data }) => setClients((data || []).map(cl => ({ ...cl, _label: cl.company_name }))));
+    supabase.from("suppliers").select("id,name,address").order("name")
+      .then(({ data }) => setSuppliers((data || []).map(s => ({ ...s, _label: s.name }))));
+  }, []);
 
   useEffect(() => {
     if (!c.supplier_id) { setSupplierDocs([]); return; }
     supabase.from("supplier_documents")
       .select("id,name,document_type,file_url,file_name,validity_date")
-      .eq("supplier_id", c.supplier_id)
-      .order("name")
+      .eq("supplier_id", c.supplier_id).order("name")
       .then(({ data }) => setSupplierDocs(data || []));
   }, [c.supplier_id]);
 
-  const handleSupplierSelect = (supplier) => {
-    onChange({
-      ...c,
-      supplier_id: supplier.id,
-      supplier_name: supplier.name,
-      supplier_address: supplier.address || c.supplier_address,
-      attached_docs: [],
-    });
+  const handleProjectSelect = (p) => {
+    onChange({ ...c, project_id: p.id, project_name: p.track_name, client_id: p.client_id || c.client_id, client_name: p.client_name || c.client_name });
+  };
+
+  const handleClientSelect = (cl) => {
+    onChange({ ...c, client_id: cl.id, client_name: cl.company_name });
+  };
+
+  const handleSupplierSelect = (s) => {
+    onChange({ ...c, supplier_id: s.id, supplier_name: s.name, supplier_address: s.address || c.supplier_address, attached_docs: [] });
   };
 
   const toggleDoc = (doc) => {
@@ -261,119 +328,109 @@ function CoverBlockEditor({ block, onChange }) {
 
   const isAttached = (id) => (c.attached_docs || []).some(d => d.id === id);
 
-  const simpleFields = [
-    { key: "client_name", label: "Client Name" },
-    { key: "project_ref", label: "Project Reference" },
-    { key: "po_number", label: "PO Number" },
-    { key: "report_type", label: "Report Type" },
-  ];
+  const inputCls = "w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent";
 
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Inspector Name */}
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Inspector Name</label>
-          <input
-            type="text"
-            value={c.inspector_name || ""}
-            onChange={e => set("inspector_name", e.target.value)}
-            placeholder="Inspector Name"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-          />
-        </div>
-
-        {/* Visit Date */}
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Visit Date</label>
-          <input
-            type="date"
-            value={c.visit_date || ""}
-            onChange={e => set("visit_date", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-          />
-        </div>
-
-        {/* Supplier Name — combobox */}
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
-          <SupplierComboboxCover
-            value={c.supplier_name || ""}
-            onSelect={handleSupplierSelect}
-            onChangeText={val => set("supplier_name", val)}
-          />
-        </div>
-
-        {/* Supplier Address */}
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Supplier Address</label>
-          <input
-            type="text"
-            value={c.supplier_address || ""}
-            onChange={e => set("supplier_address", e.target.value)}
-            placeholder="Supplier Address"
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-          />
-        </div>
-
-        {/* Country — dropdown */}
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">Country</label>
-          <select
-            value={c.country || ""}
-            onChange={e => set("country", e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
-          >
-            <option value="">— Select country —</option>
-            {COUNTRIES.map(co => (
-              <option key={co} value={co}>{co}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Simple text fields */}
-        {simpleFields.map(({ key, label }) => (
-          <div key={key}>
-            <label className="text-xs text-gray-400 mb-1 block">{label}</label>
-            <input
-              type="text"
-              value={c[key] || ""}
-              onChange={e => set(key, e.target.value)}
-              placeholder={label}
-              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+    <div className="space-y-4">
+      {/* ── Project & Inspector ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Report Info</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Project</label>
+            <EntityCombobox
+              value={c.project_name || ""}
+              placeholder="Search project…"
+              items={projects}
+              labelKey="track_name"
+              onSelect={handleProjectSelect}
+              onClear={() => onChange({ ...c, project_id: null, project_name: "" })}
             />
           </div>
-        ))}
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Report Type</label>
+            <input type="text" value={c.report_type || ""} onChange={e => set("report_type", e.target.value)} placeholder="e.g. Pre-shipment" className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Inspector Name</label>
+            <input type="text" value={c.inspector_name || ""} onChange={e => set("inspector_name", e.target.value)} placeholder="Inspector Name" className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Visit Date</label>
+            <input type="date" value={c.visit_date || ""} onChange={e => set("visit_date", e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">PO Number</label>
+            <input type="text" value={c.po_number || ""} onChange={e => set("po_number", e.target.value)} placeholder="PO Number" className={inputCls} />
+          </div>
+        </div>
       </div>
 
-      {/* Supplier Documents picker */}
-      {c.supplier_id && (
-        <div className="border border-gray-200 rounded-lg p-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-            Supplier Documents
-            {supplierDocs.length === 0 && <span className="font-normal normal-case ml-1 text-gray-400">— none found</span>}
-          </p>
-          {supplierDocs.length > 0 && (
-            <div className="space-y-1.5">
-              {supplierDocs.map(doc => (
-                <label key={doc.id} className="flex items-center gap-2.5 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={isAttached(doc.id)}
-                    onChange={() => toggleDoc(doc)}
-                    className="rounded border-gray-300 text-blue-500 focus:ring-blue-400"
-                  />
-                  <span className="text-sm text-gray-700 group-hover:text-blue-600 flex-1 truncate">{doc.name}</span>
-                  <span className="text-xs text-gray-400 shrink-0">{DOC_TYPE_LABELS[doc.document_type] || doc.document_type}</span>
-                  {doc.validity_date && (
-                    <span className="text-xs text-gray-400 shrink-0">exp. {doc.validity_date}</span>
-                  )}
-                </label>
-              ))}
-            </div>
-          )}
+      {/* ── Client ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Client</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Client</label>
+            <EntityCombobox
+              value={c.client_name || ""}
+              placeholder="Search client…"
+              items={clients}
+              labelKey="company_name"
+              onSelect={handleClientSelect}
+              onClear={() => onChange({ ...c, client_id: null, client_name: "" })}
+            />
+          </div>
         </div>
-      )}
+      </div>
+
+      {/* ── Supplier ── */}
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Supplier</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
+            <SupplierComboboxCover
+              value={c.supplier_name || ""}
+              onSelect={handleSupplierSelect}
+              onChangeText={val => set("supplier_name", val)}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Supplier Address</label>
+            <input type="text" value={c.supplier_address || ""} onChange={e => set("supplier_address", e.target.value)} placeholder="Supplier Address" className={inputCls} />
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 mb-1 block">Country</label>
+            <select value={c.country || ""} onChange={e => set("country", e.target.value)} className={inputCls + " bg-white"}>
+              <option value="">— Select country —</option>
+              {COUNTRIES.map(co => <option key={co} value={co}>{co}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Supplier documents picker */}
+        {c.supplier_id && (
+          <div className="mt-3 border border-gray-200 rounded-lg p-3">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              Supplier Documents
+              {supplierDocs.length === 0 && <span className="font-normal normal-case ml-1 text-gray-400">— none found</span>}
+            </p>
+            {supplierDocs.length > 0 && (
+              <div className="space-y-1.5">
+                {supplierDocs.map(doc => (
+                  <label key={doc.id} className="flex items-center gap-2.5 cursor-pointer group">
+                    <input type="checkbox" checked={isAttached(doc.id)} onChange={() => toggleDoc(doc)} className="rounded border-gray-300 text-blue-500 focus:ring-blue-400" />
+                    <span className="text-sm text-gray-700 group-hover:text-blue-600 flex-1 truncate">{doc.name}</span>
+                    <span className="text-xs text-gray-400 shrink-0">{DOC_TYPE_LABELS[doc.document_type] || doc.document_type}</span>
+                    {doc.validity_date && <span className="text-xs text-gray-400 shrink-0">exp. {doc.validity_date}</span>}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
