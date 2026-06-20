@@ -8,6 +8,7 @@ const BLOCK_DEFAULTS = {
   cover: {
     inspector_name: "",
     visit_date: "",
+    supplier_id: null,
     supplier_name: "",
     supplier_address: "",
     client_name: "",
@@ -15,6 +16,7 @@ const BLOCK_DEFAULTS = {
     po_number: "",
     country: "",
     report_type: "",
+    attached_docs: [],
   },
   text: { title: "Overview", content: "" },
   gallery: { title: "Photos", images: [] },
@@ -219,13 +221,45 @@ function SupplierComboboxCover({ value, onSelect, onChangeText }) {
   );
 }
 
+const DOC_TYPE_LABELS = {
+  catalog: "Catalog", quotation: "Quotation", contract: "Contract",
+  certificate: "Certificate", product_sheet: "Product Sheet", other: "Other",
+};
+
 function CoverBlockEditor({ block, onChange }) {
   const c = block.content;
   const set = (key, val) => onChange({ ...c, [key]: val });
+  const [supplierDocs, setSupplierDocs] = useState([]);
+
+  useEffect(() => {
+    if (!c.supplier_id) { setSupplierDocs([]); return; }
+    supabase.from("supplier_documents")
+      .select("id,name,document_type,file_url,file_name,validity_date")
+      .eq("supplier_id", c.supplier_id)
+      .order("name")
+      .then(({ data }) => setSupplierDocs(data || []));
+  }, [c.supplier_id]);
 
   const handleSupplierSelect = (supplier) => {
-    onChange({ ...c, supplier_name: supplier.name, supplier_address: supplier.address || c.supplier_address });
+    onChange({
+      ...c,
+      supplier_id: supplier.id,
+      supplier_name: supplier.name,
+      supplier_address: supplier.address || c.supplier_address,
+      attached_docs: [],
+    });
   };
+
+  const toggleDoc = (doc) => {
+    const current = c.attached_docs || [];
+    const exists = current.find(d => d.id === doc.id);
+    const next = exists
+      ? current.filter(d => d.id !== doc.id)
+      : [...current, { id: doc.id, name: doc.name, document_type: doc.document_type, file_url: doc.file_url, file_name: doc.file_name, validity_date: doc.validity_date }];
+    set("attached_docs", next);
+  };
+
+  const isAttached = (id) => (c.attached_docs || []).some(d => d.id === id);
 
   const simpleFields = [
     { key: "client_name", label: "Client Name" },
@@ -235,80 +269,111 @@ function CoverBlockEditor({ block, onChange }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {/* Inspector Name */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Inspector Name</label>
-        <input
-          type="text"
-          value={c.inspector_name || ""}
-          onChange={e => set("inspector_name", e.target.value)}
-          placeholder="Inspector Name"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-        />
-      </div>
-
-      {/* Visit Date */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Visit Date</label>
-        <input
-          type="date"
-          value={c.visit_date || ""}
-          onChange={e => set("visit_date", e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-        />
-      </div>
-
-      {/* Supplier Name — combobox */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
-        <SupplierComboboxCover
-          value={c.supplier_name || ""}
-          onSelect={handleSupplierSelect}
-          onChangeText={val => set("supplier_name", val)}
-        />
-      </div>
-
-      {/* Supplier Address */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Supplier Address</label>
-        <input
-          type="text"
-          value={c.supplier_address || ""}
-          onChange={e => set("supplier_address", e.target.value)}
-          placeholder="Supplier Address"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-        />
-      </div>
-
-      {/* Country — dropdown */}
-      <div>
-        <label className="text-xs text-gray-400 mb-1 block">Country</label>
-        <select
-          value={c.country || ""}
-          onChange={e => set("country", e.target.value)}
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
-        >
-          <option value="">— Select country —</option>
-          {COUNTRIES.map(co => (
-            <option key={co} value={co}>{co}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Simple text fields */}
-      {simpleFields.map(({ key, label }) => (
-        <div key={key}>
-          <label className="text-xs text-gray-400 mb-1 block">{label}</label>
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* Inspector Name */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Inspector Name</label>
           <input
             type="text"
-            value={c[key] || ""}
-            onChange={e => set(key, e.target.value)}
-            placeholder={label}
+            value={c.inspector_name || ""}
+            onChange={e => set("inspector_name", e.target.value)}
+            placeholder="Inspector Name"
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
           />
         </div>
-      ))}
+
+        {/* Visit Date */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Visit Date</label>
+          <input
+            type="date"
+            value={c.visit_date || ""}
+            onChange={e => set("visit_date", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+          />
+        </div>
+
+        {/* Supplier Name — combobox */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
+          <SupplierComboboxCover
+            value={c.supplier_name || ""}
+            onSelect={handleSupplierSelect}
+            onChangeText={val => set("supplier_name", val)}
+          />
+        </div>
+
+        {/* Supplier Address */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Supplier Address</label>
+          <input
+            type="text"
+            value={c.supplier_address || ""}
+            onChange={e => set("supplier_address", e.target.value)}
+            placeholder="Supplier Address"
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+          />
+        </div>
+
+        {/* Country — dropdown */}
+        <div>
+          <label className="text-xs text-gray-400 mb-1 block">Country</label>
+          <select
+            value={c.country || ""}
+            onChange={e => set("country", e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent bg-white"
+          >
+            <option value="">— Select country —</option>
+            {COUNTRIES.map(co => (
+              <option key={co} value={co}>{co}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Simple text fields */}
+        {simpleFields.map(({ key, label }) => (
+          <div key={key}>
+            <label className="text-xs text-gray-400 mb-1 block">{label}</label>
+            <input
+              type="text"
+              value={c[key] || ""}
+              onChange={e => set(key, e.target.value)}
+              placeholder={label}
+              className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Supplier Documents picker */}
+      {c.supplier_id && (
+        <div className="border border-gray-200 rounded-lg p-3">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+            Supplier Documents
+            {supplierDocs.length === 0 && <span className="font-normal normal-case ml-1 text-gray-400">— none found</span>}
+          </p>
+          {supplierDocs.length > 0 && (
+            <div className="space-y-1.5">
+              {supplierDocs.map(doc => (
+                <label key={doc.id} className="flex items-center gap-2.5 cursor-pointer group">
+                  <input
+                    type="checkbox"
+                    checked={isAttached(doc.id)}
+                    onChange={() => toggleDoc(doc)}
+                    className="rounded border-gray-300 text-blue-500 focus:ring-blue-400"
+                  />
+                  <span className="text-sm text-gray-700 group-hover:text-blue-600 flex-1 truncate">{doc.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{DOC_TYPE_LABELS[doc.document_type] || doc.document_type}</span>
+                  {doc.validity_date && (
+                    <span className="text-xs text-gray-400 shrink-0">exp. {doc.validity_date}</span>
+                  )}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -80,6 +80,7 @@ function buildPdfHtml({ report, blocks }) {
         ["Project Ref", content.project_ref],
         ["PO Number", content.po_number],
       ].filter(([, v]) => v);
+      const docs = content.attached_docs || [];
       return `
         <div class="content-block cover-info">
           <div class="info-grid">
@@ -89,6 +90,18 @@ function buildPdfHtml({ report, blocks }) {
                 <span class="info-value">${esc(value)}</span>
               </div>`).join("")}
           </div>
+          ${docs.length ? `
+          <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f7;">
+            <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin:0 0 8px 0;">Attached Documents</p>
+            <table style="width:100%;border-collapse:collapse;font-size:10px;">
+              ${docs.map(d => `
+                <tr style="border-bottom:1px solid #f3f4f6;">
+                  <td style="padding:5px 0;color:#1e293b;font-weight:600;">${esc(d.name)}</td>
+                  <td style="padding:5px 0;color:#6b7280;text-align:right;">${esc(d.document_type || "")}</td>
+                  ${d.validity_date ? `<td style="padding:5px 0;color:#9ca3af;text-align:right;padding-left:12px;">exp. ${esc(d.validity_date)}</td>` : '<td></td>'}
+                </tr>`).join("")}
+            </table>
+          </div>` : ""}
         </div>`;
     }
 
@@ -441,16 +454,37 @@ function BlockRenderer({ block }) {
       ["Project Ref", content.project_ref],
       ["PO Number", content.po_number],
     ].filter(([, v]) => v);
+    const docs = content.attached_docs || [];
 
     return (
       <div style={{ marginBottom: "28px" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1px", border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", background: "#e2e8f0" }}>
-          {pairs.map(([label, value]) => (
-            <div key={label} style={{ background: "white", padding: "12px 16px" }}>
-              <span style={{ display: "block", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9ca3af", marginBottom: "3px" }}>{label}</span>
-              <span style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#111827" }}>{value}</span>
+        <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "1px", background: "#e2e8f0" }}>
+            {pairs.map(([label, value]) => (
+              <div key={label} style={{ background: "white", padding: "12px 16px" }}>
+                <span style={{ display: "block", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9ca3af", marginBottom: "3px" }}>{label}</span>
+                <span style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#111827" }}>{value}</span>
+              </div>
+            ))}
+          </div>
+          {docs.length > 0 && (
+            <div style={{ background: "white", padding: "14px 16px", borderTop: "1px solid #e2e8f0" }}>
+              <span style={{ display: "block", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9ca3af", marginBottom: "10px" }}>Attached Documents</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                {docs.map(d => (
+                  <a key={d.id} href={d.file_url} target="_blank" rel="noreferrer"
+                    style={{ display: "flex", alignItems: "center", gap: "10px", textDecoration: "none", padding: "8px 10px", borderRadius: "7px", border: "1px solid #e2e8f0", background: "#f9fafb" }}>
+                    <svg width="16" height="16" fill="none" stroke="#6b7280" strokeWidth="1.5" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    <span style={{ flex: 1, fontSize: "13px", fontWeight: "600", color: "#111827" }}>{d.name}</span>
+                    <span style={{ fontSize: "11px", color: "#9ca3af" }}>{d.document_type}</span>
+                    {d.validity_date && <span style={{ fontSize: "11px", color: "#9ca3af" }}>exp. {d.validity_date}</span>}
+                  </a>
+                ))}
+              </div>
             </div>
-          ))}
+          )}
         </div>
       </div>
     );
