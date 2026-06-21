@@ -499,7 +499,7 @@ function CoverBlockEditor({ block, onChange }) {
   );
 }
 
-function TextBlockEditor({ block, onChange }) {
+function TextBlockEditor({ block, onChange, language = "en" }) {
   const [retouching, setRetouching] = useState(false);
   const [retouchError, setRetouchError] = useState("");
 
@@ -518,7 +518,7 @@ function TextBlockEditor({ block, onChange }) {
       const res = await fetch("/api/ai-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "retouch", text: plainText }),
+        body: JSON.stringify({ type: "retouch", text: plainText, language }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
@@ -1119,7 +1119,7 @@ function ConclusionBlockEditor({ block, onChange }) {
 }
 
 // ─── Block card ───────────────────────────────────────────────────────────────
-function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange }) {
+function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, language }) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
       {/* Header */}
@@ -1170,7 +1170,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChan
       {/* Content */}
       <div className="p-4">
         {block.type === "cover"     && <CoverBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
-        {block.type === "text"      && <TextBlockEditor      block={block} onChange={(c) => onChange({ ...block, content: c })} />}
+        {block.type === "text"      && <TextBlockEditor      block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} />}
         {block.type === "gallery"   && <GalleryBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "checklist" && <ChecklistBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "table"     && <TableBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
@@ -1277,7 +1277,7 @@ export default function InspectionReportEditorPage() {
     try {
       const { error: updErr } = await supabase
         .from("inspection_reports")
-        .update({ title: report.title, status: report.status })
+        .update({ title: report.title, status: report.status, language: report.language || "en" })
         .eq("id", report.id);
       if (updErr) throw new Error(updErr.message);
 
@@ -1367,8 +1367,25 @@ export default function InspectionReportEditorPage() {
             </div>
           </div>
 
-          {/* Right: Preview + Save */}
+          {/* Right: Language + Preview + Save */}
           <div className="flex items-center gap-2 shrink-0">
+            {/* Language toggle */}
+            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+              {["en", "es"].map(lang => (
+                <button
+                  key={lang}
+                  type="button"
+                  onClick={() => setReport(r => ({ ...r, language: lang }))}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-md transition ${
+                    (report?.language || "en") === lang
+                      ? "bg-white shadow text-gray-800"
+                      : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  {lang.toUpperCase()}
+                </button>
+              ))}
+            </div>
             {report?.report_number && (
               <button
                 onClick={openPreview}
@@ -1453,6 +1470,7 @@ export default function InspectionReportEditorPage() {
             onMoveDown={() => moveBlock(block._localId, 1)}
             onDelete={() => deleteBlock(block._localId)}
             onChange={(updated) => updateBlock(block._localId, updated)}
+            language={report?.language || "en"}
           />
         ))}
 

@@ -71,12 +71,17 @@ Return ONLY a valid JSON object — no markdown, no explanation:
   "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
 }`,
 
-  retouch: `You are a technical writer for an international trade company. Rephrase the following product description in a professional, formal B2B tone. Keep all technical facts exactly as they are — only improve the language, clarity, and flow.
+  retouch: (lang = "en") => {
+    const langLine = lang === "es"
+      ? "Write your output in Spanish."
+      : "Write your output in English.";
+    return `You are a technical writer for an international trade company. Rephrase the following text in a professional, formal B2B tone. Keep all technical facts exactly as they are — only improve the language, clarity, and flow. ${langLine}
 
 Return plain text only — no markdown symbols (no **, no *, no #, no - bullets). Use blank lines to separate paragraphs. Keep distinct specification items on separate lines.
 
 Return ONLY a valid JSON object on a single line — no literal line breaks in the JSON itself, use \\n for line breaks:
-{"content": "paragraph one\\n\\nparagraph two\\nspec item one\\nspec item two"}`,
+{"content": "paragraph one\\n\\nparagraph two\\nspec item one\\nspec item two"}`;
+  },
 
   extract: `You are a document transcription assistant. Copy ALL text from this document image exactly as it appears — preserving every specification, measurement, value, and detail verbatim. Do not summarize, rephrase, or omit anything.
 
@@ -137,7 +142,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { image, mimeType, type, text } = body;
+  const { image, mimeType, type, text, language } = body;
 
   if (!PROMPTS[type]) {
     res.statusCode = 400;
@@ -162,8 +167,9 @@ export default async function handler(req, res) {
     return;
   }
 
+  const retouchPrompt = typeof PROMPTS.retouch === "function" ? PROMPTS.retouch(language) : PROMPTS.retouch;
   const messages = type === "retouch"
-    ? [{ role: "user", content: `${PROMPTS.retouch}\n\nText to rephrase:\n${text}` }]
+    ? [{ role: "user", content: `${retouchPrompt}\n\nText to rephrase:\n${text}` }]
     : [{ role: "user", content: [
         { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
         { type: "text", text: PROMPTS[type] },
