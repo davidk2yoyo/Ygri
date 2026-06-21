@@ -35,11 +35,43 @@ const STATUS_COLORS = {
   rejected: "#dc2626",
 };
 
-const SEVERITY_COLORS = {
-  critical: "#dc2626",
-  major: "#d97706",
-  minor: "#2563eb",
-  low: "#6b7280",
+const CONDITION_COLORS = {
+  good:        "#16a34a",
+  regular:     "#d97706",
+  defects:     "#ea580c",
+  not_suitable:"#dc2626",
+  // legacy fallbacks
+  low: "#6b7280", medium: "#d97706", high: "#dc2626",
+  critical: "#dc2626", major: "#d97706", minor: "#2563eb",
+};
+
+const DEFECT_LABELS = {
+  en: {
+    title: "Defects Found",
+    item_name: "Item / Name",
+    comment: "Comment",
+    qty_inspected: "Qty. Inspected",
+    condition: "Condition",
+    no_items: "No items recorded.",
+    conditions: {
+      good: "Good Condition", regular: "Regular",
+      defects: "Defects Found", not_suitable: "Not Suitable for Dispatch",
+      low: "Low", medium: "Medium", high: "High", critical: "Critical", major: "Major", minor: "Minor",
+    },
+  },
+  es: {
+    title: "Hallazgos / Defectos",
+    item_name: "Artículo / Nombre",
+    comment: "Comentario",
+    qty_inspected: "Cant. Inspeccionada",
+    condition: "Condición",
+    no_items: "Sin artículos registrados.",
+    conditions: {
+      good: "Buenas Condiciones", regular: "Regular",
+      defects: "Defectos Encontrados", not_suitable: "No Apto para Despacho",
+      low: "Bajo", medium: "Medio", high: "Alto", critical: "Crítico", major: "Mayor", minor: "Menor",
+    },
+  },
 };
 
 const ACTION_LABELS = {
@@ -216,33 +248,44 @@ function buildPdfHtml({ report, blocks }) {
     }
 
     if (type === "defects") {
-      const items = (content.items || []).filter(d => d.type || d.recommendation);
+      const dt = DEFECT_LABELS[lang] || DEFECT_LABELS.en;
+      const items = (content.items || []).filter(d => d.item_name || d.type || d.comment || d.recommendation);
       return `
         <div class="content-block">
-          ${heading(content.title || "Defects Found")}
-          ${items.length === 0 ? `<p style="color:#9ca3af;font-size:11px;">No defects recorded.</p>` : `
+          ${heading(content.title || dt.title)}
+          ${items.length === 0 ? `<p style="color:#9ca3af;font-size:11px;">${dt.no_items}</p>` : (() => {
+            const hasPhotos = items.some(d => d.photo_url);
+            return `
           <table class="data-table">
             <thead>
               <tr>
-                <th>Type</th>
-                <th>Severity</th>
-                <th>Quantity</th>
-                <th>Recommendation</th>
+                ${hasPhotos ? "<th style='width:80px'>Photo</th>" : ""}
+                <th>${dt.item_name}</th>
+                <th>${dt.condition}</th>
+                <th>${dt.qty_inspected}</th>
+                <th>${dt.comment}</th>
               </tr>
             </thead>
             <tbody>
               ${items.map((d, i) => {
-                const sevColor = SEVERITY_COLORS[d.severity] || "#6b7280";
+                const condKey = d.condition || d.severity || "good";
+                const condColor = CONDITION_COLORS[condKey] || "#6b7280";
+                const condLabel = dt.conditions[condKey] || condKey;
+                const photoCell = hasPhotos
+                  ? (d.photo_url ? `<td style="padding:4px;"><img src="${esc(d.photo_url)}" style="width:72px;height:56px;object-fit:cover;border-radius:4px;" /></td>` : "<td></td>")
+                  : "";
                 return `
                   <tr class="${i % 2 === 0 ? "even" : "odd"}">
-                    <td>${esc(d.type || "")}</td>
-                    <td><span style="display:inline-block;background:${sevColor}22;color:${sevColor};font-size:8px;font-weight:700;letter-spacing:.08em;padding:2px 8px;border-radius:999px;">${esc((d.severity || "").toUpperCase())}</span></td>
-                    <td>${esc(d.quantity || "")}</td>
-                    <td>${esc(d.recommendation || "")}</td>
+                    ${photoCell}
+                    <td style="font-weight:600;">${esc(d.item_name || d.type || "")}</td>
+                    <td><span style="display:inline-block;background:${condColor}22;color:${condColor};font-size:8px;font-weight:700;letter-spacing:.06em;padding:2px 8px;border-radius:999px;">${esc(condLabel)}</span></td>
+                    <td>${esc(d.qty_inspected || d.quantity || "")}</td>
+                    <td style="color:#6b7280;">${esc(d.comment || d.recommendation || "")}</td>
                   </tr>`;
               }).join("")}
             </tbody>
-          </table>`}
+          </table>`;
+          })()}
         </div>`;
     }
 
@@ -633,39 +676,51 @@ function BlockRenderer({ block, language = "en" }) {
   }
 
   if (type === "defects") {
-    const items = (content.items || []).filter(d => d.type || d.recommendation);
+    const dt = DEFECT_LABELS[language] || DEFECT_LABELS.en;
+    const items = (content.items || []).filter(d => d.item_name || d.type || d.comment || d.recommendation);
     return (
       <div style={{ marginBottom: "28px" }}>
-        <SectionHeading title={content.title || "Defects Found"} />
+        <SectionHeading title={content.title || dt.title} />
         {items.length === 0 ? (
-          <p style={{ color: "#9ca3af", fontSize: "13px", margin: 0 }}>No defects recorded.</p>
+          <p style={{ color: "#9ca3af", fontSize: "13px", margin: 0 }}>{dt.no_items}</p>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
             {items.map((defect, i) => {
-              const sevColor = SEVERITY_COLORS[defect.severity] || "#6b7280";
+              const condKey = defect.condition || defect.severity || "good";
+              const condColor = CONDITION_COLORS[condKey] || "#6b7280";
+              const condLabel = dt.conditions[condKey] || condKey;
               return (
-                <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", display: "flex", gap: 0 }}>
+                <div key={i} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden", display: "flex" }}>
+                  {/* Left accent bar based on condition */}
+                  <div style={{ width: "4px", flexShrink: 0, background: condColor }} />
                   {defect.photo_url && (
                     <img
                       src={defect.photo_url}
-                      alt="Defect"
-                      style={{ width: "120px", minWidth: "120px", height: "100px", objectFit: "cover", borderRight: "1px solid #e2e8f0" }}
+                      alt=""
+                      style={{ width: "110px", minWidth: "110px", objectFit: "cover", borderRight: "1px solid #e2e8f0" }}
                     />
                   )}
-                  <div style={{ padding: "12px 16px", flex: 1 }}>
+                  <div style={{ padding: "12px 14px", flex: 1, minWidth: 0 }}>
+                    {/* Top row: name + condition badge */}
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px", flexWrap: "wrap" }}>
-                      <span style={{ fontWeight: "700", fontSize: "13px", color: "#111827" }}>{defect.type || "Defect"}</span>
-                      {defect.severity && (
-                        <span style={{ display: "inline-block", background: sevColor + "22", color: sevColor, fontSize: "10px", fontWeight: "700", letterSpacing: "0.06em", textTransform: "uppercase", padding: "2px 10px", borderRadius: "999px" }}>
-                          {defect.severity}
-                        </span>
-                      )}
-                      {defect.quantity && (
-                        <span style={{ fontSize: "11px", color: "#6b7280" }}>Qty: {defect.quantity}</span>
-                      )}
+                      <span style={{ fontWeight: "700", fontSize: "13px", color: "#111827" }}>
+                        {defect.item_name || defect.type || "—"}
+                      </span>
+                      <span style={{ display: "inline-block", background: condColor + "18", color: condColor, fontSize: "10px", fontWeight: "700", letterSpacing: "0.05em", padding: "2px 10px", borderRadius: "999px", border: `1px solid ${condColor}33` }}>
+                        {condLabel}
+                      </span>
                     </div>
-                    {defect.recommendation && (
-                      <p style={{ margin: 0, fontSize: "12px", color: "#374151" }}>{defect.recommendation}</p>
+                    {/* Meta row: qty */}
+                    {(defect.qty_inspected || defect.quantity) && (
+                      <div style={{ fontSize: "11px", color: "#9ca3af", marginBottom: "4px" }}>
+                        {dt.qty_inspected}: <strong style={{ color: "#6b7280" }}>{defect.qty_inspected || defect.quantity}</strong>
+                      </div>
+                    )}
+                    {/* Comment */}
+                    {(defect.comment || defect.recommendation) && (
+                      <p style={{ margin: 0, fontSize: "12px", color: "#374151", lineHeight: "1.5" }}>
+                        {defect.comment || defect.recommendation}
+                      </p>
                     )}
                   </div>
                 </div>

@@ -31,7 +31,7 @@ const BLOCK_DEFAULTS = {
   },
   defects: {
     title: "Defects Found",
-    items: [{ photo_url: "", type: "", severity: "low", quantity: "", recommendation: "" }],
+    items: [{ photo_url: "", item_name: "", condition: "good", qty_inspected: "", comment: "" }],
   },
   scoring: {
     title: "Quality Scoring",
@@ -1074,10 +1074,18 @@ function TableBlockEditor({ block, onChange }) {
   );
 }
 
-const SEVERITY_STYLES = {
-  low:    "bg-blue-50 text-blue-700 border-blue-200",
-  medium: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  high:   "bg-red-50 text-red-700 border-red-200",
+const CONDITION_STYLES = {
+  good:        "bg-green-50 text-green-700 border-green-200",
+  regular:     "bg-yellow-50 text-yellow-700 border-yellow-200",
+  defects:     "bg-orange-50 text-orange-700 border-orange-200",
+  not_suitable:"bg-red-50 text-red-700 border-red-200",
+};
+
+const CONDITION_LABELS = {
+  good:        "Good Condition",
+  regular:     "Regular",
+  defects:     "Defects Found",
+  not_suitable:"Not Suitable for Dispatch",
 };
 
 function DefectsBlockEditor({ block, onChange }) {
@@ -1107,119 +1115,124 @@ function DefectsBlockEditor({ block, onChange }) {
       ...block.content,
       items: [
         ...items,
-        { photo_url: "", type: "", severity: "low", quantity: "", recommendation: "" },
+        { photo_url: "", item_name: "", condition: "good", qty_inspected: "", comment: "" },
       ],
     });
   const removeItem = (i) =>
     onChange({ ...block.content, items: items.filter((_, idx) => idx !== i) });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <input
         value={block.content.title}
         onChange={(e) => onChange({ ...block.content, title: e.target.value })}
         placeholder="Block title"
         className="w-full text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
       />
-      {items.map((item, i) => (
-        <div key={i} className="border border-gray-200 rounded-xl p-3 space-y-3 relative">
-          <button
-            onClick={() => removeItem(i)}
-            className="absolute top-2 right-2 text-gray-300 hover:text-red-400 transition text-xs"
-          >
-            ✕
-          </button>
-          <div className="flex gap-3">
-            {/* Photo */}
-            <div className="shrink-0 w-24">
-              {item.photo_url ? (
-                <div className="relative group">
-                  <img
-                    src={item.photo_url}
-                    alt=""
-                    className="w-24 h-20 object-cover rounded-lg border border-gray-200"
-                  />
-                  <button
-                    onClick={() => updateItem(i, "photo_url", "")}
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : (
-                <UploadDropzone
-                  onFiles={(files) => handlePhotoUpload(i, files)}
-                  uploading={!!uploading[i]}
-                  multiple={false}
-                >
-                  <div className="w-24 h-20 flex flex-col items-center justify-center gap-1">
-                    {uploading[i] ? (
-                      <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                          d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                          d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    )}
-                    <span className="text-[10px] text-center leading-tight px-1">
-                      {uploading[i] ? "Uploading…" : "Photo"}
-                    </span>
+      {items.map((item, i) => {
+        const condStyle = CONDITION_STYLES[item.condition] || "bg-gray-50 text-gray-700 border-gray-200";
+        return (
+          <div key={i} className="border border-gray-200 rounded-xl overflow-hidden relative">
+            <button
+              onClick={() => removeItem(i)}
+              className="absolute top-2 right-2 text-gray-300 hover:text-red-400 transition text-xs z-10"
+            >
+              ✕
+            </button>
+            <div className="flex">
+              {/* Photo column */}
+              <div className="shrink-0 w-28 bg-gray-50 border-r border-gray-100">
+                {item.photo_url ? (
+                  <div className="relative group h-full min-h-[96px]">
+                    <img
+                      src={item.photo_url}
+                      alt=""
+                      className="w-full h-full object-cover"
+                      style={{ minHeight: "96px" }}
+                    />
+                    <button
+                      onClick={() => updateItem(i, "photo_url", "")}
+                      className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-4 h-4 text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+                    >
+                      ✕
+                    </button>
                   </div>
-                </UploadDropzone>
-              )}
-            </div>
-            {/* Fields */}
-            <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
-              <div>
-                <label className="text-[10px] text-gray-400 mb-0.5 block">Defect Type</label>
-                <input
-                  value={item.type}
-                  onChange={(e) => updateItem(i, "type", e.target.value)}
-                  placeholder="e.g. Scratch, Dent…"
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                />
+                ) : (
+                  <UploadDropzone
+                    onFiles={(files) => handlePhotoUpload(i, files)}
+                    uploading={!!uploading[i]}
+                    multiple={false}
+                  >
+                    <div className="w-full h-full min-h-[96px] flex flex-col items-center justify-center gap-1 text-gray-300">
+                      {uploading[i] ? (
+                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      ) : (
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                            d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                      )}
+                      <span className="text-[10px] text-center leading-tight px-1">
+                        {uploading[i] ? "Uploading…" : "Add Photo"}
+                      </span>
+                    </div>
+                  </UploadDropzone>
+                )}
               </div>
-              <div>
-                <label className="text-[10px] text-gray-400 mb-0.5 block">Severity</label>
-                <select
-                  value={item.severity}
-                  onChange={(e) => updateItem(i, "severity", e.target.value)}
-                  className={`w-full px-2 py-1.5 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent ${SEVERITY_STYLES[item.severity] || ""}`}
-                >
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 mb-0.5 block">Quantity</label>
-                <input
-                  value={item.quantity}
-                  onChange={(e) => updateItem(i, "quantity", e.target.value)}
-                  placeholder="e.g. 3 units"
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] text-gray-400 mb-0.5 block">Recommendation</label>
-                <input
-                  value={item.recommendation}
-                  onChange={(e) => updateItem(i, "recommendation", e.target.value)}
-                  placeholder="e.g. Rework…"
-                  className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
-                />
+              {/* Fields */}
+              <div className="flex-1 p-3 grid grid-cols-2 gap-2 min-w-0">
+                <div className="col-span-2">
+                  <label className="text-[10px] text-gray-400 mb-0.5 block">Item / Name</label>
+                  <input
+                    value={item.item_name ?? item.type ?? ""}
+                    onChange={(e) => updateItem(i, "item_name", e.target.value)}
+                    placeholder="Item number or name…"
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 mb-0.5 block">Condition</label>
+                  <select
+                    value={item.condition ?? item.severity ?? "good"}
+                    onChange={(e) => updateItem(i, "condition", e.target.value)}
+                    className={`w-full px-2 py-1.5 border rounded-lg text-sm font-medium focus:ring-2 focus:ring-blue-400 focus:border-transparent ${condStyle}`}
+                  >
+                    <option value="good">Good Condition</option>
+                    <option value="regular">Regular</option>
+                    <option value="defects">Defects Found</option>
+                    <option value="not_suitable">Not Suitable for Dispatch</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] text-gray-400 mb-0.5 block">Qty. Inspected</label>
+                  <input
+                    value={item.qty_inspected ?? item.quantity ?? ""}
+                    onChange={(e) => updateItem(i, "qty_inspected", e.target.value)}
+                    placeholder="e.g. 50 pcs"
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-[10px] text-gray-400 mb-0.5 block">Comment</label>
+                  <input
+                    value={item.comment ?? item.recommendation ?? ""}
+                    onChange={(e) => updateItem(i, "comment", e.target.value)}
+                    placeholder="Observations or notes…"
+                    className="w-full px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       <button
         onClick={addItem}
         className="text-xs text-blue-500 hover:text-blue-700 font-medium"
       >
-        + Add defect
+        + Add item
       </button>
     </div>
   );
