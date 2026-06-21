@@ -83,6 +83,26 @@ Return ONLY a valid JSON object on a single line — no literal line breaks in t
 {"content": "paragraph one\\n\\nparagraph two\\nspec item one\\nspec item two"}`;
   },
 
+  table: `You are extracting tabular data from an image (packing list, inspection table, spreadsheet, quality report, or any document with rows and columns).
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "title": "table title or document title visible in the image, or empty string",
+  "headers": ["Column Name 1", "Column Name 2", "Column Name 3"],
+  "rows": [
+    ["value1", "value2", "value3"],
+    ["value1", "value2", "value3"]
+  ]
+}
+
+Rules:
+- Include ALL visible columns
+- Include ALL data rows — skip header rows only
+- Preserve original column names exactly as written
+- Empty cells must be empty strings ""
+- All values must be strings, not numbers
+- If no clear table exists, create one from the most structured content visible`,
+
   extract: `You are a document transcription assistant. Copy ALL text from this document image exactly as it appears — preserving every specification, measurement, value, and detail verbatim. Do not summarize, rephrase, or omit anything.
 
 Return ONLY a valid JSON object — no markdown, no explanation:

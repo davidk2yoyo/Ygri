@@ -24,10 +24,8 @@ function esc(str) {
 }
 
 const STATUS_LABELS = {
-  draft: "Draft",
-  approved: "Approved",
-  approved_with_observations: "Approved with Observations",
-  rejected: "Rejected",
+  en: { draft: "Draft", approved: "Approved", approved_with_observations: "Approved with Observations", rejected: "Rejected" },
+  es: { draft: "Borrador", approved: "Aprobado", approved_with_observations: "Aprobado con Observaciones", rejected: "Rechazado" },
 };
 
 const STATUS_COLORS = {
@@ -45,10 +43,8 @@ const SEVERITY_COLORS = {
 };
 
 const ACTION_LABELS = {
-  proceed: "Proceed",
-  proceed_with_observations: "Proceed with Observations",
-  hold: "Hold",
-  reject: "Reject",
+  en: { proceed: "Proceed", proceed_with_observations: "Proceed with Observations", hold: "Hold", reject: "Reject" },
+  es: { proceed: "Proceder", proceed_with_observations: "Proceder con Observaciones", hold: "En Espera", reject: "Rechazar" },
 };
 
 const ACTION_COLORS = {
@@ -58,27 +54,46 @@ const ACTION_COLORS = {
   reject: "#dc2626",
 };
 
+// Cover field label translations
+const COVER_LABELS = {
+  en: {
+    project: "Project", report_type: "Report Type", inspector: "Inspector",
+    visit_date: "Visit Date", po_number: "PO Number", client: "Client",
+    supplier: "Supplier", supplier_address: "Supplier Address", country: "Country",
+    attached_docs: "Attached Documents", report_label: "Inspection Report",
+  },
+  es: {
+    project: "Proyecto", report_type: "Tipo de Reporte", inspector: "Inspector",
+    visit_date: "Fecha de Visita", po_number: "Número de PO", client: "Cliente",
+    supplier: "Proveedor", supplier_address: "Dirección del Proveedor", country: "País",
+    attached_docs: "Documentos Adjuntos", report_label: "Reporte de Inspección",
+  },
+};
+
 // ─── PDF HTML builder ─────────────────────────────────────────────────────────
 function buildPdfHtml({ report, blocks }) {
+  const lang = report.language || "en";
+  const t = COVER_LABELS[lang] || COVER_LABELS.en;
   const logoSrc = `${window.location.origin}/images/interasia-logo.png`;
-  const date = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const dateLocale = lang === "es" ? "es-ES" : "en-US";
+  const date = new Date().toLocaleDateString(dateLocale, { year: "numeric", month: "long", day: "numeric" });
   const statusColor = STATUS_COLORS[report.status] || "#6b7280";
-  const statusLabel = STATUS_LABELS[report.status] || report.status || "";
+  const statusLabel = (STATUS_LABELS[lang] || STATUS_LABELS.en)[report.status] || report.status || "";
 
   const blocksHtml = blocks.map(block => {
     const { type, content } = block;
 
     if (type === "cover") {
       const pairs = [
-        ["Project", content.project_name],
-        ["Report Type", content.report_type],
-        ["Inspector", content.inspector_name],
-        ["Visit Date", content.visit_date],
-        ["PO Number", content.po_number],
-        ["Client", content.client_name],
-        ["Supplier", content.supplier_name],
-        ["Supplier Address", content.supplier_address],
-        ["Country", content.country],
+        [t.project, content.project_name],
+        [t.report_type, content.report_type],
+        [t.inspector, content.inspector_name],
+        [t.visit_date, content.visit_date],
+        [t.po_number, content.po_number],
+        [t.client, content.client_name],
+        [t.supplier, content.supplier_name],
+        [t.supplier_address, content.supplier_address],
+        [t.country, content.country],
       ].filter(([, v]) => v);
       const docs = content.attached_docs || [];
       return `
@@ -92,7 +107,7 @@ function buildPdfHtml({ report, blocks }) {
           </div>
           ${docs.length ? `
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid #eef2f7;">
-            <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin:0 0 8px 0;">Attached Documents</p>
+            <p style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#9ca3af;margin:0 0 8px 0;">${esc(t.attached_docs)}</p>
             <table style="width:100%;border-collapse:collapse;font-size:10px;">
               ${docs.map(d => `
                 <tr style="border-bottom:1px solid #f3f4f6;">
@@ -102,6 +117,16 @@ function buildPdfHtml({ report, blocks }) {
                 </tr>`).join("")}
             </table>
           </div>` : ""}
+        </div>`;
+    }
+
+    if (type === "image") {
+      if (!content.url) return "";
+      return `
+        <div class="content-block" style="break-inside:avoid;page-break-inside:avoid;">
+          <img src="${esc(content.url)}" alt="${esc(content.caption || "")}" crossorigin="anonymous"
+            style="width:100%;max-height:480px;object-fit:contain;border-radius:6px;border:1px solid #e2e8f0;display:block;" />
+          ${content.caption ? `<p class="caption" style="text-align:center;margin-top:6px;">${esc(content.caption)}</p>` : ""}
         </div>`;
     }
 
@@ -120,13 +145,17 @@ function buildPdfHtml({ report, blocks }) {
     if (type === "gallery") {
       const images = content.images || [];
       if (!images.length) return "";
+      const tmpl = content.template || "g3";
+      const cols = { g1: 1, g2: 2, g3: 3, g4: 4 }[tmpl] || 3;
+      const pct = Math.floor(100 / cols);
       return `
         <div class="content-block">
           ${heading(content.title || "Photos")}
-          <div class="image-grid">
+          <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:7px;break-inside:avoid;page-break-inside:avoid;">
             ${images.map(img => `
-              <div class="image-cell">
-                <img src="${esc(img.url)}" alt="${esc(img.caption || "")}" crossorigin="anonymous" />
+              <div style="${img.featured ? "grid-column:span 2;" : ""}">
+                <img src="${esc(img.url)}" alt="${esc(img.caption || "")}" crossorigin="anonymous"
+                  style="width:100%;height:${cols === 1 ? "360px" : cols === 2 ? "200px" : "140px"};object-fit:cover;border-radius:5px;border:1px solid #e2e8f0;display:block;" />
                 ${img.caption ? `<p class="caption">${esc(img.caption)}</p>` : ""}
               </div>`).join("")}
           </div>
@@ -428,9 +457,9 @@ function SectionHeading({ title }) {
   );
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ status, language = "en" }) {
   const color = STATUS_COLORS[status] || "#6b7280";
-  const label = STATUS_LABELS[status] || status || "";
+  const label = (STATUS_LABELS[language] || STATUS_LABELS.en)[status] || status || "";
   return (
     <span style={{ display: "inline-block", background: color, color: "white", fontSize: "10px", fontWeight: "700", letterSpacing: "0.06em", textTransform: "uppercase", padding: "3px 12px", borderRadius: "999px" }}>
       {label}
@@ -439,20 +468,21 @@ function StatusBadge({ status }) {
 }
 
 // ─── Screen block renderer ────────────────────────────────────────────────────
-function BlockRenderer({ block }) {
+function BlockRenderer({ block, language = "en" }) {
   const { type, content } = block;
+  const t = COVER_LABELS[language] || COVER_LABELS.en;
 
   if (type === "cover") {
     const pairs = [
-      ["Project", content.project_name],
-      ["Report Type", content.report_type],
-      ["Inspector", content.inspector_name],
-      ["Visit Date", content.visit_date],
-      ["PO Number", content.po_number],
-      ["Client", content.client_name],
-      ["Supplier", content.supplier_name],
-      ["Supplier Address", content.supplier_address],
-      ["Country", content.country],
+      [t.project, content.project_name],
+      [t.report_type, content.report_type],
+      [t.inspector, content.inspector_name],
+      [t.visit_date, content.visit_date],
+      [t.po_number, content.po_number],
+      [t.client, content.client_name],
+      [t.supplier, content.supplier_name],
+      [t.supplier_address, content.supplier_address],
+      [t.country, content.country],
     ].filter(([, v]) => v);
     const docs = content.attached_docs || [];
 
@@ -469,7 +499,7 @@ function BlockRenderer({ block }) {
           </div>
           {docs.length > 0 && (
             <div style={{ background: "white", padding: "14px 16px", borderTop: "1px solid #e2e8f0" }}>
-              <span style={{ display: "block", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9ca3af", marginBottom: "10px" }}>Attached Documents</span>
+              <span style={{ display: "block", fontSize: "10px", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.1em", color: "#9ca3af", marginBottom: "10px" }}>{t.attached_docs}</span>
               <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
                 {docs.map(d => (
                   <a key={d.id} href={d.file_url} target="_blank" rel="noreferrer"
@@ -503,16 +533,29 @@ function BlockRenderer({ block }) {
     );
   }
 
+  if (type === "image") {
+    if (!content.url) return null;
+    return (
+      <div style={{ marginBottom: "28px", textAlign: "center" }}>
+        <img src={content.url} alt={content.caption || ""} style={{ maxWidth: "100%", maxHeight: "480px", objectFit: "contain", borderRadius: "10px", border: "1px solid #e2e8f0", display: "inline-block" }} />
+        {content.caption && <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#9ca3af" }}>{content.caption}</p>}
+      </div>
+    );
+  }
+
   if (type === "gallery") {
     const images = content.images || [];
     if (!images.length) return null;
+    const tmpl = content.template || "g3";
+    const cols = { g1: 1, g2: 2, g3: 3, g4: 4 }[tmpl] || 3;
+    const imgH = cols === 1 ? "360px" : cols === 2 ? "220px" : "160px";
     return (
       <div style={{ marginBottom: "28px" }}>
         <SectionHeading title={content.title || "Photos"} />
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "10px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: "10px" }}>
           {images.map((img, i) => (
-            <div key={i} style={{ textAlign: "center" }}>
-              <img src={img.url} alt={img.caption || ""} style={{ width: "100%", height: "140px", objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0", display: "block" }} />
+            <div key={i} style={{ textAlign: "center", ...(img.featured ? { gridColumn: "span 2" } : {}) }}>
+              <img src={img.url} alt={img.caption || ""} style={{ width: "100%", height: imgH, objectFit: "cover", borderRadius: "8px", border: "1px solid #e2e8f0", display: "block" }} />
               {img.caption && <p style={{ margin: "4px 0 0", fontSize: "10px", color: "#9ca3af" }}>{img.caption}</p>}
             </div>
           ))}
@@ -815,7 +858,7 @@ export default function InspectionReportPublicPage() {
             </p>
           ) : (
             blocks.map(block => (
-              <BlockRenderer key={block.id} block={block} />
+              <BlockRenderer key={block.id} block={block} language={report?.language || "en"} />
             ))
           )}
           <div style={{ marginTop: "48px", paddingTop: "20px", borderTop: "1px solid #f1f5f9" }}>

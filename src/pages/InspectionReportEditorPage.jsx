@@ -22,6 +22,7 @@ const BLOCK_DEFAULTS = {
   },
   text: { title: "Overview", content: "" },
   gallery: { title: "Photos", images: [] },
+  image: { url: "", caption: "" },
   checklist: { title: "Checklist", items: [{ label: "", status: "ok", comment: "" }] },
   table: {
     title: "",
@@ -56,6 +57,7 @@ const BLOCK_LABELS = {
   cover: "Cover Info",
   text: "Text Block",
   gallery: "Photo Gallery",
+  image: "Single Image",
   checklist: "Checklist",
   table: "Table",
   defects: "Defects Log",
@@ -78,6 +80,10 @@ const BLOCK_ICONS = {
         d="M4 16l4-4 3 3 4-5 5 6" />
       <rect x="3" y="3" width="18" height="18" rx="2" strokeWidth={1.5} />
     </>
+  ),
+  image: (
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
   ),
   checklist: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -499,9 +505,65 @@ function CoverBlockEditor({ block, onChange }) {
   );
 }
 
+function SingleImageBlockEditor({ block, onChange }) {
+  const [uploading, setUploading] = useState(false);
+
+  const handleUpload = useCallback(async (files) => {
+    const file = files[0];
+    if (!file?.type.startsWith("image/")) return;
+    setUploading(true);
+    try {
+      const url = await uploadFile(file, "img");
+      onChange({ ...block.content, url });
+    } finally {
+      setUploading(false);
+    }
+  }, [block.content, onChange]);
+
+  return (
+    <div className="space-y-3">
+      {block.content.url ? (
+        <div className="relative group">
+          <img
+            src={block.content.url}
+            alt={block.content.caption || ""}
+            className="w-full max-h-[480px] object-contain rounded-xl border border-gray-200 bg-gray-50"
+          />
+          <button
+            onClick={() => onChange({ ...block.content, url: "" })}
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+          >✕</button>
+        </div>
+      ) : (
+        <UploadDropzone onFiles={handleUpload} uploading={uploading} multiple={false}>
+          <div className="py-12 flex flex-col items-center gap-2">
+            {uploading ? (
+              <div className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            )}
+            <p className="text-sm text-gray-400">{uploading ? "Uploading…" : "Paste · Drag & drop · Click to browse"}</p>
+          </div>
+        </UploadDropzone>
+      )}
+      <input
+        value={block.content.caption || ""}
+        onChange={e => onChange({ ...block.content, caption: e.target.value })}
+        placeholder="Caption (optional)"
+        className="w-full text-sm text-gray-500 border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent"
+      />
+    </div>
+  );
+}
+
 function TextBlockEditor({ block, onChange, language = "en" }) {
   const [retouching, setRetouching] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [retouchError, setRetouchError] = useState("");
+  const scanFileRef = useRef(null);
 
   const stripHtml = (html) => {
     const div = document.createElement("div");
@@ -542,44 +604,120 @@ function TextBlockEditor({ block, onChange, language = "en" }) {
     }
   };
 
+  const handleScanFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    setRetouchError("");
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise((res, rej) => {
+        reader.onload = (ev) => res(ev.target.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const apiRes = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "extract", image: base64, mimeType: file.type }),
+      });
+      const data = await apiRes.json();
+      if (!apiRes.ok) throw new Error(data.error || `Error ${apiRes.status}`);
+      if (data.content) {
+        const lines = data.content.replace(/\\n/g, "\n").split("\n");
+        const html = lines
+          .map(l => l.trim())
+          .filter(l => l)
+          .map(l => `<p>${l}</p>`)
+          .join("");
+        onChange({
+          ...block.content,
+          title: data.title || block.content.title,
+          content: (block.content.content ? block.content.content + html : html),
+        });
+      }
+    } catch (e) {
+      setRetouchError(e.message);
+    } finally {
+      setScanning(false);
+      e.target.value = "";
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <input
           value={block.content.title}
           onChange={(e) => onChange({ ...block.content, title: e.target.value })}
           placeholder="Section title"
           className="flex-1 text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
         />
-        <button
-          onClick={handleRetouch}
-          disabled={retouching || !stripHtml(block.content.content || "").trim()}
-          className="ml-3 shrink-0 flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-purple-400 hover:text-purple-600 disabled:opacity-40 transition"
-        >
-          {retouching ? (
-            <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin inline-block" />
-          ) : (
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-            </svg>
-          )}
-          Retouch with AI
-        </button>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* AI Scan */}
+          <input
+            ref={scanFileRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleScanFile}
+          />
+          <button
+            onClick={() => scanFileRef.current?.click()}
+            disabled={scanning}
+            className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 transition"
+            title="Scan image / catalog page"
+          >
+            {scanning ? (
+              <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            )}
+            {scanning ? "Scanning…" : "AI Scan"}
+          </button>
+          {/* Retouch */}
+          <button
+            onClick={handleRetouch}
+            disabled={retouching || !stripHtml(block.content.content || "").trim()}
+            className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-purple-400 hover:text-purple-600 disabled:opacity-40 transition"
+          >
+            {retouching ? (
+              <span className="w-3 h-3 border-2 border-purple-400 border-t-transparent rounded-full animate-spin inline-block" />
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            )}
+            {retouching ? "Retouching…" : "Retouch"}
+          </button>
+        </div>
       </div>
-      <RichTextEditor
-        content={block.content.content || ""}
-        onChange={(html) => onChange({ ...block.content, content: html })}
-        placeholder="Enter text here or use 'Retouch with AI' to improve the writing…"
-      />
       {retouchError && <p className="text-xs text-red-500">{retouchError}</p>}
+      <RichTextEditor
+        value={block.content.content}
+        onChange={(val) => onChange({ ...block.content, content: val })}
+      />
     </div>
   );
 }
 
+const GALLERY_TEMPLATES = [
+  { id: "g1", label: "1 col",   cols: 1 },
+  { id: "g2", label: "2 col",   cols: 2 },
+  { id: "g3", label: "3 col",   cols: 3 },
+  { id: "g4", label: "4 col",   cols: 4 },
+];
+
 function GalleryBlockEditor({ block, onChange }) {
   const [uploading, setUploading] = useState(false);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dragOver, setDragOverIdx] = useState(null);
   const images = block.content.images || [];
+  const template = block.content.template || "g3";
+  const cols = GALLERY_TEMPLATES.find(t => t.id === template)?.cols || 3;
 
   const handleUpload = useCallback(async (files) => {
     setUploading(true);
@@ -588,7 +726,7 @@ function GalleryBlockEditor({ block, onChange }) {
       for (const file of files) {
         if (!file?.type.startsWith("image/")) continue;
         const url = await uploadFile(file, "gallery");
-        newImgs.push({ url, caption: "" });
+        newImgs.push({ url, caption: "", featured: false });
       }
       onChange({ ...block.content, images: [...images, ...newImgs] });
     } finally {
@@ -596,39 +734,87 @@ function GalleryBlockEditor({ block, onChange }) {
     }
   }, [block.content, images, onChange]);
 
-  const updateCaption = (i, val) => {
-    const next = images.map((img, idx) => (idx === i ? { ...img, caption: val } : img));
+  const updateImage = (i, patch) => {
+    const next = images.map((img, idx) => idx === i ? { ...img, ...patch } : img);
     onChange({ ...block.content, images: next });
   };
 
   const removeImage = (i) =>
     onChange({ ...block.content, images: images.filter((_, idx) => idx !== i) });
 
+  const handleDrop = (dropIdx) => {
+    if (dragIdx === null || dragIdx === dropIdx) { setDragIdx(null); setDragOverIdx(null); return; }
+    const next = [...images];
+    const [moved] = next.splice(dragIdx, 1);
+    next.splice(dropIdx, 0, moved);
+    onChange({ ...block.content, images: next });
+    setDragIdx(null);
+    setDragOverIdx(null);
+  };
+
+  const gridCls = `grid gap-3 grid-cols-${cols}`;
+
   return (
     <div className="space-y-3">
-      <input
-        value={block.content.title}
-        onChange={(e) => onChange({ ...block.content, title: e.target.value })}
-        placeholder="Gallery title"
-        className="w-full text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
-      />
-      <div className="grid grid-cols-3 gap-3">
+      <div className="flex items-center gap-3">
+        <input
+          value={block.content.title}
+          onChange={(e) => onChange({ ...block.content, title: e.target.value })}
+          placeholder="Gallery title"
+          className="flex-1 text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
+        />
+        {/* Template picker */}
+        <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5 shrink-0">
+          {GALLERY_TEMPLATES.map(t => (
+            <button
+              key={t.id}
+              onClick={() => onChange({ ...block.content, template: t.id })}
+              className={`px-2 py-1 text-xs font-medium rounded-md transition ${template === t.id ? "bg-white shadow text-gray-800" : "text-gray-400 hover:text-gray-600"}`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={gridCls}>
         {images.map((img, i) => (
-          <div key={i} className="relative group">
+          <div
+            key={i}
+            draggable
+            onDragStart={() => setDragIdx(i)}
+            onDragOver={e => { e.preventDefault(); setDragOverIdx(i); }}
+            onDrop={() => handleDrop(i)}
+            onDragEnd={() => { setDragIdx(null); setDragOverIdx(null); }}
+            className={`relative group rounded-xl transition-all ${dragOver === i && dragIdx !== i ? "ring-2 ring-blue-400 scale-[1.02]" : ""} ${img.featured ? "col-span-2" : ""}`}
+          >
+            {/* Drag handle */}
+            <div className="absolute top-1 left-1 opacity-0 group-hover:opacity-100 transition cursor-grab active:cursor-grabbing z-10">
+              <div className="bg-black/50 text-white rounded px-1.5 py-0.5">
+                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 6h2v2H8V6zm0 4h2v2H8v-2zm0 4h2v2H8v-2zm6-8h2v2h-2V6zm0 4h2v2h-2v-2zm0 4h2v2h-2v-2z"/>
+                </svg>
+              </div>
+            </div>
+            {/* Featured toggle */}
+            <button
+              onClick={() => updateImage(i, { featured: !img.featured })}
+              className={`absolute top-1 right-6 opacity-0 group-hover:opacity-100 transition z-10 rounded px-1.5 py-0.5 text-[10px] font-bold ${img.featured ? "bg-blue-500 text-white" : "bg-black/50 text-white"}`}
+              title="Toggle featured (double width)"
+            >★</button>
+            {/* Delete */}
+            <button
+              onClick={() => removeImage(i)}
+              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition z-10"
+            >✕</button>
             <img
               src={img.url}
               alt=""
               className="w-full h-28 object-cover rounded-xl border border-gray-200"
             />
-            <button
-              onClick={() => removeImage(i)}
-              className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
-            >
-              ✕
-            </button>
             <input
-              value={img.caption}
-              onChange={(e) => updateCaption(i, e.target.value)}
+              value={img.caption || ""}
+              onChange={(e) => updateImage(i, { caption: e.target.value })}
               placeholder="Caption…"
               className="mt-1 w-full text-xs border-0 border-b border-gray-200 outline-none bg-transparent text-gray-500 pb-0.5"
             />
@@ -727,6 +913,9 @@ function TableBlockEditor({ block, onChange }) {
   const headers = block.content.headers || [];
   const rows = block.content.rows || [];
   const colCount = headers.length;
+  const [scanning, setScanning] = useState(false);
+  const [scanError, setScanError] = useState("");
+  const scanFileRef = useRef(null);
 
   const updateHeader = (ci, val) => {
     const next = headers.map((h, idx) => (idx === ci ? val : h));
@@ -742,28 +931,111 @@ function TableBlockEditor({ block, onChange }) {
     onChange({ ...block.content, rows: [...rows, Array(colCount).fill("")] });
   const removeRow = (ri) =>
     onChange({ ...block.content, rows: rows.filter((_, idx) => idx !== ri) });
+  const addColumn = () => {
+    onChange({
+      ...block.content,
+      headers: [...headers, "Column"],
+      rows: rows.map(r => [...r, ""]),
+    });
+  };
+  const removeColumn = (ci) => {
+    onChange({
+      ...block.content,
+      headers: headers.filter((_, i) => i !== ci),
+      rows: rows.map(r => r.filter((_, i) => i !== ci)),
+    });
+  };
+
+  const handleScanFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setScanning(true);
+    setScanError("");
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise((res, rej) => {
+        reader.onload = (ev) => res(ev.target.result.split(",")[1]);
+        reader.onerror = rej;
+        reader.readAsDataURL(file);
+      });
+      const apiRes = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "table", image: base64, mimeType: file.type }),
+      });
+      const data = await apiRes.json();
+      if (!apiRes.ok) throw new Error(data.error || `Error ${apiRes.status}`);
+      onChange({
+        ...block.content,
+        title: data.title || block.content.title,
+        headers: data.headers || headers,
+        rows: data.rows || rows,
+      });
+    } catch (e) {
+      setScanError(e.message);
+    } finally {
+      setScanning(false);
+      e.target.value = "";
+    }
+  };
 
   return (
     <div className="space-y-3">
-      <input
-        value={block.content.title}
-        onChange={(e) => onChange({ ...block.content, title: e.target.value })}
-        placeholder="Table title"
-        className="w-full text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
-      />
+      <div className="flex items-center gap-2">
+        <input
+          value={block.content.title}
+          onChange={(e) => onChange({ ...block.content, title: e.target.value })}
+          placeholder="Table title"
+          className="flex-1 text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
+        />
+        <input ref={scanFileRef} type="file" accept="image/*" className="hidden" onChange={handleScanFile} />
+        <button
+          onClick={() => scanFileRef.current?.click()}
+          disabled={scanning}
+          className="shrink-0 flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 transition"
+          title="Scan image to auto-fill table"
+        >
+          {scanning ? (
+            <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          )}
+          {scanning ? "Scanning…" : "AI Scan"}
+        </button>
+      </div>
+      {scanError && <p className="text-xs text-red-500">{scanError}</p>}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
               {headers.map((h, ci) => (
                 <th key={ci} className="border border-gray-200 bg-gray-50 p-0">
-                  <input
-                    value={h}
-                    onChange={(e) => updateHeader(ci, e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide bg-transparent outline-none text-center"
-                  />
+                  <div className="flex items-center">
+                    <input
+                      value={h}
+                      onChange={(e) => updateHeader(ci, e.target.value)}
+                      className="flex-1 px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide bg-transparent outline-none text-center"
+                    />
+                    {headers.length > 1 && (
+                      <button
+                        onClick={() => removeColumn(ci)}
+                        className="text-gray-300 hover:text-red-400 transition text-xs px-1"
+                        title="Remove column"
+                      >✕</button>
+                    )}
+                  </div>
                 </th>
               ))}
+              <th className="border border-gray-200 bg-gray-50 w-7">
+                <button
+                  onClick={addColumn}
+                  className="w-full h-full text-gray-400 hover:text-blue-500 transition text-sm font-bold px-2 py-1"
+                  title="Add column"
+                >+</button>
+              </th>
               <th className="border border-gray-200 bg-gray-50 w-7" />
             </tr>
           </thead>
@@ -780,13 +1052,12 @@ function TableBlockEditor({ block, onChange }) {
                     />
                   </td>
                 ))}
+                <td className="border border-gray-100" />
                 <td className="border border-gray-100 text-center">
                   <button
                     onClick={() => removeRow(ri)}
                     className="text-gray-300 hover:text-red-400 transition text-xs px-1"
-                  >
-                    ✕
-                  </button>
+                  >✕</button>
                 </td>
               </tr>
             ))}
@@ -1172,6 +1443,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChan
         {block.type === "cover"     && <CoverBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "text"      && <TextBlockEditor      block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} />}
         {block.type === "gallery"   && <GalleryBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
+        {block.type === "image"     && <SingleImageBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "checklist" && <ChecklistBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "table"     && <TableBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "defects"   && <DefectsBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
