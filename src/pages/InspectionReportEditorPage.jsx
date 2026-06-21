@@ -1343,12 +1343,7 @@ export default function InspectionReportEditorPage() {
             </button>
             <div className="min-w-0">
               <p className="text-xs text-gray-400">Inspection Report</p>
-              <input
-                value={report?.title || ""}
-                onChange={(e) => setReport((r) => ({ ...r, title: e.target.value }))}
-                className="text-sm font-bold text-gray-800 border-0 outline-none bg-transparent w-56 truncate"
-                placeholder="Report title"
-              />
+              <p className="text-sm font-bold text-gray-800 truncate max-w-xs">{report?.title || "Untitled Report"}</p>
             </div>
             {/* Status dropdown */}
             <div className="relative shrink-0">
@@ -1425,14 +1420,19 @@ export default function InspectionReportEditorPage() {
         {/* Report meta card */}
         {report && (
           <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">
+            <div className="flex-1 min-w-0 mr-4">
+              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold mb-0.5">
                 Inspection Report
               </p>
-              <p className="font-bold text-gray-800 mt-0.5">{report.title || "Untitled Report"}</p>
+              <input
+                value={report.title || ""}
+                onChange={e => setReport(r => ({ ...r, title: e.target.value }))}
+                placeholder="Report title…"
+                className="font-bold text-gray-800 text-base bg-transparent border-0 outline-none w-full focus:ring-2 focus:ring-blue-400 focus:bg-blue-50 rounded px-1 -mx-1 transition"
+              />
             </div>
             {report.report_number && (
-              <div className="text-right">
+              <div className="text-right shrink-0">
                 <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Ref</p>
                 <p className="font-bold text-blue-600 mt-0.5">{report.report_number}</p>
               </div>
