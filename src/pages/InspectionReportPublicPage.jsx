@@ -353,6 +353,16 @@ function buildPdfHtml({ report, blocks }) {
         </div>`;
     }
 
+    if (type === "diagram") {
+      if (!content.svg) return "";
+      const svgScaled = content.svg.replace(/<svg /, '<svg style="max-width:100%;height:auto;" ');
+      return `
+        <div class="content-block">
+          ${content.title ? heading(content.title) : ""}
+          <div style="text-align:center;padding:8px 0;">${svgScaled}</div>
+        </div>`;
+    }
+
     return "";
   }).join("\n");
 
@@ -816,6 +826,24 @@ function BlockRenderer({ block, language = "en" }) {
     );
   }
 
+  if (type === "diagram") {
+    return (
+      <div style={{ marginBottom: "28px" }}>
+        {content.title && <SectionHeading title={content.title} />}
+        {content.svg ? (
+          <div
+            style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "20px", background: "white", overflow: "auto", textAlign: "center" }}
+            dangerouslySetInnerHTML={{ __html: content.svg.replace(/<svg /, '<svg style="max-width:100%;height:auto;" ') }}
+          />
+        ) : (
+          <p style={{ color: "#9ca3af", fontSize: "13px", textAlign: "center", padding: "24px", background: "#f8fafc", borderRadius: "10px", margin: 0 }}>
+            No diagram generated yet.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   return null;
 }
 
@@ -855,6 +883,23 @@ export default function InspectionReportPublicPage() {
     win.document.open();
     win.document.write(html);
     win.document.close();
+  };
+
+  const handleExportWord = () => {
+    const pdfHtml = buildPdfHtml({ report, blocks });
+    // Add Word namespace and remove auto-print script
+    const wordHtml = pdfHtml
+      .replace('<html lang="en">', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="en">')
+      .replace(/<script>window\.onload[^<]*<\/script>/, "");
+    const blob = new Blob(["﻿" + wordHtml], { type: "application/msword" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${report.report_number}-${(report.title || "report").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.doc`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (loading) return (
@@ -903,6 +948,15 @@ export default function InspectionReportPublicPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               Export PDF
+            </button>
+            <button
+              onClick={handleExportWord}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Word
             </button>
             {/* Company card */}
             <div style={{ background: "white", borderRadius: "10px", padding: "8px 12px", textAlign: "right", minWidth: "160px" }}>

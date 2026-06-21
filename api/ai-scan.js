@@ -104,6 +104,45 @@ Return ONLY a valid JSON object on a single line — no literal line breaks in t
 {"content": "paragraph one\\n\\nparagraph two\\nspec item one\\nspec item two"}`;
   },
 
+  diagram: `You are generating a Mermaid.js diagram from a user's description.
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "code": "the complete Mermaid diagram code (raw syntax, no code fences)",
+  "title": "short descriptive title for the diagram"
+}
+
+Mermaid code rules:
+- For Org Charts: use "graph TD" (or LR). Nodes with multiline labels: A["Name\\nTitle"]
+- For Process Flows: use "flowchart TD" (or LR). Use shapes: [box] ([rounded]) {diamond} [(cylinder)]
+- Always add 2-3 classDef styles for visual polish. Apply them with :::className
+- Short descriptive node IDs (A, B, CEO, DIR1, etc.)
+- Use double quotes around node labels that contain special characters or spaces
+- Maximum 20 nodes — keep it readable
+- Do NOT wrap code in backticks or code fences — return raw Mermaid syntax
+- If refining existing code, preserve the structure and only apply the requested change
+
+Navy org chart example:
+graph TD
+  classDef exec fill:#1e3a5f,color:#fff,stroke:#1e3a5f,rx:6
+  classDef mgr fill:#2563eb,color:#fff,stroke:#1d4ed8,rx:6
+  classDef staff fill:#f1f5f9,color:#1e293b,stroke:#cbd5e1,rx:6
+  CEO["Jimena García\\nCEO"]:::exec
+  CEO --> DIR1["Clara Castejón\\nDirectora de Cuentas"]:::mgr
+  CEO --> DIR2["Valeria Palacio\\nDirectora de Comunicación"]:::mgr
+  DIR1 --> E1["Héctor Díaz\\nDiseñador"]:::staff
+  DIR2 --> E2["Carlos Gómez\\nVentas"]:::staff
+
+Process flow example:
+flowchart LR
+  classDef box fill:#dbeafe,stroke:#2563eb,color:#1e3a5f
+  classDef action fill:#1e3a5f,color:#fff,stroke:#1e3a5f
+  classDef check fill:#fef9c3,stroke:#ca8a04,color:#78350f
+  A([Supplier]):::box --> B[Raw Materials]:::action --> C[Fabrication]:::action
+  C --> D{Quality\\nCheck}:::check
+  D -->|Pass| E[Packaging]:::action --> F([Shipping]):::box
+  D -->|Fail| C`,
+
   table: `You are extracting tabular data from an image (packing list, inspection table, spreadsheet, quality report, or any document with rows and columns).
 
 Return ONLY a valid JSON object — no markdown, no explanation:
@@ -190,12 +229,13 @@ export default async function handler(req, res) {
     res.end(JSON.stringify({ error: `Unknown type: ${type}` }));
     return;
   }
-  if ((type === "retouch" || type === "conclusions") && !text) {
+  const TEXT_ONLY = ["retouch", "conclusions", "diagram"];
+  if (TEXT_ONLY.includes(type) && !text) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Missing required field: text" }));
     return;
   }
-  if (type !== "retouch" && type !== "conclusions" && (!image || !mimeType)) {
+  if (!TEXT_ONLY.includes(type) && (!image || !mimeType)) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Missing required fields: image, mimeType" }));
     return;
@@ -215,6 +255,8 @@ export default async function handler(req, res) {
   } else if (type === "conclusions") {
     const conclusionsPrompt = typeof PROMPTS.conclusions === "function" ? PROMPTS.conclusions(language) : PROMPTS.conclusions;
     messages = [{ role: "user", content: `${conclusionsPrompt}\n\nInspection context:\n${text}` }];
+  } else if (type === "diagram") {
+    messages = [{ role: "user", content: `${PROMPTS.diagram}\n\n${text}` }];
   } else {
     messages = [{ role: "user", content: [
       { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
@@ -231,7 +273,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "conclusions" ? 1500 : 800,
+        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
         messages,
       }),
     });

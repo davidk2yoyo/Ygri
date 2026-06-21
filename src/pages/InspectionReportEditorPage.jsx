@@ -51,6 +51,14 @@ const BLOCK_DEFAULTS = {
     recommendations: "",
     action: "proceed",
   },
+  diagram: {
+    title: "",
+    diagramType: "org",
+    direction: "TD",
+    prompt: "",
+    code: "",
+    svg: "",
+  },
 };
 
 const BLOCK_LABELS = {
@@ -63,6 +71,7 @@ const BLOCK_LABELS = {
   defects: "Defects Log",
   scoring: "Scoring",
   conclusion: "Conclusion",
+  diagram: "Diagram",
 };
 
 const BLOCK_ICONS = {
@@ -104,6 +113,15 @@ const BLOCK_ICONS = {
   conclusion: (
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
       d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+  ),
+  diagram: (
+    <>
+      <rect x="8" y="2" width="8" height="4" rx="1" strokeWidth={1.5} />
+      <rect x="1" y="16" width="6" height="4" rx="1" strokeWidth={1.5} />
+      <rect x="9" y="16" width="6" height="4" rx="1" strokeWidth={1.5} />
+      <rect x="17" y="16" width="6" height="4" rx="1" strokeWidth={1.5} />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v5M12 11H4v5M12 11h8v5" />
+    </>
   ),
 };
 
@@ -1637,6 +1655,183 @@ function ConclusionBlockEditor({ block, onChange, language = "en", allBlocks = [
   );
 }
 
+// ─── Diagram block ────────────────────────────────────────────────────────────
+function DiagramBlockEditor({ block, onChange }) {
+  const [prompt, setPrompt] = useState(block.content.prompt || "");
+  const [refine, setRefine] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState("");
+  const [renderedSvg, setRenderedSvg] = useState(block.content.svg || "");
+  const renderCount = useRef(0);
+
+  const diagramType = block.content.diagramType || "org";
+  const direction = block.content.direction || "TD";
+
+  // Re-render with mermaid whenever code changes
+  useEffect(() => {
+    const code = block.content.code;
+    if (!code) return;
+    let cancelled = false;
+    const id = `mermaid-${Date.now()}-${++renderCount.current}`;
+    import("mermaid").then(async ({ default: mermaid }) => {
+      try {
+        mermaid.initialize({
+          startOnLoad: false,
+          theme: "base",
+          themeVariables: {
+            primaryColor: "#1e3a5f", primaryTextColor: "#ffffff",
+            primaryBorderColor: "#1e3a5f", lineColor: "#475569",
+            background: "#ffffff", nodeBorder: "#1e3a5f",
+            clusterBkg: "#f8fafc", edgeLabelBackground: "#ffffff",
+          },
+          flowchart: { useMaxWidth: true, htmlLabels: true },
+        });
+        const { svg } = await mermaid.render(id, code);
+        if (!cancelled) {
+          setRenderedSvg(svg);
+          setError("");
+          if (svg !== block.content.svg) onChange({ ...block.content, svg });
+        }
+      } catch {
+        if (!cancelled) setError("Could not render diagram — try refining your description.");
+      }
+    });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.content.code]);
+
+  const callAI = async (description, currentCode = "") => {
+    setGenerating(true);
+    setError("");
+    try {
+      const context = [
+        `Type: ${diagramType === "org" ? "Organizational Chart" : "Process Flow Diagram"}`,
+        `Direction: ${direction === "TD" ? "Top to Bottom" : "Left to Right"}`,
+        currentCode ? `Current diagram (refine this):\n${currentCode}` : "",
+        `Description: ${description}`,
+      ].filter(Boolean).join("\n");
+
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "diagram", text: context }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "AI error");
+      onChange({
+        ...block.content,
+        code: data.code || "",
+        title: block.content.title || data.title || "",
+        prompt: description,
+      });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <input
+        value={block.content.title || ""}
+        onChange={e => onChange({ ...block.content, title: e.target.value })}
+        placeholder="Diagram title"
+        className="w-full text-base font-semibold border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent text-gray-800"
+      />
+
+      {/* Type + direction */}
+      <div className="flex gap-3">
+        <div>
+          <label className="text-[10px] text-gray-400 block mb-0.5">Type</label>
+          <select
+            value={diagramType}
+            onChange={e => onChange({ ...block.content, diagramType: e.target.value })}
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="org">Org Chart</option>
+            <option value="flow">Process Flow</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] text-gray-400 block mb-0.5">Direction</label>
+          <select
+            value={direction}
+            onChange={e => onChange({ ...block.content, direction: e.target.value })}
+            className="px-2 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400"
+          >
+            <option value="TD">Top → Down</option>
+            <option value="LR">Left → Right</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Prompt */}
+      <div>
+        <label className="text-xs text-gray-400 mb-1 block font-medium">Describe your diagram</label>
+        <textarea
+          value={prompt}
+          onChange={e => setPrompt(e.target.value)}
+          placeholder={diagramType === "org"
+            ? "e.g. CEO at the top, two directors Clara and Valeria below, each with 2 team members…"
+            : "e.g. Starts with supplier → raw materials → fabrication → quality check → packaging → shipping…"}
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 resize-none"
+        />
+        <button
+          onClick={() => callAI(prompt)}
+          disabled={generating || !prompt.trim()}
+          className="mt-2 flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-40 transition"
+        >
+          {generating ? (
+            <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          )}
+          {generating ? "Generating…" : "Generate with AI"}
+        </button>
+      </div>
+
+      {/* Preview */}
+      {renderedSvg && (
+        <div>
+          <div
+            className="border border-gray-200 rounded-xl p-4 bg-white overflow-auto"
+            dangerouslySetInnerHTML={{ __html: renderedSvg }}
+            style={{ maxHeight: "500px" }}
+          />
+          {/* Refine */}
+          <div className="mt-2 flex gap-2">
+            <input
+              value={refine}
+              onChange={e => setRefine(e.target.value)}
+              placeholder="Refine: e.g. Add a Marketing department under Clara…"
+              className="flex-1 px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:ring-2 focus:ring-blue-400"
+              onKeyDown={e => {
+                if (e.key === "Enter" && refine.trim() && !generating) {
+                  callAI(refine, block.content.code);
+                  setRefine("");
+                }
+              }}
+            />
+            <button
+              onClick={() => { if (refine.trim()) { callAI(refine, block.content.code); setRefine(""); } }}
+              disabled={generating || !refine.trim()}
+              className="px-3 py-1.5 border border-blue-300 text-blue-600 text-sm font-medium rounded-lg hover:bg-blue-50 disabled:opacity-40 transition"
+            >
+              {generating ? "…" : "Refine"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
+    </div>
+  );
+}
+
 // ─── Between-block inserter ───────────────────────────────────────────────────
 function InsertBar({ onInsert }) {
   const [open, setOpen] = useState(false);
@@ -1757,6 +1952,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDupl
         {block.type === "defects"   && <DefectsBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} />}
         {block.type === "scoring"   && <ScoringBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "conclusion" && <ConclusionBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} allBlocks={allBlocks} />}
+        {block.type === "diagram"    && <DiagramBlockEditor    block={block} onChange={(c) => onChange({ ...block, content: c })} />}
       </div>
     </div>
   );

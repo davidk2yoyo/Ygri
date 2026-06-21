@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS technical_annexes (
 CREATE TABLE IF NOT EXISTS annex_blocks (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   annex_id uuid REFERENCES technical_annexes(id) ON DELETE CASCADE,
-  type text NOT NULL CHECK (type IN ('text','specs','images','diagram')),
+  type text NOT NULL CHECK (type IN ('item','text','specs','images','diagram')),
   content jsonb NOT NULL DEFAULT '{}',
   sort_order integer NOT NULL DEFAULT 0,
   created_at timestamptz DEFAULT now()
