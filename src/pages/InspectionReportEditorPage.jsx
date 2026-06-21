@@ -303,8 +303,8 @@ function CoverBlockEditor({ block, onChange }) {
   const [creating, setCreating] = useState(null); // 'client' | 'supplier'
 
   useEffect(() => {
-    supabase.from("v_tracks_overview").select("id,track_name,client_name,client_id").order("track_name")
-      .then(({ data }) => setProjects((data || []).map(p => ({ ...p, _label: p.track_name }))));
+    supabase.from("v_tracks_overview").select("track_id,track_name,client_name").order("track_name")
+      .then(({ data }) => setProjects((data || []).map(p => ({ ...p, id: p.track_id, _label: p.track_name }))));
     supabase.from("clients").select("id,company_name").order("company_name")
       .then(({ data }) => setClients((data || []).map(cl => ({ ...cl, _label: cl.company_name }))));
     supabase.from("suppliers").select("id,name,address").order("name")
@@ -320,7 +320,7 @@ function CoverBlockEditor({ block, onChange }) {
   }, [c.supplier_id]);
 
   const handleProjectSelect = (p) => {
-    onChange({ ...c, project_id: p.id, project_name: p.track_name, client_id: p.client_id || c.client_id, client_name: p.client_name || c.client_name });
+    onChange({ ...c, project_id: p.track_id, project_name: p.track_name, client_name: p.client_name || c.client_name });
   };
 
   const handleClientSelect = (cl) => {
