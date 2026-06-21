@@ -464,9 +464,10 @@ function buildPdfHtml({ report, blocks }) {
 <body>
 
 <div class="doc-header">
-  <img src="${logoSrc}" alt="Interasia" />
-  <div>
-    <div class="company-name">INTERASIA SAS (HK) TRADE COMPANY</div>
+  <img src="${logoSrc}" alt="Interasia" style="height:48px;object-fit:contain;" />
+  <div style="text-align:right;">
+    <div class="company-name">INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED</div>
+    <div class="company-web">Tel: +86 (21) 52997308 &nbsp;|&nbsp; Mobile: +86-18616329307</div>
     <div class="company-web">www.interasia.com.co</div>
   </div>
 </div>
@@ -896,16 +897,29 @@ export default function InspectionReportPublicPage() {
           <div style={{ display: "flex", alignItems: "flex-start", gap: "16px", flexShrink: 0 }}>
             <button
               onClick={handleExportPDF}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap" }}
             >
               <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
               Export PDF
             </button>
-            <div style={{ textAlign: "right" }}>
-              <p style={{ margin: "0 0 1px", fontSize: "11px", fontWeight: "700", color: "white" }}>Interasia SAS</p>
-              <p style={{ margin: 0, fontSize: "10px", color: "#93c5fd" }}>HK Trade Company</p>
+            {/* Company card */}
+            <div style={{ background: "white", borderRadius: "10px", padding: "8px 12px", textAlign: "right", minWidth: "160px" }}>
+              <img
+                src="/images/interasia-logo.png"
+                alt="Interasia"
+                style={{ height: "32px", objectFit: "contain", marginBottom: "4px", display: "block", marginLeft: "auto" }}
+                onError={e => { e.target.style.display = "none"; }}
+              />
+              <p style={{ margin: "0 0 1px", fontSize: "9.5px", fontWeight: "800", color: "#1e3a5f", letterSpacing: "0.02em", lineHeight: "1.2" }}>
+                INTERASIA SAS (HK)
+              </p>
+              <p style={{ margin: "0 0 3px", fontSize: "9px", fontWeight: "600", color: "#4b5563" }}>
+                TRADE COMPANY LIMITED
+              </p>
+              <p style={{ margin: 0, fontSize: "8.5px", color: "#6b7280" }}>+86 (21) 52997308</p>
+              <p style={{ margin: 0, fontSize: "8.5px", color: "#2563eb" }}>www.interasia.com.co</p>
             </div>
           </div>
         </div>
