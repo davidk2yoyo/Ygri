@@ -1011,21 +1011,60 @@ export default function InspectionReportPublicPage() {
     win.document.close();
   };
 
-  const handleExportWord = () => {
-    const pdfHtml = buildPdfHtml({ report, blocks });
-    // Add Word namespace and remove auto-print script
-    const wordHtml = pdfHtml
-      .replace('<html lang="en">', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="en">')
-      .replace(/<script>window\.onload[^<]*<\/script>/, "");
-    const blob = new Blob(["﻿" + wordHtml], { type: "application/msword" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${report.report_number}-${(report.title || "report").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.doc`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
+  const [wordExporting, setWordExporting] = useState(false);
+
+  const handleExportWord = async () => {
+    setWordExporting(true);
+    try {
+      // Collect all image URLs from blocks + logo
+      const imageUrls = new Set();
+      imageUrls.add(`${window.location.origin}/images/interasia-logo.png`);
+      blocks.forEach(b => {
+        const c = b.content || {};
+        if (b.type === "image" && c.url) imageUrls.add(c.url);
+        if (b.type === "gallery") (c.images || []).forEach(img => { if (img.url) imageUrls.add(img.url); });
+        if (b.type === "defects") (c.items || []).forEach(item => { if (item.photo_url) imageUrls.add(item.photo_url); });
+      });
+
+      // Fetch each image and convert to base64 data URI
+      const urlMap = {};
+      await Promise.all([...imageUrls].map(async (url) => {
+        try {
+          const res = await fetch(url, { credentials: "omit" });
+          if (!res.ok) return;
+          const blob = await res.blob();
+          urlMap[url] = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        } catch { /* skip images that can't be fetched */ }
+      }));
+
+      // Build HTML then replace every URL with its base64 data URI
+      let html = buildPdfHtml({ report, blocks });
+      Object.entries(urlMap).forEach(([url, dataUri]) => {
+        html = html.split(url).join(dataUri);
+      });
+
+      // Add Word namespace and remove auto-print script
+      const wordHtml = html
+        .replace('<html lang="en">', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="en">')
+        .replace(/<script>window\.onload[^<]*<\/script>/, "");
+
+      const blob = new Blob(["﻿" + wordHtml], { type: "application/msword" });
+      const dlUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = dlUrl;
+      a.download = `${report.report_number}-${(report.title || "report").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.doc`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(dlUrl);
+    } finally {
+      setWordExporting(false);
+    }
   };
 
   if (loading) return (
@@ -1051,6 +1090,7 @@ export default function InspectionReportPublicPage() {
         .report-text p { margin: 0 0 8px; }
         .report-text li { margin-bottom: 3px; }
         .report-text h3 { font-weight: 700; color: #111827; margin: 0 0 4px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>
 
       {/* Screen top bar — not printed */}
@@ -1077,12 +1117,17 @@ export default function InspectionReportPublicPage() {
             </button>
             <button
               onClick={handleExportWord}
-              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap" }}
+              disabled={wordExporting}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: wordExporting ? "default" : "pointer", whiteSpace: "nowrap", opacity: wordExporting ? 0.7 : 1 }}
             >
-              <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Word
+              {wordExporting ? (
+                <div style={{ width: "12px", height: "12px", border: "2px solid rgba(255,255,255,0.5)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+              ) : (
+                <svg style={{ width: "14px", height: "14px" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              )}
+              {wordExporting ? "Preparing…" : "Word"}
             </button>
             <button
               onClick={() => setShowWhatsApp(true)}
