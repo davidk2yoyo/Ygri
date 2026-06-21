@@ -697,7 +697,7 @@ function TextBlockEditor({ block, onChange, language = "en" }) {
       </div>
       {retouchError && <p className="text-xs text-red-500">{retouchError}</p>}
       <RichTextEditor
-        value={block.content.content}
+        content={block.content.content}
         onChange={(val) => onChange({ ...block.content, content: val })}
       />
     </div>
