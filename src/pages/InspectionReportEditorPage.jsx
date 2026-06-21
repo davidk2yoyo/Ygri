@@ -1470,6 +1470,56 @@ function ConclusionBlockEditor({ block, onChange }) {
   );
 }
 
+// ─── Between-block inserter ───────────────────────────────────────────────────
+function InsertBar({ onInsert }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div className="relative group py-1" ref={ref}>
+      <div className="flex items-center gap-0">
+        <div className="flex-1 h-px bg-transparent group-hover:bg-blue-200 transition-colors" />
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className={`w-6 h-6 rounded-full border-2 bg-white flex items-center justify-center text-sm font-bold transition-all
+            ${open
+              ? "border-blue-400 text-blue-500 shadow-sm"
+              : "border-transparent text-transparent group-hover:border-blue-300 group-hover:text-blue-400"
+            }`}
+        >
+          +
+        </button>
+        <div className="flex-1 h-px bg-transparent group-hover:bg-blue-200 transition-colors" />
+      </div>
+      {open && (
+        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 flex flex-wrap gap-1 z-30 w-[340px]">
+          {Object.keys(BLOCK_DEFAULTS).map((type) => (
+            <button
+              key={type}
+              onClick={() => { onInsert(type); setOpen(false); }}
+              className="flex flex-col items-center gap-1 px-3 py-2 rounded-xl hover:bg-blue-50 transition min-w-[72px]"
+            >
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                {BLOCK_ICONS[type]}
+              </svg>
+              <span className="text-[10px] font-medium text-gray-600 text-center leading-tight">
+                {BLOCK_LABELS[type]}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Block card ───────────────────────────────────────────────────────────────
 function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, language }) {
   return (
@@ -1604,6 +1654,22 @@ export default function InspectionReportEditorPage() {
       },
     ]);
     setShowAddMenu(false);
+  };
+
+  const insertBlock = (type, afterIndex) => {
+    setBlocks((prev) => {
+      const newBlock = {
+        _localId: Math.random().toString(36).slice(2),
+        id: null,
+        report_id: report?.id,
+        type,
+        content: { ...BLOCK_DEFAULTS[type] },
+        sort_order: afterIndex + 1,
+      };
+      const next = [...prev];
+      next.splice(afterIndex + 1, 0, newBlock);
+      return next;
+    });
   };
 
   const updateBlock = (localId, updated) =>
@@ -1814,17 +1880,19 @@ export default function InspectionReportEditorPage() {
 
         {/* Blocks */}
         {blocks.map((block, i) => (
-          <BlockCard
-            key={block._localId}
-            block={block}
-            index={i}
-            total={blocks.length}
-            onMoveUp={() => moveBlock(block._localId, -1)}
-            onMoveDown={() => moveBlock(block._localId, 1)}
-            onDelete={() => deleteBlock(block._localId)}
-            onChange={(updated) => updateBlock(block._localId, updated)}
-            language={report?.language || "en"}
-          />
+          <React.Fragment key={block._localId}>
+            <BlockCard
+              block={block}
+              index={i}
+              total={blocks.length}
+              onMoveUp={() => moveBlock(block._localId, -1)}
+              onMoveDown={() => moveBlock(block._localId, 1)}
+              onDelete={() => deleteBlock(block._localId)}
+              onChange={(updated) => updateBlock(block._localId, updated)}
+              language={report?.language || "en"}
+            />
+            <InsertBar onInsert={(type) => insertBlock(type, i)} />
+          </React.Fragment>
         ))}
 
         {/* Add block */}
