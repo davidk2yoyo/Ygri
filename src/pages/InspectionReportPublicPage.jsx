@@ -363,6 +363,19 @@ function buildPdfHtml({ report, blocks }) {
         </div>`;
     }
 
+    if (type === "video") {
+      if (!content.url) return "";
+      return `
+        <div class="content-block">
+          <div style="background:#f1f5f9;border-radius:8px;padding:20px;text-align:center;border:1px solid #e2e8f0;">
+            <p style="margin:0 0 6px;font-size:11px;font-weight:700;color:#1e3a5f;text-transform:uppercase;letter-spacing:.08em;">▶ Video</p>
+            ${content.caption ? `<p style="margin:0 0 8px;font-size:12px;color:#374151;">${esc(content.caption)}</p>` : ""}
+            <p style="margin:0 0 4px;font-size:10px;color:#6b7280;">Video available in the online version of this report</p>
+            <a href="${esc(content.url)}" style="font-size:10px;color:#2563eb;word-break:break-all;">${esc(content.url)}</a>
+          </div>
+        </div>`;
+    }
+
     return "";
   }).join("\n");
 
@@ -844,7 +857,119 @@ function BlockRenderer({ block, language = "en" }) {
     );
   }
 
+  if (type === "video") {
+    if (!content.url) return null;
+    return (
+      <div style={{ marginBottom: "28px", textAlign: "center" }}>
+        <video
+          src={content.url}
+          controls
+          style={{ maxWidth: "100%", maxHeight: "500px", borderRadius: "10px", border: "1px solid #e2e8f0", display: "inline-block", background: "#000" }}
+        />
+        {content.caption && <p style={{ margin: "8px 0 0", fontSize: "12px", color: "#9ca3af" }}>{content.caption}</p>}
+      </div>
+    );
+  }
+
   return null;
+}
+
+// ─── WhatsApp share modal ─────────────────────────────────────────────────────
+function WhatsAppReportModal({ onClose, report }) {
+  const [lang, setLang] = useState(report.language || "en");
+  const [copied, setCopied] = useState(false);
+  const shareUrl = `${window.location.origin}/r/${report.report_number}`;
+
+  const buildMessage = (l) => {
+    const sl = STATUS_LABELS[l] || STATUS_LABELS.en;
+    const statusText = sl[report.status] || report.status || "";
+    if (l === "es") {
+      return `¡Hola! Le compartimos el siguiente informe de inspección para su revisión.\n\n📋 *${report.title || report.report_number}*\nInforme No: ${report.report_number}${statusText ? `\nEstado: ${statusText}` : ""}\n\n🔗 Ver en línea:\n${shareUrl}`;
+    }
+    return `Hello! Please find below the inspection report for your review.\n\n📋 *${report.title || report.report_number}*\nReport No: ${report.report_number}${statusText ? `\nStatus: ${statusText}` : ""}\n\n🔗 View online:\n${shareUrl}`;
+  };
+
+  const message = lang === "both"
+    ? buildMessage("en") + "\n\n---\n\n" + buildMessage("es")
+    : buildMessage(lang);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <div
+      style={{ position: "fixed", inset: 0, zIndex: 10000, display: "flex", alignItems: "center", justifyContent: "center", padding: "16px", background: "rgba(0,0,0,0.55)" }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: "white", borderRadius: "16px", boxShadow: "0 25px 50px rgba(0,0,0,0.25)", width: "100%", maxWidth: "480px" }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 20px 12px", borderBottom: "1px solid #f1f5f9" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <svg style={{ width: "20px", height: "20px" }} viewBox="0 0 24 24" fill="#25D366">
+              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+            </svg>
+            <span style={{ fontWeight: "600", color: "#1f2937", fontSize: "15px" }}>Share via WhatsApp</span>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af", fontSize: "20px", lineHeight: 1 }}>✕</button>
+        </div>
+
+        <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em" }}>Report link</p>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px 12px" }}>
+              <svg style={{ width: "14px", height: "14px", color: "#9ca3af", flexShrink: 0 }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              </svg>
+              <span style={{ fontSize: "11px", color: "#4b5563", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{shareUrl}</span>
+            </div>
+          </div>
+
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em" }}>Message language</p>
+            <div style={{ display: "flex", gap: "8px" }}>
+              {[["en", "English"], ["es", "Español"], ["both", "Both"]].map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setLang(v)}
+                  style={{ padding: "6px 14px", borderRadius: "8px", fontSize: "13px", fontWeight: "500", cursor: "pointer", border: "none", background: lang === v ? "#25D366" : "#f1f5f9", color: lang === v ? "white" : "#374151" }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p style={{ margin: "0 0 6px", fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.08em" }}>Message preview</p>
+            <pre style={{ margin: 0, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "12px", fontSize: "11px", color: "#374151", whiteSpace: "pre-wrap", fontFamily: "inherit", maxHeight: "200px", overflowY: "auto" }}>
+              {message}
+            </pre>
+          </div>
+
+          <div style={{ display: "flex", gap: "8px" }}>
+            <button
+              onClick={handleCopy}
+              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", borderRadius: "8px", border: "1px solid #e2e8f0", background: "white", color: "#374151", fontSize: "13px", fontWeight: "500", cursor: "pointer" }}
+            >
+              {copied ? "✓ Copied!" : "Copy"}
+            </button>
+            <button
+              onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank")}
+              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", padding: "10px", borderRadius: "8px", border: "none", background: "#25D366", color: "white", fontSize: "13px", fontWeight: "600", cursor: "pointer" }}
+            >
+              Open WhatsApp
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
@@ -854,6 +979,7 @@ export default function InspectionReportPublicPage() {
   const [blocks, setBlocks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [showWhatsApp, setShowWhatsApp] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -958,6 +1084,15 @@ export default function InspectionReportPublicPage() {
               </svg>
               Word
             </button>
+            <button
+              onClick={() => setShowWhatsApp(true)}
+              style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 14px", background: "#25D366", border: "none", borderRadius: "8px", color: "white", fontSize: "12px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              <svg style={{ width: "14px", height: "14px" }} viewBox="0 0 24 24" fill="currentColor">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+              </svg>
+              Share
+            </button>
             {/* Company card */}
             <div style={{ background: "white", borderRadius: "10px", padding: "8px 12px", textAlign: "right", minWidth: "160px" }}>
               <img
@@ -998,6 +1133,8 @@ export default function InspectionReportPublicPage() {
           </div>
         </div>
       </div>
+
+      {showWhatsApp && <WhatsAppReportModal onClose={() => setShowWhatsApp(false)} report={report} />}
     </div>
   );
 }

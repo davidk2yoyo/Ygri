@@ -59,6 +59,7 @@ const BLOCK_DEFAULTS = {
     code: "",
     svg: "",
   },
+  video: { url: "", caption: "" },
 };
 
 const BLOCK_LABELS = {
@@ -72,6 +73,7 @@ const BLOCK_LABELS = {
   scoring: "Scoring",
   conclusion: "Conclusion",
   diagram: "Diagram",
+  video: "Video",
 };
 
 const BLOCK_ICONS = {
@@ -121,6 +123,13 @@ const BLOCK_ICONS = {
       <rect x="9" y="16" width="6" height="4" rx="1" strokeWidth={1.5} />
       <rect x="17" y="16" width="6" height="4" rx="1" strokeWidth={1.5} />
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v5M12 11H4v5M12 11h8v5" />
+    </>
+  ),
+  video: (
+    <>
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+        d="M15 10l4.553-2.277A1 1 0 0121 8.607v6.786a1 1 0 01-1.447.894L15 14v-4z" />
+      <rect x="3" y="6" width="12" height="12" rx="2" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
     </>
   ),
 };
@@ -569,6 +578,83 @@ function SingleImageBlockEditor({ block, onChange }) {
             <p className="text-sm text-gray-400">{uploading ? "Uploading…" : "Paste · Drag & drop · Click to browse"}</p>
           </div>
         </UploadDropzone>
+      )}
+      <input
+        value={block.content.caption || ""}
+        onChange={e => onChange({ ...block.content, caption: e.target.value })}
+        placeholder="Caption (optional)"
+        className="w-full text-sm text-gray-500 border-0 border-b border-gray-200 focus:border-blue-400 outline-none pb-1 bg-transparent"
+      />
+    </div>
+  );
+}
+
+function VideoBlockEditor({ block, onChange }) {
+  const [uploading, setUploading] = useState(false);
+  const [sizeWarning, setSizeWarning] = useState(false);
+  const fileRef = useRef(null);
+
+  const handleFile = useCallback(async (file) => {
+    if (!file?.type.startsWith("video/")) return;
+    setSizeWarning(file.size > 100 * 1024 * 1024);
+    setUploading(true);
+    try {
+      const url = await uploadFile(file, "video");
+      onChange({ ...block.content, url });
+    } finally {
+      setUploading(false);
+    }
+  }, [block.content, onChange]);
+
+  return (
+    <div className="space-y-3">
+      {block.content.url ? (
+        <div className="relative group">
+          <video
+            src={block.content.url}
+            controls
+            className="w-full max-h-[400px] rounded-xl border border-gray-200 bg-black"
+          />
+          <button
+            onClick={() => onChange({ ...block.content, url: "" })}
+            className="absolute top-2 right-2 bg-red-500 text-white rounded-full w-6 h-6 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition"
+          >✕</button>
+        </div>
+      ) : (
+        <div
+          onClick={() => !uploading && fileRef.current?.click()}
+          onDragOver={e => e.preventDefault()}
+          onDrop={e => {
+            e.preventDefault();
+            const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("video/"));
+            if (file) handleFile(file);
+          }}
+          className={`w-full border-2 border-dashed rounded-xl flex flex-col items-center justify-center gap-2 py-12 cursor-pointer transition-all border-gray-200 hover:border-blue-400 hover:text-blue-500 text-gray-400 ${uploading ? "opacity-50 cursor-not-allowed" : ""}`}
+        >
+          {uploading ? (
+            <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg className="w-10 h-10 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+                d="M15 10l4.553-2.277A1 1 0 0121 8.607v6.786a1 1 0 01-1.447.894L15 14v-4z" />
+              <rect x="3" y="6" width="12" height="12" rx="2" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          )}
+          <p className="text-sm text-gray-400">{uploading ? "Uploading…" : "Drag & drop · Click to browse"}</p>
+          <p className="text-xs text-gray-300">MP4, MOV, WebM</p>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="video/*"
+            className="hidden"
+            onChange={e => { if (e.target.files[0]) handleFile(e.target.files[0]); }}
+          />
+        </div>
+      )}
+      {sizeWarning && (
+        <p className="text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
+          Large file — upload may take a moment. Consider trimming the video beforehand for faster sharing.
+        </p>
       )}
       <input
         value={block.content.caption || ""}
@@ -1953,6 +2039,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDupl
         {block.type === "scoring"   && <ScoringBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "conclusion" && <ConclusionBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} allBlocks={allBlocks} />}
         {block.type === "diagram"    && <DiagramBlockEditor    block={block} onChange={(c) => onChange({ ...block, content: c })} />}
+        {block.type === "video"      && <VideoBlockEditor      block={block} onChange={(c) => onChange({ ...block, content: c })} />}
       </div>
     </div>
   );
