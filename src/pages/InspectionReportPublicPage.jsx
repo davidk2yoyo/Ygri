@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { buildDocx } from "../utils/buildDocx";
+import { Packer } from "docx";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 function renderContent(text) {
@@ -1016,48 +1018,12 @@ export default function InspectionReportPublicPage() {
   const handleExportWord = async () => {
     setWordExporting(true);
     try {
-      // Collect all image URLs from blocks + logo
-      const imageUrls = new Set();
-      imageUrls.add(`${window.location.origin}/images/interasia-logo.png`);
-      blocks.forEach(b => {
-        const c = b.content || {};
-        if (b.type === "image" && c.url) imageUrls.add(c.url);
-        if (b.type === "gallery") (c.images || []).forEach(img => { if (img.url) imageUrls.add(img.url); });
-        if (b.type === "defects") (c.items || []).forEach(item => { if (item.photo_url) imageUrls.add(item.photo_url); });
-      });
-
-      // Fetch each image and convert to base64 data URI
-      const urlMap = {};
-      await Promise.all([...imageUrls].map(async (url) => {
-        try {
-          const res = await fetch(url, { credentials: "omit" });
-          if (!res.ok) return;
-          const blob = await res.blob();
-          urlMap[url] = await new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-          });
-        } catch { /* skip images that can't be fetched */ }
-      }));
-
-      // Build HTML then replace every URL with its base64 data URI
-      let html = buildPdfHtml({ report, blocks });
-      Object.entries(urlMap).forEach(([url, dataUri]) => {
-        html = html.split(url).join(dataUri);
-      });
-
-      // Add Word namespace and remove auto-print script
-      const wordHtml = html
-        .replace('<html lang="en">', '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="en">')
-        .replace(/<script>window\.onload[^<]*<\/script>/, "");
-
-      const blob = new Blob(["﻿" + wordHtml], { type: "application/msword" });
+      const doc  = await buildDocx({ report, blocks });
+      const blob = await Packer.toBlob(doc);
       const dlUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = dlUrl;
-      a.download = `${report.report_number}-${(report.title || "report").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.doc`;
+      a.download = `${report.report_number}-${(report.title || "report").replace(/[^a-z0-9]/gi, "-").toLowerCase()}.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
