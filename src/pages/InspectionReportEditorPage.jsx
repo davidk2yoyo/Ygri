@@ -1521,7 +1521,7 @@ function InsertBar({ onInsert }) {
 }
 
 // ─── Block card ───────────────────────────────────────────────────────────────
-function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChange, language }) {
+function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDuplicate, onChange, language }) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
       {/* Header */}
@@ -1556,6 +1556,16 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChan
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <button
+            onClick={onDuplicate}
+            title="Duplicate block"
+            className="p-1 rounded text-gray-300 hover:text-blue-500 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </button>
           <button
@@ -1685,6 +1695,22 @@ export default function InspectionReportEditorPage() {
       const swap = idx + dir;
       if (swap < 0 || swap >= next.length) return prev;
       [next[idx], next[swap]] = [next[swap], next[idx]];
+      return next;
+    });
+
+  const duplicateBlock = (localId) =>
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b._localId === localId);
+      if (idx === -1) return prev;
+      const original = prev[idx];
+      const copy = {
+        ...original,
+        _localId: Math.random().toString(36).slice(2),
+        id: null,
+        content: JSON.parse(JSON.stringify(original.content)),
+      };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
       return next;
     });
 
@@ -1888,6 +1914,7 @@ export default function InspectionReportEditorPage() {
               onMoveUp={() => moveBlock(block._localId, -1)}
               onMoveDown={() => moveBlock(block._localId, 1)}
               onDelete={() => deleteBlock(block._localId)}
+              onDuplicate={() => duplicateBlock(block._localId)}
               onChange={(updated) => updateBlock(block._localId, updated)}
               language={report?.language || "en"}
             />
