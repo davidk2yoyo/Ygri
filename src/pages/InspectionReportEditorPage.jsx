@@ -916,6 +916,7 @@ function TableBlockEditor({ block, onChange }) {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const scanFileRef = useRef(null);
+  const containerRef = useRef(null);
 
   const updateHeader = (ci, val) => {
     const next = headers.map((h, idx) => (idx === ci ? val : h));
@@ -946,9 +947,8 @@ function TableBlockEditor({ block, onChange }) {
     });
   };
 
-  const handleScanFile = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const runScan = async (file) => {
+    if (!file?.type.startsWith("image/")) return;
     setScanning(true);
     setScanError("");
     try {
@@ -975,12 +975,33 @@ function TableBlockEditor({ block, onChange }) {
       setScanError(e.message);
     } finally {
       setScanning(false);
-      e.target.value = "";
     }
   };
 
+  const handleScanFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (file) await runScan(file);
+    e.target.value = "";
+  };
+
+  // Ctrl+V paste image anywhere inside the block
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const handlePaste = (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imgItem = items.find(it => it.type.startsWith("image/"));
+      if (!imgItem) return;
+      e.preventDefault();
+      runScan(imgItem.getAsFile());
+    };
+    el.addEventListener("paste", handlePaste);
+    return () => el.removeEventListener("paste", handlePaste);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [block.content, headers, rows, onChange]);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={containerRef}>
       <div className="flex items-center gap-2">
         <input
           value={block.content.title}
@@ -993,7 +1014,7 @@ function TableBlockEditor({ block, onChange }) {
           onClick={() => scanFileRef.current?.click()}
           disabled={scanning}
           className="shrink-0 flex items-center gap-1 px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 transition"
-          title="Scan image to auto-fill table"
+          title="Scan image to auto-fill table — or Ctrl+V to paste"
         >
           {scanning ? (
             <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
@@ -1007,56 +1028,62 @@ function TableBlockEditor({ block, onChange }) {
         </button>
       </div>
       {scanError && <p className="text-xs text-red-500">{scanError}</p>}
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+      {scanning && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 rounded-lg text-xs text-blue-600">
+          <span className="w-3.5 h-3.5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block shrink-0" />
+          Analyzing image and building table…
+        </div>
+      )}
+      <div className="overflow-x-auto rounded-xl border border-gray-200">
+        <table className="w-full border-collapse text-sm min-w-[500px]">
           <thead>
-            <tr>
+            <tr className="bg-gray-50">
               {headers.map((h, ci) => (
-                <th key={ci} className="border border-gray-200 bg-gray-50 p-0">
+                <th key={ci} className="border-b border-r border-gray-200 last:border-r-0 p-0 min-w-[120px]">
                   <div className="flex items-center">
                     <input
                       value={h}
                       onChange={(e) => updateHeader(ci, e.target.value)}
-                      className="flex-1 px-2 py-1.5 text-xs font-semibold text-gray-600 uppercase tracking-wide bg-transparent outline-none text-center"
+                      className="flex-1 px-3 py-2.5 text-xs font-bold text-gray-500 uppercase tracking-wider bg-transparent outline-none text-center"
                     />
                     {headers.length > 1 && (
                       <button
                         onClick={() => removeColumn(ci)}
-                        className="text-gray-300 hover:text-red-400 transition text-xs px-1"
+                        className="text-gray-300 hover:text-red-400 transition text-xs pr-1.5"
                         title="Remove column"
                       >✕</button>
                     )}
                   </div>
                 </th>
               ))}
-              <th className="border border-gray-200 bg-gray-50 w-7">
+              <th className="border-b border-r border-gray-200 bg-gray-50 w-8">
                 <button
                   onClick={addColumn}
-                  className="w-full h-full text-gray-400 hover:text-blue-500 transition text-sm font-bold px-2 py-1"
+                  className="w-full h-full text-gray-400 hover:text-blue-500 transition text-base font-bold px-2 py-2.5"
                   title="Add column"
                 >+</button>
               </th>
-              <th className="border border-gray-200 bg-gray-50 w-7" />
+              <th className="border-b border-gray-200 bg-gray-50 w-8" />
             </tr>
           </thead>
           <tbody>
             {rows.map((row, ri) => (
-              <tr key={ri}>
+              <tr key={ri} className={ri % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
                 {row.map((cell, ci) => (
-                  <td key={ci} className="border border-gray-100 p-0">
+                  <td key={ci} className="border-b border-r border-gray-100 last:border-r-0 p-0">
                     <textarea
                       value={cell}
                       onChange={(e) => updateCell(ri, ci, e.target.value)}
-                      rows={1}
-                      className="w-full px-2 py-1.5 text-sm text-gray-700 bg-transparent outline-none resize-none focus:bg-blue-50/30 transition"
+                      rows={2}
+                      className="w-full px-3 py-2 text-sm text-gray-700 bg-transparent outline-none resize-none focus:bg-blue-50/40 transition leading-snug"
                     />
                   </td>
                 ))}
-                <td className="border border-gray-100" />
-                <td className="border border-gray-100 text-center">
+                <td className="border-b border-r border-gray-100 w-8" />
+                <td className="border-b border-gray-100 w-8 text-center align-middle">
                   <button
                     onClick={() => removeRow(ri)}
-                    className="text-gray-300 hover:text-red-400 transition text-xs px-1"
+                    className="text-gray-300 hover:text-red-400 transition text-xs"
                   >✕</button>
                 </td>
               </tr>
@@ -1088,13 +1115,36 @@ const CONDITION_LABELS = {
   not_suitable:"Not Suitable for Dispatch",
 };
 
-function DefectsBlockEditor({ block, onChange }) {
+function DefectsBlockEditor({ block, onChange, language = "en" }) {
   const [uploading, setUploading] = useState({});
+  const [retouchingIdx, setRetouchingIdx] = useState(null);
   const items = block.content.items || [];
 
   const updateItem = (i, field, val) => {
     const next = items.map((it, idx) => (idx === i ? { ...it, [field]: val } : it));
     onChange({ ...block.content, items: next });
+  };
+
+  const handleRetouchComment = async (i) => {
+    const text = (items[i].comment || items[i].recommendation || "").trim();
+    if (!text) return;
+    setRetouchingIdx(i);
+    try {
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "retouch", text, language }),
+      });
+      const data = await res.json();
+      if (data.content) {
+        const plain = data.content.replace(/\\n/g, " ").replace(/\n/g, " ").trim();
+        updateItem(i, "comment", plain);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setRetouchingIdx(null);
+    }
   };
 
   const handlePhotoUpload = useCallback(async (i, files) => {
@@ -1215,7 +1265,25 @@ function DefectsBlockEditor({ block, onChange }) {
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="text-[10px] text-gray-400 mb-0.5 block">Comment</label>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <label className="text-[10px] text-gray-400">Comment</label>
+                    <button
+                      type="button"
+                      onClick={() => handleRetouchComment(i)}
+                      disabled={retouchingIdx === i || !(item.comment || item.recommendation)}
+                      title="Retouch with AI"
+                      className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-purple-600 disabled:opacity-30 transition"
+                    >
+                      {retouchingIdx === i ? (
+                        <span className="w-2.5 h-2.5 border border-purple-400 border-t-transparent rounded-full animate-spin inline-block" />
+                      ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                      )}
+                      Retouch
+                    </button>
+                  </div>
                   <input
                     value={item.comment ?? item.recommendation ?? ""}
                     onChange={(e) => updateItem(i, "comment", e.target.value)}
@@ -1459,7 +1527,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onChan
         {block.type === "image"     && <SingleImageBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "checklist" && <ChecklistBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "table"     && <TableBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
-        {block.type === "defects"   && <DefectsBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
+        {block.type === "defects"   && <DefectsBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} />}
         {block.type === "scoring"   && <ScoringBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "conclusion" && <ConclusionBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
       </div>
