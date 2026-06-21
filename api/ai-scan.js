@@ -71,6 +71,22 @@ Return ONLY a valid JSON object — no markdown, no explanation:
   "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
 }`,
 
+  conclusions: `You are an expert quality control inspector. Based on the inspection report context provided, write a professional conclusion section.
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "summary": "2-3 sentence overall summary of the inspection findings",
+  "positives": "Key positive findings and satisfactory aspects (use \\n for line breaks between points)",
+  "risks": "Issues, defects, or risks identified (use \\n for line breaks between points)",
+  "recommendations": "Specific actionable recommendations (use \\n for line breaks between points)"
+}
+
+Rules:
+- Be factual and professional — base conclusions ONLY on the context provided
+- If a category has nothing relevant, write a brief neutral statement
+- Keep each section concise (3-5 lines max)
+- recommendations should be specific and actionable`,
+
   retouch: (lang = "en") => {
     const langLine = lang === "es"
       ? "Write your output in Spanish."
@@ -169,12 +185,12 @@ export default async function handler(req, res) {
     res.end(JSON.stringify({ error: `Unknown type: ${type}` }));
     return;
   }
-  if (type === "retouch" && !text) {
+  if ((type === "retouch" || type === "conclusions") && !text) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Missing required field: text" }));
     return;
   }
-  if (type !== "retouch" && (!image || !mimeType)) {
+  if (type !== "retouch" && type !== "conclusions" && (!image || !mimeType)) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Missing required fields: image, mimeType" }));
     return;
@@ -188,12 +204,17 @@ export default async function handler(req, res) {
   }
 
   const retouchPrompt = typeof PROMPTS.retouch === "function" ? PROMPTS.retouch(language) : PROMPTS.retouch;
-  const messages = type === "retouch"
-    ? [{ role: "user", content: `${retouchPrompt}\n\nText to rephrase:\n${text}` }]
-    : [{ role: "user", content: [
-        { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
-        { type: "text", text: PROMPTS[type] },
-      ]}];
+  let messages;
+  if (type === "retouch") {
+    messages = [{ role: "user", content: `${retouchPrompt}\n\nText to rephrase:\n${text}` }];
+  } else if (type === "conclusions") {
+    messages = [{ role: "user", content: `${PROMPTS.conclusions}\n\nInspection context:\n${text}` }];
+  } else {
+    messages = [{ role: "user", content: [
+      { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
+      { type: "text", text: PROMPTS[type] },
+    ]}];
+  }
 
   try {
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -204,7 +225,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : 800,
+        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "conclusions" ? 1500 : 800,
         messages,
       }),
     });

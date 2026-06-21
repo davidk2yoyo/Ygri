@@ -127,17 +127,6 @@ function UploadDropzone({ onFiles, uploading, multiple, children }) {
   const [dragOver, setDragOver] = useState(false);
   const fileRef = useRef(null);
 
-  useEffect(() => {
-    const fn = (e) => {
-      const files = Array.from(e.clipboardData?.items || [])
-        .filter((it) => it.type.startsWith("image/"))
-        .map((it) => it.getAsFile());
-      if (files.length) onFiles(multiple ? files : [files[0]]);
-    };
-    window.addEventListener("paste", fn);
-    return () => window.removeEventListener("paste", fn);
-  }, [onFiles, multiple]);
-
   return (
     <div
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -507,6 +496,7 @@ function CoverBlockEditor({ block, onChange }) {
 
 function SingleImageBlockEditor({ block, onChange }) {
   const [uploading, setUploading] = useState(false);
+  const containerRef = useRef(null);
 
   const handleUpload = useCallback(async (files) => {
     const file = files[0];
@@ -520,8 +510,21 @@ function SingleImageBlockEditor({ block, onChange }) {
     }
   }, [block.content, onChange]);
 
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const fn = (e) => {
+      const files = Array.from(e.clipboardData?.items || [])
+        .filter((it) => it.type.startsWith("image/"))
+        .map((it) => it.getAsFile());
+      if (files.length) handleUpload([files[0]]);
+    };
+    el.addEventListener("paste", fn);
+    return () => el.removeEventListener("paste", fn);
+  }, [handleUpload]);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={containerRef} tabIndex={-1} style={{ outline: "none" }}>
       {block.content.url ? (
         <div className="relative group">
           <img
@@ -715,6 +718,7 @@ function GalleryBlockEditor({ block, onChange }) {
   const [uploading, setUploading] = useState(false);
   const [dragIdx, setDragIdx] = useState(null);
   const [dragOver, setDragOverIdx] = useState(null);
+  const containerRef = useRef(null);
   const images = block.content.images || [];
   const template = block.content.template || "g3";
   const cols = GALLERY_TEMPLATES.find(t => t.id === template)?.cols || 3;
@@ -733,6 +737,19 @@ function GalleryBlockEditor({ block, onChange }) {
       setUploading(false);
     }
   }, [block.content, images, onChange]);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const fn = (e) => {
+      const files = Array.from(e.clipboardData?.items || [])
+        .filter((it) => it.type.startsWith("image/"))
+        .map((it) => it.getAsFile());
+      if (files.length) handleUpload(files);
+    };
+    el.addEventListener("paste", fn);
+    return () => el.removeEventListener("paste", fn);
+  }, [handleUpload]);
 
   const updateImage = (i, patch) => {
     const next = images.map((img, idx) => idx === i ? { ...img, ...patch } : img);
@@ -755,7 +772,7 @@ function GalleryBlockEditor({ block, onChange }) {
   const gridCls = `grid gap-3 grid-cols-${cols}`;
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={containerRef} tabIndex={-1} style={{ outline: "none" }}>
       <div className="flex items-center gap-3">
         <input
           value={block.content.title}
@@ -1426,7 +1443,124 @@ const ACTION_ACTIVE = {
   reject:                    "bg-red-500 text-white border-red-500",
 };
 
-function ConclusionBlockEditor({ block, onChange }) {
+function ConclusionBlockEditor({ block, onChange, language = "en", allBlocks = [] }) {
+  const [retouchingField, setRetouchingField] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [aiError, setAiError] = useState("");
+
+  const stripHtml = (html) => {
+    const d = document.createElement("div");
+    d.innerHTML = html || "";
+    return d.textContent || "";
+  };
+
+  const toHtml = (text) =>
+    (text || "")
+      .replace(/\\n/g, "\n")
+      .split(/\n{2,}/)
+      .map((p) =>
+        `<p>${p
+          .replace(/\n/g, "<br>")
+          .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+          .replace(/\*(.*?)\*/g, "<em>$1</em>")}</p>`
+      )
+      .join("");
+
+  const handleRetouch = async (key) => {
+    const plainText = stripHtml(block.content[key] || "").trim();
+    if (!plainText) return;
+    setRetouchingField(key);
+    setAiError("");
+    try {
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "retouch", text: plainText, language }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      if (data.content) {
+        onChange({ ...block.content, [key]: toHtml(data.content) });
+      }
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setRetouchingField(null);
+    }
+  };
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    setAiError("");
+    try {
+      const lines = [];
+      for (const b of allBlocks) {
+        if (b.type === "cover") {
+          const c = b.content;
+          if (c.client_name) lines.push(`Client: ${c.client_name}`);
+          if (c.supplier_name) lines.push(`Supplier: ${c.supplier_name}`);
+          if (c.project_name) lines.push(`Project: ${c.project_name}`);
+          if (c.report_type) lines.push(`Report Type: ${c.report_type}`);
+          if (c.inspector_name) lines.push(`Inspector: ${c.inspector_name}`);
+        } else if (b.type === "text") {
+          const c = b.content;
+          lines.push(`[Text Block: ${c.title || ""}]`);
+          const txt = stripHtml(c.content || "").trim();
+          if (txt) lines.push(txt);
+        } else if (b.type === "defects") {
+          const c = b.content;
+          lines.push(`[Defects Block: ${c.title || ""}]`);
+          (c.items || []).forEach((item) => {
+            const parts = [];
+            if (item.item_name || item.type) parts.push(item.item_name || item.type);
+            if (item.condition || item.severity) parts.push(`Condition: ${item.condition || item.severity}`);
+            if (item.qty_inspected || item.quantity) parts.push(`Qty: ${item.qty_inspected || item.quantity}`);
+            if (item.comment || item.recommendation) parts.push(item.comment || item.recommendation);
+            if (parts.length) lines.push(`- ${parts.join(" | ")}`);
+          });
+        } else if (b.type === "scoring") {
+          const c = b.content;
+          lines.push(`[Scoring Block: ${c.title || ""}]`);
+          (c.categories || []).forEach((cat) => {
+            if (cat.label) lines.push(`- ${cat.label}: ${cat.score !== null && cat.score !== undefined ? cat.score : "N/A"}${cat.notes ? ` (${cat.notes})` : ""}`);
+          });
+        } else if (b.type === "checklist") {
+          const c = b.content;
+          lines.push(`[Checklist Block: ${c.title || ""}]`);
+          (c.items || []).forEach((item) => {
+            if (item.label) lines.push(`- ${item.label}: ${item.status || ""}${item.comment ? ` - ${item.comment}` : ""}`);
+          });
+        } else if (b.type === "table") {
+          const c = b.content;
+          lines.push(`[Table Block: ${c.title || ""}]`);
+          if (c.headers?.length) lines.push(`Headers: ${c.headers.join(" | ")}`);
+          (c.rows || []).slice(0, 10).forEach((row) => {
+            if (Array.isArray(row) && row.some(Boolean)) lines.push(row.join(" | "));
+          });
+        }
+      }
+      const context = lines.join("\n");
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "conclusions", text: context, language }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      onChange({
+        ...block.content,
+        summary: data.summary ? toHtml(data.summary) : block.content.summary,
+        positives: data.positives ? toHtml(data.positives) : block.content.positives,
+        risks: data.risks ? toHtml(data.risks) : block.content.risks,
+        recommendations: data.recommendations ? toHtml(data.recommendations) : block.content.recommendations,
+      });
+    } catch (e) {
+      setAiError(e.message);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   const fields = [
     { key: "summary", label: "Summary", placeholder: "Overall summary of inspection findings…" },
     { key: "positives", label: "Positives", placeholder: "What was satisfactory…" },
@@ -1436,15 +1570,48 @@ function ConclusionBlockEditor({ block, onChange }) {
 
   return (
     <div className="space-y-4">
+      {/* Generate with AI button */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={handleGenerate}
+          disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-300 rounded-lg text-xs text-blue-600 hover:bg-blue-50 disabled:opacity-40 transition font-medium"
+        >
+          {generating ? (
+            <span className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block" />
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+          )}
+          {generating ? "Generating…" : "Generate with AI"}
+        </button>
+        {aiError && <p className="text-xs text-red-500">{aiError}</p>}
+      </div>
+
       {fields.map(({ key, label, placeholder }) => (
         <div key={key}>
-          <label className="text-xs text-gray-400 mb-1 block font-medium">{label}</label>
-          <textarea
-            value={block.content[key] || ""}
-            onChange={(e) => onChange({ ...block.content, [key]: e.target.value })}
+          <div className="flex items-center justify-between mb-1">
+            <label className="text-xs text-gray-400 font-medium">{label}</label>
+            <button
+              onClick={() => handleRetouch(key)}
+              disabled={retouchingField === key || !stripHtml(block.content[key] || "").trim()}
+              className="flex items-center gap-1 px-2 py-0.5 border border-gray-200 rounded text-xs text-gray-400 hover:border-purple-400 hover:text-purple-600 disabled:opacity-40 transition"
+            >
+              {retouchingField === key ? (
+                <span className="w-2.5 h-2.5 border border-purple-400 border-t-transparent rounded-full animate-spin inline-block" />
+              ) : (
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              )}
+              Retouch
+            </button>
+          </div>
+          <RichTextEditor
+            content={block.content[key] || ""}
+            onChange={(val) => onChange({ ...block.content, [key]: val })}
             placeholder={placeholder}
-            rows={3}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 focus:ring-2 focus:ring-blue-400 focus:border-transparent resize-none"
           />
         </div>
       ))}
@@ -1521,7 +1688,7 @@ function InsertBar({ onInsert }) {
 }
 
 // ─── Block card ───────────────────────────────────────────────────────────────
-function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDuplicate, onChange, language }) {
+function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDuplicate, onChange, language, allBlocks }) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl shadow-sm">
       {/* Header */}
@@ -1589,7 +1756,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDupl
         {block.type === "table"     && <TableBlockEditor     block={block} onChange={(c) => onChange({ ...block, content: c })} />}
         {block.type === "defects"   && <DefectsBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} />}
         {block.type === "scoring"   && <ScoringBlockEditor   block={block} onChange={(c) => onChange({ ...block, content: c })} />}
-        {block.type === "conclusion" && <ConclusionBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} />}
+        {block.type === "conclusion" && <ConclusionBlockEditor block={block} onChange={(c) => onChange({ ...block, content: c })} language={language} allBlocks={allBlocks} />}
       </div>
     </div>
   );
@@ -1917,6 +2084,7 @@ export default function InspectionReportEditorPage() {
               onDuplicate={() => duplicateBlock(block._localId)}
               onChange={(updated) => updateBlock(block._localId, updated)}
               language={report?.language || "en"}
+              allBlocks={blocks}
             />
             <InsertBar onInsert={(type) => insertBlock(type, i)} />
           </React.Fragment>

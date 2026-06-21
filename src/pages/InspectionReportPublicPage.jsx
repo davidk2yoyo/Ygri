@@ -79,6 +79,11 @@ const ACTION_LABELS = {
   es: { proceed: "Proceder", proceed_with_observations: "Proceder con Observaciones", hold: "En Espera", reject: "Rechazar" },
 };
 
+const CONCLUSION_LABELS = {
+  en: { title: "Conclusion", summary: "Summary", positives: "Positives", risks: "Risks", recommendations: "Recommendations", action: "Action" },
+  es: { title: "Conclusión", summary: "Resumen", positives: "Aspectos Positivos", risks: "Riesgos", recommendations: "Recomendaciones", action: "Acción" },
+};
+
 const ACTION_COLORS = {
   proceed: "#16a34a",
   proceed_with_observations: "#d97706",
@@ -323,17 +328,18 @@ function buildPdfHtml({ report, blocks }) {
     }
 
     if (type === "conclusion") {
-      const actionLabel = ACTION_LABELS[content.action] || content.action || "";
+      const cl = CONCLUSION_LABELS[lang] || CONCLUSION_LABELS.en;
+      const actionLabel = (ACTION_LABELS[lang] || ACTION_LABELS.en)[content.action] || content.action || "";
       const actionColor = ACTION_COLORS[content.action] || "#6b7280";
       const sections = [
-        ["Summary", content.summary],
-        ["Positives", content.positives],
-        ["Risks", content.risks],
-        ["Recommendations", content.recommendations],
-      ].filter(([, v]) => v);
+        ["summary", cl.summary],
+        ["positives", cl.positives],
+        ["risks", cl.risks],
+        ["recommendations", cl.recommendations],
+      ].map(([key, label]) => [label, content[key]]).filter(([, v]) => v);
       return `
         <div class="content-block">
-          ${heading("Conclusion")}
+          ${heading(cl.title)}
           ${sections.map(([label, value]) => `
             <div style="margin-bottom:10px;">
               <p style="margin:0 0 3px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;">${esc(label)}</p>
@@ -341,7 +347,7 @@ function buildPdfHtml({ report, blocks }) {
             </div>`).join("")}
           ${content.action ? `
           <div style="margin-top:12px;">
-            <p style="margin:0 0 4px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;">Action</p>
+            <p style="margin:0 0 4px;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#6b7280;">${esc(cl.action)}</p>
             <span style="display:inline-block;background:${actionColor};color:white;font-size:9px;font-weight:700;letter-spacing:.08em;padding:3px 14px;border-radius:999px;">${esc(actionLabel.toUpperCase())}</span>
           </div>` : ""}
         </div>`;
@@ -773,17 +779,18 @@ function BlockRenderer({ block, language = "en" }) {
   }
 
   if (type === "conclusion") {
-    const actionLabel = ACTION_LABELS[content.action] || content.action || "";
+    const cl = CONCLUSION_LABELS[language] || CONCLUSION_LABELS.en;
+    const actionLabel = (ACTION_LABELS[language] || ACTION_LABELS.en)[content.action] || content.action || "";
     const actionColor = ACTION_COLORS[content.action] || "#6b7280";
     const sections = [
-      ["Summary", content.summary],
-      ["Positives", content.positives],
-      ["Risks", content.risks],
-      ["Recommendations", content.recommendations],
-    ].filter(([, v]) => v);
+      ["summary", cl.summary],
+      ["positives", cl.positives],
+      ["risks", cl.risks],
+      ["recommendations", cl.recommendations],
+    ].map(([key, label]) => [label, content[key]]).filter(([, v]) => v);
     return (
       <div style={{ marginBottom: "28px" }}>
-        <SectionHeading title="Conclusion" />
+        <SectionHeading title={cl.title} />
         <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
           {sections.map(([label, value], i) => (
             <div key={label} style={{ padding: "14px 16px", borderBottom: "1px solid #f1f5f9", backgroundColor: i % 2 === 0 ? "#fff" : "#f8fafc" }}>
@@ -797,7 +804,7 @@ function BlockRenderer({ block, language = "en" }) {
           ))}
           {content.action && (
             <div style={{ padding: "14px 16px", background: "#f8fafc", display: "flex", alignItems: "center", gap: "12px" }}>
-              <span style={{ fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em" }}>Action:</span>
+              <span style={{ fontSize: "11px", fontWeight: "700", color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.1em" }}>{cl.action}:</span>
               <span style={{ display: "inline-block", background: actionColor, color: "white", fontSize: "11px", fontWeight: "700", letterSpacing: "0.06em", padding: "4px 16px", borderRadius: "999px" }}>
                 {actionLabel.toUpperCase()}
               </span>

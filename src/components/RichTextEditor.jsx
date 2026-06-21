@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Underline } from "@tiptap/extension-underline";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Color } from "@tiptap/extension-color";
+import Link from "@tiptap/extension-link";
 
 const COLORS = [
   { label: "Default",  value: "" },
@@ -46,12 +47,16 @@ function mdToHtml(text) {
 }
 
 export default function RichTextEditor({ content, onChange, placeholder }) {
+  const [linkUrl, setLinkUrl] = useState("");
+  const [showLinkInput, setShowLinkInput] = useState(false);
+
   const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
       TextStyle,
       Color,
+      Link.configure({ openOnClick: false }),
     ],
     content: mdToHtml(content) || "",
     onUpdate: ({ editor }) => {
@@ -106,6 +111,71 @@ export default function RichTextEditor({ content, onChange, placeholder }) {
         <ToolBtn onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} active={editor.isActive("heading", { level: 3 })} title="Heading">
           H
         </ToolBtn>
+
+        <Divider />
+
+        {/* Link */}
+        {editor.isActive("link") ? (
+          <ToolBtn
+            onClick={() => editor.chain().focus().unsetLink().run()}
+            active={false}
+            title="Unlink"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+              <line x1="18" y1="6" x2="6" y2="18" strokeWidth={2} strokeLinecap="round" />
+            </svg>
+          </ToolBtn>
+        ) : (
+          <ToolBtn
+            onClick={() => { setShowLinkInput(v => !v); setLinkUrl(""); }}
+            active={showLinkInput}
+            title="Add link"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </ToolBtn>
+        )}
+        {showLinkInput && (
+          <div className="flex items-center gap-1 ml-1">
+            <input
+              type="text"
+              value={linkUrl}
+              onChange={e => setLinkUrl(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const url = linkUrl.trim();
+                  if (!url) return;
+                  const href = url.startsWith("http") ? url : `https://${url}`;
+                  editor.chain().focus().setLink({ href, target: "_blank" }).run();
+                  setShowLinkInput(false);
+                  setLinkUrl("");
+                }
+                if (e.key === "Escape") { setShowLinkInput(false); setLinkUrl(""); }
+              }}
+              placeholder="https://..."
+              className="text-xs border border-gray-300 rounded px-2 py-0.5 w-36 outline-none focus:border-blue-400"
+              autoFocus
+            />
+            <button
+              type="button"
+              onMouseDown={e => {
+                e.preventDefault();
+                const url = linkUrl.trim();
+                if (!url) return;
+                const href = url.startsWith("http") ? url : `https://${url}`;
+                editor.chain().focus().setLink({ href, target: "_blank" }).run();
+                setShowLinkInput(false);
+                setLinkUrl("");
+              }}
+              className="text-xs px-2 py-0.5 bg-blue-500 text-white rounded hover:bg-blue-600 transition"
+            >
+              OK
+            </button>
+          </div>
+        )}
 
         <Divider />
 
