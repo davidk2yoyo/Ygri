@@ -164,7 +164,7 @@ function UploadDropzone({ onFiles, uploading, multiple, children }) {
 
 // ─── Block editors ────────────────────────────────────────────────────────────
 
-function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear }) {
+function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear, onCreateNew, renderItem }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(value || "");
   const ref = useRef(null);
@@ -180,6 +180,9 @@ function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear
   const filtered = query
     ? items.filter(it => it[labelKey]?.toLowerCase().includes(query.toLowerCase()))
     : items;
+
+  const showCreate = !!onCreateNew && query.trim().length > 0;
+  const showDropdown = open && (filtered.length > 0 || showCreate);
 
   return (
     <div className="relative" ref={ref}>
@@ -198,7 +201,7 @@ function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear
           </button>
         )}
       </div>
-      {open && filtered.length > 0 && (
+      {showDropdown && (
         <ul className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-auto">
           {filtered.map((it, i) => (
             <li
@@ -206,9 +209,18 @@ function EntityCombobox({ value, placeholder, items, labelKey, onSelect, onClear
               onMouseDown={() => { onSelect(it); setQuery(it[labelKey]); setOpen(false); }}
               className="px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 text-gray-700"
             >
-              {it._label ?? it[labelKey]}
+              {renderItem ? renderItem(it) : (it._label ?? it[labelKey])}
             </li>
           ))}
+          {showCreate && (
+            <li
+              onMouseDown={() => { onCreateNew(query.trim()); setOpen(false); }}
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-blue-50 text-blue-600 font-medium border-t border-gray-100 flex items-center gap-1.5"
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+              Create &ldquo;{query.trim()}&rdquo;
+            </li>
+          )}
         </ul>
       )}
     </div>
@@ -282,11 +294,13 @@ const DOC_TYPE_LABELS = {
 function CoverBlockEditor({ block, onChange }) {
   const c = block.content;
   const set = (key, val) => onChange({ ...c, [key]: val });
+  const navigate = useNavigate();
 
   const [projects, setProjects] = useState([]);
   const [clients, setClients] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [supplierDocs, setSupplierDocs] = useState([]);
+  const [creating, setCreating] = useState(null); // 'client' | 'supplier'
 
   useEffect(() => {
     supabase.from("v_tracks_overview").select("id,track_name,client_name,client_id").order("track_name")
@@ -317,6 +331,26 @@ function CoverBlockEditor({ block, onChange }) {
     onChange({ ...c, supplier_id: s.id, supplier_name: s.name, supplier_address: s.address || c.supplier_address, attached_docs: [] });
   };
 
+  const handleCreateClient = async (name) => {
+    setCreating("client");
+    const { data, error } = await supabase.from("clients").insert({ company_name: name }).select().single();
+    setCreating(null);
+    if (error) { alert(error.message); return; }
+    const cl = { ...data, _label: data.company_name };
+    setClients(prev => [...prev, cl].sort((a, b) => a.company_name.localeCompare(b.company_name)));
+    handleClientSelect(cl);
+  };
+
+  const handleCreateSupplier = async (name) => {
+    setCreating("supplier");
+    const { data, error } = await supabase.from("suppliers").insert({ name }).select().single();
+    setCreating(null);
+    if (error) { alert(error.message); return; }
+    const s = { ...data, _label: data.name };
+    setSuppliers(prev => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)));
+    handleSupplierSelect(s);
+  };
+
   const toggleDoc = (doc) => {
     const current = c.attached_docs || [];
     const exists = current.find(d => d.id === doc.id);
@@ -332,7 +366,7 @@ function CoverBlockEditor({ block, onChange }) {
 
   return (
     <div className="space-y-4">
-      {/* ── Project & Inspector ── */}
+      {/* ── Report Info ── */}
       <div>
         <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Report Info</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -345,7 +379,20 @@ function CoverBlockEditor({ block, onChange }) {
               labelKey="track_name"
               onSelect={handleProjectSelect}
               onClear={() => onChange({ ...c, project_id: null, project_name: "" })}
+              renderItem={p => (
+                <div>
+                  <div className="font-medium text-gray-700">{p.track_name}</div>
+                  {p.client_name && <div className="text-xs text-gray-400">{p.client_name}</div>}
+                </div>
+              )}
+              onCreateNew={() => navigate("/projects")}
             />
+            {projects.length === 0 && (
+              <p className="text-xs text-gray-400 mt-1">
+                No projects yet —{" "}
+                <button type="button" onClick={() => navigate("/projects")} className="text-blue-500 hover:underline">create one</button>
+              </p>
+            )}
           </div>
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Report Type</label>
@@ -368,17 +415,20 @@ function CoverBlockEditor({ block, onChange }) {
 
       {/* ── Client ── */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Client</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+          Client {creating === "client" && <span className="font-normal normal-case text-blue-400 ml-1">creating…</span>}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Client</label>
             <EntityCombobox
               value={c.client_name || ""}
-              placeholder="Search client…"
+              placeholder="Search or create client…"
               items={clients}
               labelKey="company_name"
               onSelect={handleClientSelect}
               onClear={() => onChange({ ...c, client_id: null, client_name: "" })}
+              onCreateNew={handleCreateClient}
             />
           </div>
         </div>
@@ -386,14 +436,26 @@ function CoverBlockEditor({ block, onChange }) {
 
       {/* ── Supplier ── */}
       <div>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Supplier</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+          Supplier {creating === "supplier" && <span className="font-normal normal-case text-blue-400 ml-1">creating…</span>}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-gray-400 mb-1 block">Supplier Name</label>
-            <SupplierComboboxCover
+            <EntityCombobox
               value={c.supplier_name || ""}
+              placeholder="Search or create supplier…"
+              items={suppliers}
+              labelKey="name"
               onSelect={handleSupplierSelect}
-              onChangeText={val => set("supplier_name", val)}
+              onClear={() => onChange({ ...c, supplier_id: null, supplier_name: "", supplier_address: "", attached_docs: [] })}
+              onCreateNew={handleCreateSupplier}
+              renderItem={s => (
+                <div>
+                  <div className="font-medium text-gray-700">{s.name}</div>
+                  {s.address && <div className="text-xs text-gray-400 truncate">{s.address}</div>}
+                </div>
+              )}
             />
           </div>
           <div>
@@ -414,7 +476,7 @@ function CoverBlockEditor({ block, onChange }) {
           <div className="mt-3 border border-gray-200 rounded-lg p-3">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Supplier Documents
-              {supplierDocs.length === 0 && <span className="font-normal normal-case ml-1 text-gray-400">— none found</span>}
+              {supplierDocs.length === 0 && <span className="font-normal normal-case ml-1 text-gray-400">— none uploaded yet</span>}
             </p>
             {supplierDocs.length > 0 && (
               <div className="space-y-1.5">
