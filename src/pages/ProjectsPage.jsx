@@ -620,6 +620,8 @@ export default function ProjectsPage() {
   const [loadingEmails, setLoadingEmails] = useState(false);
   const [allComments, setAllComments] = useState([]);
   const [loadingComments, setLoadingComments] = useState(false);
+  const [renamingTrackId, setRenamingTrackId] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
 
   // --- Resizable panels ---
   const [sidebarWidth, setSidebarWidth] = useState(30); // percentage, default 30%
@@ -907,6 +909,20 @@ export default function ProjectsPage() {
     setDeleteError("");
   };
 
+  const handleRenameProject = async (trackId, currentName) => {
+    const trimmed = renameValue.trim();
+    setRenamingTrackId(null);
+    if (!trimmed || trimmed === currentName) return;
+    try {
+      const { error } = await supabase.from("tracks").update({ name: trimmed }).eq("id", trackId);
+      if (error) throw error;
+      await fetchTracksOverview();
+      if (activeTrackId === trackId) await loadTrackDetail();
+    } catch (e) {
+      setError(e.message);
+    }
+  };
+
   // Reactivate a cancelled project
   const reactivateProject = async (project) => {
     try {
@@ -1125,7 +1141,22 @@ export default function ProjectsPage() {
                         className="w-full text-left"
                       >
                         <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
-                        <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
+                        {renamingTrackId === t.track_id ? (
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            onChange={e => setRenameValue(e.target.value)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") handleRenameProject(t.track_id, t.track_name);
+                              if (e.key === "Escape") setRenamingTrackId(null);
+                            }}
+                            onBlur={() => handleRenameProject(t.track_id, t.track_name)}
+                            onClick={e => e.stopPropagation()}
+                            className="w-full font-semibold text-darkblack-700 dark:text-white mb-2 border-b-2 border-primary bg-transparent focus:outline-none text-sm pb-0.5"
+                          />
+                        ) : (
+                          <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
+                        )}
                         <div className="flex items-center justify-between">
                           <div className="text-xs text-bgray-600 dark:text-bgray-300">
                             {t.workflow_kind}
@@ -1141,6 +1172,21 @@ export default function ProjectsPage() {
                         <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
                           Due: {t.next_due_date ?? "No due date"}
                         </div>
+                      </button>
+
+                      {/* Rename Button - Hidden by default, shown on hover */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setRenamingTrackId(t.track_id);
+                          setRenameValue(t.track_name);
+                        }}
+                        className="absolute top-2 right-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-blue-100 dark:hover:bg-blue-900 rounded text-blue-500 hover:text-blue-700"
+                        title="Rename project"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
                       </button>
 
                       {/* Delete Button - Hidden by default, shown on hover */}
