@@ -71,7 +71,11 @@ Return ONLY a valid JSON object — no markdown, no explanation:
   "description": "3-5 sentence professional technical description. Include: what the product is, key technical highlights, main application/industry, and a notable feature or advantage. Formal B2B tone."
 }`,
 
-  conclusions: `You are an expert quality control inspector. Based on the inspection report context provided, write a professional conclusion section.
+  conclusions: (lang = "en") => {
+    const langLine = lang === "es"
+      ? "Write ALL output values in Spanish."
+      : "Write ALL output values in English.";
+    return `You are an expert quality control inspector. Based on the inspection report context provided, write a professional conclusion section. ${langLine}
 
 Return ONLY a valid JSON object — no markdown, no explanation:
 {
@@ -85,7 +89,8 @@ Rules:
 - Be factual and professional — base conclusions ONLY on the context provided
 - If a category has nothing relevant, write a brief neutral statement
 - Keep each section concise (3-5 lines max)
-- recommendations should be specific and actionable`,
+- recommendations should be specific and actionable`;
+  },
 
   retouch: (lang = "en") => {
     const langLine = lang === "es"
@@ -208,7 +213,8 @@ export default async function handler(req, res) {
   if (type === "retouch") {
     messages = [{ role: "user", content: `${retouchPrompt}\n\nText to rephrase:\n${text}` }];
   } else if (type === "conclusions") {
-    messages = [{ role: "user", content: `${PROMPTS.conclusions}\n\nInspection context:\n${text}` }];
+    const conclusionsPrompt = typeof PROMPTS.conclusions === "function" ? PROMPTS.conclusions(language) : PROMPTS.conclusions;
+    messages = [{ role: "user", content: `${conclusionsPrompt}\n\nInspection context:\n${text}` }];
   } else {
     messages = [{ role: "user", content: [
       { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
