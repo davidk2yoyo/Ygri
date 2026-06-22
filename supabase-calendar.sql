@@ -33,3 +33,7 @@ CREATE INDEX IF NOT EXISTS milestone_date_history_milestone_idx ON milestone_dat
 ALTER TABLE milestone_date_history ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow authenticated full access" ON milestone_date_history
   FOR ALL USING (auth.role() = 'authenticated');
+
+-- Add supplier association to milestones
+ALTER TABLE project_milestones
+  ADD COLUMN IF NOT EXISTS supplier_id uuid REFERENCES suppliers(id) ON DELETE SET NULL;

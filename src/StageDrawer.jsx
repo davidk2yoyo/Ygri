@@ -27,16 +27,22 @@ const MILESTONE_COLORS = {
 
 function KeyDatesSection({ trackId }) {
   const [milestones, setMilestones] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: "inspection", date: "", label: "" });
+  const [form, setForm] = useState({ type: "inspection", date: "", label: "", supplier_id: "" });
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { if (trackId) load(); }, [trackId]);
+  useEffect(() => {
+    if (!trackId) return;
+    load();
+    supabase.from("suppliers").select("id, name").order("name")
+      .then(({ data }) => setSuppliers(data || []));
+  }, [trackId]);
 
   const load = async () => {
     const { data } = await supabase
       .from("project_milestones")
-      .select("id, type, label, date, notes")
+      .select("id, type, label, date, notes, supplier_id, supplier:suppliers(name)")
       .eq("track_id", trackId)
       .order("date");
     setMilestones(data || []);
@@ -51,10 +57,11 @@ function KeyDatesSection({ trackId }) {
         type: form.type,
         label: form.type === "custom" ? form.label.trim() || null : null,
         date: form.date,
+        supplier_id: form.supplier_id || null,
       });
       if (error) throw error;
       sileo.success({ title: "Key date added" });
-      setForm({ type: "inspection", date: "", label: "" });
+      setForm({ type: "inspection", date: "", label: "", supplier_id: "" });
       setShowForm(false);
       load();
     } catch (e) {
@@ -97,23 +104,33 @@ function KeyDatesSection({ trackId }) {
             const cfg = MILESTONE_CONFIG[m.type] || MILESTONE_CONFIG.custom;
             const colors = MILESTONE_COLORS[cfg.color];
             return (
-              <div key={m.id} className="flex items-center gap-2 group">
-                <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium flex-1 min-w-0 ${colors}`}>
-                  <span className="flex-shrink-0">{cfg.emoji}</span>
-                  <span className="truncate">{m.label || cfg.label}</span>
-                </span>
-                <span className="text-xs text-bgray-500 dark:text-bgray-400 flex-shrink-0 tabular-nums">
-                  {m.date}
-                </span>
-                <button
-                  onClick={() => handleDelete(m.id)}
-                  className="opacity-0 group-hover:opacity-100 transition p-0.5 text-bgray-400 hover:text-red-500"
-                  title="Remove"
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                  </svg>
-                </button>
+              <div key={m.id} className="group">
+                <div className="flex items-center gap-2">
+                  <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium flex-1 min-w-0 ${colors}`}>
+                    <span className="flex-shrink-0">{cfg.emoji}</span>
+                    <span className="truncate">{m.label || cfg.label}</span>
+                  </span>
+                  <span className="text-xs text-bgray-500 dark:text-bgray-400 flex-shrink-0 tabular-nums">
+                    {m.date}
+                  </span>
+                  <button
+                    onClick={() => handleDelete(m.id)}
+                    className="opacity-0 group-hover:opacity-100 transition p-0.5 text-bgray-400 hover:text-red-500"
+                    title="Remove"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+                {m.supplier?.name && (
+                  <div className="mt-0.5 ml-1 flex items-center gap-1 text-[11px] text-bgray-500 dark:text-bgray-400">
+                    <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+                    </svg>
+                    {m.supplier.name}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -166,6 +183,23 @@ function KeyDatesSection({ trackId }) {
             onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
             className={inputCls}
           />
+
+          {/* Supplier (optional) */}
+          <div>
+            <label className="block text-[11px] font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide mb-1">
+              Supplier (optional)
+            </label>
+            <select
+              value={form.supplier_id}
+              onChange={e => setForm(p => ({ ...p, supplier_id: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">No supplier</option>
+              {suppliers.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
 
           <div className="flex items-center gap-2">
             <button
