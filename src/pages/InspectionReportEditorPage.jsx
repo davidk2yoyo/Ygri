@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { sileo } from "sileo";
 import RichTextEditor from "../components/RichTextEditor";
 
 // ─── Block defaults ──────────────────────────────────────────────────────────
@@ -359,7 +360,7 @@ function CoverBlockEditor({ block, onChange }) {
     setCreating("client");
     const { data, error } = await supabase.from("clients").insert({ company_name: name }).select().single();
     setCreating(null);
-    if (error) { alert(error.message); return; }
+    if (error) { sileo.error({ title: "Failed to create client", description: error.message }); return; }
     const cl = { ...data, _label: data.company_name };
     setClients(prev => [...prev, cl].sort((a, b) => a.company_name.localeCompare(b.company_name)));
     handleClientSelect(cl);
@@ -369,7 +370,7 @@ function CoverBlockEditor({ block, onChange }) {
     setCreating("supplier");
     const { data, error } = await supabase.from("suppliers").insert({ name }).select().single();
     setCreating(null);
-    if (error) { alert(error.message); return; }
+    if (error) { sileo.error({ title: "Failed to create supplier", description: error.message }); return; }
     const s = { ...data, _label: data.name };
     setSuppliers(prev => [...prev, s].sort((a, b) => a.name.localeCompare(b.name)));
     handleSupplierSelect(s);

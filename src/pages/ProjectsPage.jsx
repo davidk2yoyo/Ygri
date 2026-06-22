@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef, useCallback } from "react";
+import { sileo } from "sileo";
 import ReactFlow, { Background, Controls, MiniMap, MarkerType } from "reactflow";
 import "reactflow/dist/style.css";
 import { useTranslation } from "react-i18next";
@@ -216,7 +217,7 @@ function NewProjectModal({ isOpen, onClose, onSuccess, initialClientId, initialC
       setShowNewClientForm(false);
     } catch (err) {
       console.error("Error creating client:", err);
-      alert("Failed to create client: " + err.message);
+      sileo.error({ title: "Failed to create client", description: err.message });
     } finally {
       setCreatingClient(false);
     }

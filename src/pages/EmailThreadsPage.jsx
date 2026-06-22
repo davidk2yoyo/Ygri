@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
+import { sileo } from 'sileo';
 import {
   Inbox,
   AlertCircle,
@@ -219,7 +220,7 @@ const EmailThreadsPage = () => {
     } catch (err) {
       console.error('Full error attaching email to project:', err);
       console.error('Error details:', JSON.stringify(err, null, 2));
-      alert('Failed to attach email to project: ' + err.message);
+      sileo.error({ title: "Failed to attach email", description: err.message });
     } finally {
       setAttaching(false);
     }
@@ -238,7 +239,7 @@ const EmailThreadsPage = () => {
       await fetchThreads();
     } catch (err) {
       console.error('Error detaching email from project:', err);
-      alert('Failed to detach email: ' + err.message);
+      sileo.error({ title: "Failed to detach email", description: err.message });
     }
   };
 

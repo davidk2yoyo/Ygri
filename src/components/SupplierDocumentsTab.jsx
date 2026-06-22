@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
+import { sileo } from "sileo";
 import FileUpload from "./FileUpload";
 import DocumentCard, { DOCUMENT_TYPES } from "./DocumentCard";
 
@@ -92,6 +93,7 @@ function DocumentModal({ document, supplierId, quotations, onClose, onSaved }) {
           });
           throw error;
         }
+        sileo.success({ title: "Document uploaded" });
         onSaved(data, "created");
       } else {
         const { data, error } = await supabase
@@ -102,6 +104,7 @@ function DocumentModal({ document, supplierId, quotations, onClose, onSaved }) {
           .single();
 
         if (error) throw error;
+        sileo.success({ title: "Document updated" });
         onSaved(data, "updated");
       }
     } catch (e) {
@@ -482,7 +485,7 @@ export default function SupplierDocumentsTab({ supplierId }) {
       setDocuments(prev => prev.filter(d => d.id !== doc.id));
     } catch (e) {
       console.error("Error deleting document:", e);
-      alert("Error deleting document: " + e.message);
+      sileo.error({ title: "Delete failed", description: e.message });
     }
   };
 

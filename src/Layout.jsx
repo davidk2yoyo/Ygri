@@ -5,6 +5,8 @@ import { supabase } from "./supabaseClient";
 import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
 import YgriAiChat from "./pages/AiAssistantPage";
+import { Toaster } from "sileo";
+import "sileo/styles.css";
 
 export default function Layout() {
   const location = useLocation();
@@ -285,6 +287,7 @@ export default function Layout() {
       </main>
 
       <YgriAiChat />
+      <Toaster position="bottom-right" />
     </div>
   );
 }

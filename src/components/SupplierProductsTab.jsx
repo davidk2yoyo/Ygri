@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { supabase } from "../supabaseClient";
+import { sileo } from "sileo";
 
 // ── Tag input ────────────────────────────────────────────────────────────────
 function TagInput({ tags, onChange }) {
@@ -93,10 +94,12 @@ function ProductModal({ product, supplierId, onClose, onSaved }) {
       if (isNew) {
         const { data: row, error: e } = await supabase.from("supplier_products").insert(data).select().single();
         if (e) throw e;
+        sileo.success({ title: "Product added", description: data.name });
         onSaved(row, "created");
       } else {
         const { data: row, error: e } = await supabase.from("supplier_products").update(data).eq("id", product.id).select().single();
         if (e) throw e;
+        sileo.success({ title: "Product updated" });
         onSaved(row, "updated");
       }
     } catch (e) {
@@ -339,7 +342,7 @@ export default function SupplierProductsTab({ supplierId }) {
   const handleDelete = async (product) => {
     if (!window.confirm(`Delete "${product.name}"?`)) return;
     const { error } = await supabase.from("supplier_products").delete().eq("id", product.id);
-    if (error) { alert(error.message); return; }
+    if (error) { sileo.error({ title: "Delete failed", description: error.message }); return; }
     setProducts(p => p.filter(x => x.id !== product.id));
   };
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { useNavigate } from "react-router-dom";
+import { sileo } from "sileo";
 
 // ─── Type config ──────────────────────────────────────────────────────────────
 const MILESTONE_CONFIG = {
@@ -702,12 +703,14 @@ export default function CalendarPage() {
 
   const handleMilestoneSaved = (saved) => {
     setAddModal(null);
+    sileo.success({ title: "Key date added", description: saved.track?.name });
     loadEvents();
     setSelectedDate(saved.date);
   };
 
   const handleRescheduled = (updated) => {
     setRescheduleModal(null);
+    sileo.success({ title: "Date rescheduled", description: `Moved to ${formatShortDate(updated.date)}` });
     loadEvents();
     setSelectedDate(updated.date);
   };
@@ -716,7 +719,8 @@ export default function CalendarPage() {
     const label = milestone.label || MILESTONE_CONFIG[milestone.type]?.label || "this date";
     if (!window.confirm(`Delete "${label}"?`)) return;
     const { error } = await supabase.from("project_milestones").delete().eq("id", milestone.id);
-    if (error) { alert(error.message); return; }
+    if (error) { sileo.error({ title: "Delete failed", description: error.message }); return; }
+    sileo.success({ title: "Date removed" });
     loadEvents();
   };
 
