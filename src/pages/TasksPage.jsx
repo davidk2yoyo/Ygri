@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
+import { sileo } from "sileo";
 
 const STATUS_FILTERS = ["all", "pending", "done", "overdue"];
 
@@ -286,7 +287,9 @@ export default function TasksPage() {
       setBusy(true);
       await supabase.rpc("update_stage_todo", { p_todo_id: todoId, p_done: !currentDone });
       await loadTasks();
+      if (!currentDone) sileo.success({ title: "Task completed" });
     } catch (e) {
+      sileo.error({ title: "Error", description: e.message });
       setError(e.message);
     } finally {
       setBusy(false);
@@ -306,12 +309,15 @@ export default function TasksPage() {
         p_assignee: null,
         p_user: user.id,
       });
+      const addedTitle = newTask.title.trim();
       setNewTask({ title: "", due_date: "" });
       setSelectedProjectId("");
       setSelectedStageId("");
       setShowAddForm(false);
       await loadTasks();
+      sileo.success({ title: "Task added", description: addedTitle });
     } catch (e) {
+      sileo.error({ title: "Error", description: e.message });
       setError(e.message);
     } finally {
       setBusy(false);

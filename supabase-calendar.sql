@@ -37,3 +37,7 @@ CREATE POLICY "Allow authenticated full access" ON milestone_date_history
 -- Add supplier association to milestones
 ALTER TABLE project_milestones
   ADD COLUMN IF NOT EXISTS supplier_id uuid REFERENCES suppliers(id) ON DELETE SET NULL;
+
+-- Reminder: how many days before the date to show a notification (NULL = no reminder)
+ALTER TABLE project_milestones
+  ADD COLUMN IF NOT EXISTS reminder_days integer DEFAULT NULL;

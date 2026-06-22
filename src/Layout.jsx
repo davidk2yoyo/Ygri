@@ -1,12 +1,22 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "./supabaseClient";
 import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
 import YgriAiChat from "./pages/AiAssistantPage";
-import { Toaster } from "sileo";
+import { Toaster, sileo } from "sileo";
 import "sileo/styles.css";
+
+const MILESTONE_LABELS = {
+  production_ready:   { emoji: "🏭", label: "Production Ready" },
+  inspection:         { emoji: "🔍", label: "Inspection" },
+  shipping_departure: { emoji: "🚢", label: "Departure" },
+  estimated_arrival:  { emoji: "📦", label: "ETA / Arrival" },
+  payment_balance:    { emoji: "💰", label: "Balance Payment" },
+  client_delivery:    { emoji: "✅", label: "Client Delivery" },
+  custom:             { emoji: "📌", label: "Custom" },
+};
 
 export default function Layout() {
   const location = useLocation();
@@ -14,6 +24,99 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [darkMode, toggleDarkMode] = useDarkMode();
   const { t, i18n } = useTranslation();
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === "INITIAL_SESSION" || event === "SIGNED_IN")) {
+        checkNotifications();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const checkNotifications = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const key = `dismissed_notifs_${today}`;
+      const dismissed = new Set(JSON.parse(localStorage.getItem(key) || "[]"));
+
+      // Overdue tasks (due today or earlier)
+      const { data: todos, error: todosErr } = await supabase
+        .from("stage_todos")
+        .select("id, title")
+        .eq("is_done", false)
+        .lte("due_date", today)
+        .not("due_date", "is", null);
+
+      if (todosErr) console.warn("Notification todos error:", todosErr.message);
+
+      (todos || [])
+        .filter(t => !dismissed.has(`todo_${t.id}`))
+        .slice(0, 5)
+        .forEach(todo => {
+          let tid;
+          tid = sileo.warning({
+            title: "Overdue Task",
+            description: todo.title,
+            duration: null,
+            button: {
+              title: "Dismiss",
+              onClick: () => {
+                const list = JSON.parse(localStorage.getItem(key) || "[]");
+                list.push(`todo_${todo.id}`);
+                localStorage.setItem(key, JSON.stringify(list));
+                sileo.dismiss(tid);
+              },
+            },
+          });
+        });
+
+      // Milestone reminders (only if reminder_days column exists)
+      const { data: milestones, error: msErr } = await supabase
+        .from("project_milestones")
+        .select("id, type, label, date, reminder_days, track:tracks(name)")
+        .not("reminder_days", "is", null)
+        .gte("date", today);
+
+      if (msErr) {
+        console.warn("Milestone reminder query failed (reminder_days column may not exist yet):", msErr.message);
+      } else {
+        (milestones || [])
+          .filter(m => {
+            const daysUntil = Math.round(
+              (new Date(m.date + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000
+            );
+            return daysUntil <= m.reminder_days && !dismissed.has(`milestone_${m.id}`);
+          })
+          .forEach(m => {
+            const daysUntil = Math.round(
+              (new Date(m.date + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000
+            );
+            const cfg = MILESTONE_LABELS[m.type] || MILESTONE_LABELS.custom;
+            let mid;
+            mid = sileo.info({
+              title: `${cfg.emoji} ${m.label || cfg.label}`,
+              description: `${m.track?.name || "Project"} · ${daysUntil === 0 ? "Today" : `in ${daysUntil} day${daysUntil !== 1 ? "s" : ""}`}`,
+              duration: null,
+              button: {
+                title: "Dismiss",
+                onClick: () => {
+                  const list = JSON.parse(localStorage.getItem(key) || "[]");
+                  list.push(`milestone_${m.id}`);
+                  localStorage.setItem(key, JSON.stringify(list));
+                  sileo.dismiss(mid);
+                },
+              },
+            });
+          });
+      }
+    } catch (e) {
+      console.error("checkNotifications error:", e);
+    }
+  };
 
   const toggleLanguage = () => {
     const newLang = i18n.language === 'en' ? 'es' : 'en';

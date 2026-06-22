@@ -29,7 +29,7 @@ function KeyDatesSection({ trackId }) {
   const [milestones, setMilestones] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ type: "inspection", date: "", label: "", supplier_id: "" });
+  const [form, setForm] = useState({ type: "inspection", date: "", label: "", supplier_id: "", reminder_days: "" });
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -58,10 +58,11 @@ function KeyDatesSection({ trackId }) {
         label: form.type === "custom" ? form.label.trim() || null : null,
         date: form.date,
         supplier_id: form.supplier_id || null,
+        reminder_days: form.reminder_days !== "" ? parseInt(form.reminder_days) : null,
       });
       if (error) throw error;
       sileo.success({ title: "Key date added" });
-      setForm({ type: "inspection", date: "", label: "", supplier_id: "" });
+      setForm({ type: "inspection", date: "", label: "", supplier_id: "", reminder_days: "" });
       setShowForm(false);
       load();
     } catch (e) {
@@ -198,6 +199,26 @@ function KeyDatesSection({ trackId }) {
               {suppliers.map(s => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Reminder */}
+          <div>
+            <label className="block text-[11px] font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide mb-1">
+              Reminder
+            </label>
+            <select
+              value={form.reminder_days}
+              onChange={e => setForm(p => ({ ...p, reminder_days: e.target.value }))}
+              className={inputCls}
+            >
+              <option value="">No reminder</option>
+              <option value="0">Same day</option>
+              <option value="1">1 day before</option>
+              <option value="3">3 days before</option>
+              <option value="7">7 days before</option>
+              <option value="14">14 days before</option>
+              <option value="30">30 days before</option>
             </select>
           </div>
 

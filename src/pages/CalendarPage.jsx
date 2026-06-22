@@ -92,6 +92,7 @@ function AddMilestoneModal({ initialDate, projects, onClose, onSaved }) {
     label: "",
     date: initialDate || toDateStr(new Date()),
     notes: "",
+    reminder_days: "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -99,18 +100,18 @@ function AddMilestoneModal({ initialDate, projects, onClose, onSaved }) {
   const inputCls = "w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400";
 
   const handleSave = async () => {
-    if (!form.track_id) { setError("Please select a project"); return; }
     if (!form.date) { setError("Please select a date"); return; }
     setBusy(true);
     try {
       const { data, error: e } = await supabase
         .from("project_milestones")
         .insert({
-          track_id: form.track_id,
+          track_id: form.track_id || null,
           type: form.type,
           label: form.label.trim() || null,
           date: form.date,
           notes: form.notes.trim() || null,
+          reminder_days: form.reminder_days !== "" ? parseInt(form.reminder_days) : null,
         })
         .select("*, track:tracks(name, client:clients(name))")
         .single();
@@ -137,9 +138,9 @@ function AddMilestoneModal({ initialDate, projects, onClose, onSaved }) {
           {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
 
           <div>
-            <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Project *</label>
+            <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Project (optional)</label>
             <select value={form.track_id} onChange={e => setForm(p => ({ ...p, track_id: e.target.value }))} className={inputCls}>
-              <option value="">Select project…</option>
+              <option value="">No project</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>
                   {p.name}{p.client?.name ? ` — ${p.client.name}` : ""}
@@ -180,9 +181,23 @@ function AddMilestoneModal({ initialDate, projects, onClose, onSaved }) {
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Date *</label>
-            <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className={inputCls} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Date *</label>
+              <input type="date" value={form.date} onChange={e => setForm(p => ({ ...p, date: e.target.value }))} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Reminder</label>
+              <select value={form.reminder_days} onChange={e => setForm(p => ({ ...p, reminder_days: e.target.value }))} className={inputCls}>
+                <option value="">No reminder</option>
+                <option value="0">Same day</option>
+                <option value="1">1 day before</option>
+                <option value="3">3 days before</option>
+                <option value="7">7 days before</option>
+                <option value="14">14 days before</option>
+                <option value="30">30 days before</option>
+              </select>
+            </div>
           </div>
 
           <div>
@@ -193,7 +208,7 @@ function AddMilestoneModal({ initialDate, projects, onClose, onSaved }) {
 
         <div className="flex items-center justify-end gap-3 p-5 border-t border-bgray-200 dark:border-darkblack-400 sticky bottom-0 bg-white dark:bg-darkblack-600">
           <button onClick={onClose} className="px-4 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-bgray-600 dark:text-bgray-300 hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition">Cancel</button>
-          <button onClick={handleSave} disabled={!form.track_id || !form.date || busy} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition">
+          <button onClick={handleSave} disabled={!form.date || busy} className="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition">
             {busy ? "Saving…" : "Add Date"}
           </button>
         </div>
@@ -543,9 +558,18 @@ export default function CalendarPage() {
     supabase
       .from("tracks")
       .select("id, name, client:clients(name)")
-      .eq("status", "active")
       .order("name")
       .then(({ data }) => setProjects(data || []));
+  }, []);
+
+  // Re-trigger loadEvents when auth becomes available
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === "INITIAL_SESSION" || event === "SIGNED_IN")) {
+        loadEvents();
+      }
+    });
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => { loadEvents(); }, [year, month, filterProject, filterType]);
@@ -560,16 +584,43 @@ export default function CalendarPage() {
     };
 
     try {
-      // Only load manually-added project milestones
-      let mq = supabase
+      // Base milestone query without joins first (most reliable)
+      let baseQ = supabase
         .from("project_milestones")
-        .select("*, track:tracks(name, client:clients(name)), supplier:suppliers(name)")
+        .select("*")
         .gte("date", startDate)
         .lte("date", endDate);
-      if (filterProject) mq = mq.eq("track_id", filterProject);
-      if (filterType)    mq = mq.eq("type", filterType);
-      const { data: milestones } = await mq;
-      (milestones || []).forEach(m => add(m.date, { ...m, source: "milestone" }));
+      if (filterProject) baseQ = baseQ.eq("track_id", filterProject);
+      if (filterType)    baseQ = baseQ.eq("type", filterType);
+
+      const { data: milestones, error: msErr } = await baseQ;
+      if (msErr) throw msErr;
+
+      // Enrich with track & supplier names via separate queries
+      const rows = milestones || [];
+      if (rows.length > 0) {
+        const trackIds    = [...new Set(rows.map(m => m.track_id).filter(Boolean))];
+        const supplierIds = [...new Set(rows.map(m => m.supplier_id).filter(Boolean))];
+
+        const [tracksRes, suppliersRes] = await Promise.all([
+          trackIds.length
+            ? supabase.from("tracks").select("id, name, client:clients(name)").in("id", trackIds)
+            : { data: [] },
+          supplierIds.length
+            ? supabase.from("suppliers").select("id, name").in("id", supplierIds)
+            : { data: [] },
+        ]);
+
+        const trackMap    = Object.fromEntries((tracksRes.data    || []).map(t => [t.id, t]));
+        const supplierMap = Object.fromEntries((suppliersRes.data || []).map(s => [s.id, s]));
+
+        rows.forEach(m => add(m.date, {
+          ...m,
+          source: "milestone",
+          track: trackMap[m.track_id] || null,
+          supplier: supplierMap[m.supplier_id] || null,
+        }));
+      }
 
       setEvents(map);
     } catch (e) {
