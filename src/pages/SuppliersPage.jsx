@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
+import SupplierProductsTab from "../components/SupplierProductsTab";
 import AIClientScanner from "../components/AIClientScanner";
 import CountrySelect from "../components/CountrySelect";
 
@@ -121,6 +122,18 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
               Documents
             </button>
           )}
+          {!isNew && (
+            <button
+              onClick={() => setActiveTab("products")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "products"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Products
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -185,8 +198,10 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : activeTab === "documents" ? (
             <SupplierDocumentsTab supplierId={supplier.id} />
+          ) : (
+            <SupplierProductsTab supplierId={supplier.id} />
           )}
         </div>
 

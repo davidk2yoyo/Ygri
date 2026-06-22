@@ -204,7 +204,10 @@ function DocumentModal({ document, supplierId, quotations, onClose, onSaved }) {
             >
               <option value="">No quotation</option>
               {quotations.map(q => (
-                <option key={q.id} value={q.id}>{q.quote_number}</option>
+                <option key={q.id} value={q.id}>
+                  {[q.client_name, q.project_name].filter(Boolean).join(" · ")}
+                  {q.client_name || q.project_name ? ` (${q.quote_number})` : q.quote_number}
+                </option>
               ))}
             </select>
           </div>
@@ -439,7 +442,7 @@ export default function SupplierDocumentsTab({ supplierId }) {
       // Load quotations for dropdown
       const { data: quotationsData, error: quotationsError } = await supabase
         .from("quotations")
-        .select("id, quote_number")
+        .select("id, quote_number, client_name, project_name")
         .order("quote_number", { ascending: false });
 
       if (quotationsError) throw quotationsError;
@@ -564,7 +567,10 @@ export default function SupplierDocumentsTab({ supplierId }) {
           >
             <option value="">All Quotations</option>
             {quotations.map(q => (
-              <option key={q.id} value={q.id}>{q.quote_number}</option>
+              <option key={q.id} value={q.id}>
+                {[q.client_name, q.project_name].filter(Boolean).join(" · ")}
+                {q.client_name || q.project_name ? ` (${q.quote_number})` : q.quote_number}
+              </option>
             ))}
           </select>
           <svg
