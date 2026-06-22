@@ -308,7 +308,17 @@ function RescheduleModal({ milestone, onClose, onSaved }) {
 }
 
 // ─── Day Panel ────────────────────────────────────────────────────────────────
-function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete, onTodoDone }) {
+const REMINDER_OPTIONS = [
+  { value: "", label: "No reminder" },
+  { value: "0", label: "Same day" },
+  { value: "1", label: "1 day before" },
+  { value: "3", label: "3 days before" },
+  { value: "7", label: "7 days before" },
+  { value: "14", label: "14 days before" },
+  { value: "30", label: "30 days before" },
+];
+
+function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete, onTodoDone, onReminderSet }) {
   const navigate = useNavigate();
   const [expandedHistory, setExpandedHistory] = useState({});
   const [historyMap, setHistoryMap] = useState({});
@@ -329,6 +339,17 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete, onT
 
   const milestones = events.filter(e => e.source === "milestone");
   const todos      = events.filter(e => e.source === "todo");
+
+  const handleSetReminder = async (milestoneId, value) => {
+    const days = value === "" ? null : parseInt(value);
+    const { error } = await supabase
+      .from("project_milestones")
+      .update({ reminder_days: days })
+      .eq("id", milestoneId);
+    if (error) { sileo.error({ title: "Failed to set reminder", description: error.message }); return; }
+    sileo.success({ title: days === null ? "Reminder removed" : `Reminder set: ${REMINDER_OPTIONS.find(o => o.value === value)?.label}` });
+    onReminderSet();
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -393,6 +414,20 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete, onT
                             {m.notes && (
                               <div className="text-xs text-bgray-500 mt-1 italic">{m.notes}</div>
                             )}
+                            <div className="flex items-center gap-1 mt-1.5">
+                              <svg className="w-3 h-3 text-bgray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                              </svg>
+                              <select
+                                value={m.reminder_days != null ? String(m.reminder_days) : ""}
+                                onChange={e => handleSetReminder(m.id, e.target.value)}
+                                className="text-xs bg-transparent border-none outline-none cursor-pointer text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-200 transition"
+                              >
+                                {REMINDER_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                            </div>
                           </div>
                           <div className="flex items-center gap-0.5 flex-shrink-0">
                             <button
@@ -691,6 +726,8 @@ export default function CalendarPage() {
     setSelectedDate(updated.date);
   };
 
+  const handleReminderSet = () => { loadEvents(); };
+
   const handleTodoDone = async (todoId) => {
     const { error } = await supabase.rpc("update_stage_todo", { p_todo_id: todoId, p_done: true });
     if (error) { sileo.error({ title: "Error", description: error.message }); return; }
@@ -824,6 +861,7 @@ export default function CalendarPage() {
               onReschedule={(m) => setRescheduleModal(m)}
               onDelete={handleDelete}
               onTodoDone={handleTodoDone}
+              onReminderSet={handleReminderSet}
             />
           </div>
         )}
