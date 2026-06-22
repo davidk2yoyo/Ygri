@@ -293,6 +293,7 @@ export default function SuppliersPage() {
   const [search, setSearch] = useState("");
   const [modalSupplier, setModalSupplier] = useState(undefined); // undefined = closed, null = new, obj = edit
   const [itemCounts, setItemCounts] = useState({}); // supplierId → count
+  const [clientMap, setClientMap] = useState({}); // supplierId → [clientName, ...]
 
   const loadSuppliers = useCallback(async () => {
     setLoading(true);
@@ -302,16 +303,29 @@ export default function SuppliersPage() {
       if (error) throw error;
       setSuppliers(data || []);
 
-      // Load item counts per supplier
-      const { data: counts } = await supabase
+      // Load item counts + client associations per supplier
+      const { data: qiData } = await supabase
         .from("quotation_items")
-        .select("supplier_id")
+        .select("supplier_id, quotations(client_name)")
         .not("supplier_id", "is", null);
+
       const countMap = {};
-      (counts || []).forEach(row => {
-        countMap[row.supplier_id] = (countMap[row.supplier_id] || 0) + 1;
+      const cMap = {};
+      (qiData || []).forEach(row => {
+        const sid = row.supplier_id;
+        countMap[sid] = (countMap[sid] || 0) + 1;
+        const name = row.quotations?.client_name;
+        if (name) {
+          if (!cMap[sid]) cMap[sid] = new Set();
+          cMap[sid].add(name);
+        }
       });
       setItemCounts(countMap);
+      const clientMapResult = {};
+      Object.entries(cMap).forEach(([sid, set]) => {
+        clientMapResult[sid] = [...set].sort();
+      });
+      setClientMap(clientMapResult);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -478,6 +492,18 @@ export default function SuppliersPage() {
                   ))}
                   {s.tags.length > 3 && (
                     <span className="px-2 py-0.5 bg-bgray-100 dark:bg-darkblack-500 text-bgray-500 text-xs rounded-full">+{s.tags.length - 3}</span>
+                  )}
+                </div>
+              )}
+
+              {/* Client associations */}
+              {clientMap[s.id]?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {clientMap[s.id].slice(0, 3).map(c => (
+                    <span key={c} className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-xs rounded-full font-medium truncate max-w-[120px]" title={c}>{c}</span>
+                  ))}
+                  {clientMap[s.id].length > 3 && (
+                    <span className="px-2 py-0.5 bg-bgray-100 dark:bg-darkblack-500 text-bgray-500 text-xs rounded-full">+{clientMap[s.id].length - 3}</span>
                   )}
                 </div>
               )}
