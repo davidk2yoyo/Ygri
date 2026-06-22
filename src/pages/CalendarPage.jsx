@@ -27,11 +27,8 @@ const TW = {
   gray:    { bg: "bg-gray-50",     text: "text-gray-400",    dot: "bg-gray-300",    border: "border-gray-100"    },
 };
 
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
-];
-const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAY_NAMES   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function toDateStr(d) {
@@ -317,10 +314,7 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete }) {
     setExpandedHistory(p => ({ ...p, [milestoneId]: true }));
   };
 
-  const milestones  = events.filter(e => e.source === "milestone");
-  const stages      = events.filter(e => e.source === "stage_due");
-  const inspections = events.filter(e => e.source === "inspection_visit");
-  const todos       = events.filter(e => e.source === "todo");
+  const milestones = events.filter(e => e.source === "milestone");
 
   return (
     <div className="flex flex-col h-full">
@@ -439,70 +433,6 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete }) {
               </div>
             )}
 
-            {/* Stage deadlines */}
-            {stages.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-bgray-400 dark:text-bgray-500 uppercase tracking-wider mb-2">Stage Deadlines</div>
-                <div className="space-y-2">
-                  {stages.map(s => (
-                    <div key={s.id} className="flex items-center gap-2 p-2.5 bg-indigo-50 dark:bg-indigo-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800">
-                      <span className="text-sm flex-shrink-0">📅</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-indigo-700 dark:text-indigo-300 truncate">
-                          {s.stage_template?.name || "Stage"}
-                        </div>
-                        <div className="text-xs text-bgray-500 truncate">{s.track?.name}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Inspections */}
-            {inspections.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-bgray-400 dark:text-bgray-500 uppercase tracking-wider mb-2">Inspections</div>
-                <div className="space-y-2">
-                  {inspections.map(r => (
-                    <div
-                      key={r.id}
-                      onClick={() => navigate(`/reports/${r.id}/edit`)}
-                      className="flex items-center gap-2 p-2.5 bg-sky-50 dark:bg-sky-900/20 rounded-xl border border-sky-100 dark:border-sky-800 cursor-pointer hover:bg-sky-100 dark:hover:bg-sky-900/40 transition"
-                    >
-                      <span className="text-sm flex-shrink-0">🔎</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium text-sky-700 dark:text-sky-300 truncate">
-                          {r.title || r.report_number || "Inspection"}
-                        </div>
-                        <div className="text-xs text-bgray-500 truncate">{r.track?.name}</div>
-                      </div>
-                      <svg className="w-4 h-4 text-sky-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                      </svg>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Todos */}
-            {todos.length > 0 && (
-              <div>
-                <div className="text-xs font-semibold text-bgray-400 dark:text-bgray-500 uppercase tracking-wider mb-2">Tasks</div>
-                <div className="space-y-1.5">
-                  {todos.map(t => (
-                    <div key={t.id} className="flex items-start gap-2.5 p-2.5 bg-gray-50 dark:bg-darkblack-500 rounded-xl border border-gray-100 dark:border-darkblack-400">
-                      <div className="w-4 h-4 rounded border border-gray-300 dark:border-darkblack-300 mt-0.5 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm text-darkblack-700 dark:text-white truncate">{t.title}</div>
-                        <div className="text-xs text-bgray-400 truncate">{t.track_stage?.track?.name}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </>
         )}
       </div>
@@ -578,12 +508,6 @@ function Legend() {
           {cfg.label}
         </span>
       ))}
-      <span className="flex items-center gap-1 text-[11px] text-bgray-500 dark:text-bgray-400">
-        <span className="w-2 h-2 rounded-full bg-indigo-400" />Stage due
-      </span>
-      <span className="flex items-center gap-1 text-[11px] text-bgray-500 dark:text-bgray-400">
-        <span className="w-2 h-2 rounded-full bg-sky-400" />Inspection
-      </span>
     </div>
   );
 }
@@ -597,7 +521,6 @@ export default function CalendarPage() {
   const [projects, setProjects]   = useState([]);
   const [filterProject, setFilterProject] = useState("");
   const [filterType, setFilterType]       = useState("");
-  const [showTodos, setShowTodos]         = useState(false);
   const [selectedDate, setSelectedDate]   = useState(null);
   const [loading, setLoading]             = useState(true);
   const [addModal, setAddModal]           = useState(null);
@@ -617,7 +540,7 @@ export default function CalendarPage() {
       .then(({ data }) => setProjects(data || []));
   }, []);
 
-  useEffect(() => { loadEvents(); }, [year, month, filterProject, filterType, showTodos]);
+  useEffect(() => { loadEvents(); }, [year, month, filterProject, filterType]);
 
   const loadEvents = async () => {
     setLoading(true);
@@ -629,7 +552,7 @@ export default function CalendarPage() {
     };
 
     try {
-      // 1. Project milestones
+      // Only load manually-added project milestones
       let mq = supabase
         .from("project_milestones")
         .select("*, track:tracks(name, client:clients(name))")
@@ -639,45 +562,6 @@ export default function CalendarPage() {
       if (filterType)    mq = mq.eq("type", filterType);
       const { data: milestones } = await mq;
       (milestones || []).forEach(m => add(m.date, { ...m, source: "milestone" }));
-
-      // 2. Stage due dates
-      let sq = supabase
-        .from("track_stages")
-        .select("id, due_date, status, track_id, stage_template:stage_templates(name), track:tracks(name)")
-        .gte("due_date", startDate)
-        .lte("due_date", endDate)
-        .neq("status", "done")
-        .not("due_date", "is", null);
-      if (filterProject) sq = sq.eq("track_id", filterProject);
-      const { data: stages } = await sq;
-      (stages || []).forEach(s => add(s.due_date, { ...s, source: "stage_due" }));
-
-      // 3. Inspection visits
-      let iq = supabase
-        .from("inspection_reports")
-        .select("id, visit_date, report_number, title, status, track_id, track:tracks(name)")
-        .gte("visit_date", startDate)
-        .lte("visit_date", endDate)
-        .not("visit_date", "is", null);
-      if (filterProject) iq = iq.eq("track_id", filterProject);
-      const { data: inspections } = await iq;
-      (inspections || []).forEach(r => add(r.visit_date, { ...r, source: "inspection_visit" }));
-
-      // 4. Todos (optional toggle)
-      if (showTodos) {
-        const { data: todos } = await supabase
-          .from("stage_todos")
-          .select("id, due_date, title, track_stage:track_stages(track_id, track:tracks(name))")
-          .gte("due_date", startDate)
-          .lte("due_date", endDate)
-          .eq("is_done", false)
-          .not("due_date", "is", null);
-        (todos || []).forEach(t => {
-          if (!filterProject || t.track_stage?.track_id === filterProject) {
-            add(t.due_date, { ...t, source: "todo" });
-          }
-        });
-      }
 
       setEvents(map);
     } catch (e) {
@@ -775,16 +659,6 @@ export default function CalendarPage() {
             <option key={k} value={k}>{v.emoji} {v.label}</option>
           ))}
         </select>
-
-        <label className="flex items-center gap-1.5 text-sm text-bgray-600 dark:text-bgray-300 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={showTodos}
-            onChange={e => setShowTodos(e.target.checked)}
-            className="w-4 h-4 rounded border-bgray-300 text-primary focus:ring-primary"
-          />
-          Tasks
-        </label>
 
         <button
           onClick={() => setAddModal(todayStr)}
