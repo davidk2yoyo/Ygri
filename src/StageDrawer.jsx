@@ -4,6 +4,190 @@ import { supabase } from "./supabaseClient";
 import { sileo } from "sileo";
 import QuotationForm from "./components/QuotationForm";
 
+// ─── Key Dates Section ────────────────────────────────────────────────────────
+const MILESTONE_CONFIG = {
+  production_ready:   { label: "Production Ready",  emoji: "🏭", color: "orange" },
+  inspection:         { label: "Inspection",         emoji: "🔍", color: "blue"   },
+  shipping_departure: { label: "Departure",          emoji: "🚢", color: "teal"   },
+  estimated_arrival:  { label: "ETA / Arrival",      emoji: "📦", color: "purple" },
+  payment_balance:    { label: "Balance Payment",    emoji: "💰", color: "green"  },
+  client_delivery:    { label: "Client Delivery",    emoji: "✅", color: "emerald"},
+  custom:             { label: "Custom",             emoji: "📌", color: "slate"  },
+};
+
+const MILESTONE_COLORS = {
+  orange:  "bg-orange-100 text-orange-700",
+  blue:    "bg-blue-100 text-blue-700",
+  teal:    "bg-teal-100 text-teal-700",
+  purple:  "bg-purple-100 text-purple-700",
+  green:   "bg-green-100 text-green-700",
+  emerald: "bg-emerald-100 text-emerald-700",
+  slate:   "bg-slate-100 text-slate-600",
+};
+
+function KeyDatesSection({ trackId }) {
+  const [milestones, setMilestones] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ type: "inspection", date: "", label: "" });
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (trackId) load(); }, [trackId]);
+
+  const load = async () => {
+    const { data } = await supabase
+      .from("project_milestones")
+      .select("id, type, label, date, notes")
+      .eq("track_id", trackId)
+      .order("date");
+    setMilestones(data || []);
+  };
+
+  const handleAdd = async () => {
+    if (!form.date) { sileo.warning({ title: "Please pick a date" }); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("project_milestones").insert({
+        track_id: trackId,
+        type: form.type,
+        label: form.type === "custom" ? form.label.trim() || null : null,
+        date: form.date,
+      });
+      if (error) throw error;
+      sileo.success({ title: "Key date added" });
+      setForm({ type: "inspection", date: "", label: "" });
+      setShowForm(false);
+      load();
+    } catch (e) {
+      sileo.error({ title: "Failed to add date", description: e.message });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    const { error } = await supabase.from("project_milestones").delete().eq("id", id);
+    if (error) { sileo.error({ title: "Delete failed", description: error.message }); return; }
+    sileo.success({ title: "Date removed" });
+    setMilestones(p => p.filter(m => m.id !== id));
+  };
+
+  const inputCls = "w-full px-2.5 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400";
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="font-medium text-darkblack-700 dark:text-white">
+          Key Dates ({milestones.length})
+        </h4>
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold bg-primary/10 text-primary hover:bg-primary/20 transition"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+          </svg>
+          Add
+        </button>
+      </div>
+
+      {/* Existing milestones */}
+      {milestones.length > 0 && (
+        <div className="space-y-1.5 mb-3">
+          {milestones.map(m => {
+            const cfg = MILESTONE_CONFIG[m.type] || MILESTONE_CONFIG.custom;
+            const colors = MILESTONE_COLORS[cfg.color];
+            return (
+              <div key={m.id} className="flex items-center gap-2 group">
+                <span className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs font-medium flex-1 min-w-0 ${colors}`}>
+                  <span className="flex-shrink-0">{cfg.emoji}</span>
+                  <span className="truncate">{m.label || cfg.label}</span>
+                </span>
+                <span className="text-xs text-bgray-500 dark:text-bgray-400 flex-shrink-0 tabular-nums">
+                  {m.date}
+                </span>
+                <button
+                  onClick={() => handleDelete(m.id)}
+                  className="opacity-0 group-hover:opacity-100 transition p-0.5 text-bgray-400 hover:text-red-500"
+                  title="Remove"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {milestones.length === 0 && !showForm && (
+        <p className="text-xs text-bgray-400 dark:text-bgray-500 italic mb-2">No key dates yet.</p>
+      )}
+
+      {/* Inline add form */}
+      {showForm && (
+        <div className="p-3 bg-bgray-50 dark:bg-darkblack-500 rounded-xl border border-bgray-200 dark:border-darkblack-400 space-y-2.5">
+          {/* Type grid */}
+          <div className="grid grid-cols-2 gap-1.5">
+            {Object.entries(MILESTONE_CONFIG).map(([key, cfg]) => {
+              const colors = MILESTONE_COLORS[cfg.color];
+              const active = form.type === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setForm(p => ({ ...p, type: key }))}
+                  className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-xs border transition text-left ${
+                    active
+                      ? `${colors} border-current font-semibold`
+                      : "border-bgray-200 dark:border-darkblack-400 text-bgray-500 dark:text-bgray-400 hover:bg-white dark:hover:bg-darkblack-400"
+                  }`}
+                >
+                  <span>{cfg.emoji}</span>
+                  <span className="truncate">{cfg.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {form.type === "custom" && (
+            <input
+              type="text"
+              value={form.label}
+              onChange={e => setForm(p => ({ ...p, label: e.target.value }))}
+              placeholder="Custom label…"
+              className={inputCls}
+            />
+          )}
+
+          <input
+            type="date"
+            value={form.date}
+            onChange={e => setForm(p => ({ ...p, date: e.target.value }))}
+            className={inputCls}
+          />
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowForm(false)}
+              className="flex-1 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-xs text-bgray-500 dark:text-bgray-400 hover:bg-bgray-100 dark:hover:bg-darkblack-400 transition"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleAdd}
+              disabled={!form.date || saving}
+              className="flex-1 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 transition"
+            >
+              {saving ? "Saving…" : "Save Date"}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Report Tab ───────────────────────────────────────────────────────────────
 const STATUS_COLORS = {
   draft:                    "bg-gray-100 text-gray-600",
@@ -903,8 +1087,15 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                   </form>
                 </div>
 
+                {/* Key Dates Section */}
+                {trackId && (
+                  <div className="pt-2 border-t border-bgray-100 dark:border-darkblack-500">
+                    <KeyDatesSection trackId={trackId} />
+                  </div>
+                )}
+
               </div>
-              
+
               {/* Right Column */}
               <div className="space-y-6">
                 {/* Files Section */}
