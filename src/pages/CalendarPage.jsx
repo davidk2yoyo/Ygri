@@ -25,6 +25,7 @@ const TW = {
   indigo:  { bg: "bg-indigo-50",   text: "text-indigo-600",  dot: "bg-indigo-400",  border: "border-indigo-100"  },
   sky:     { bg: "bg-sky-50",      text: "text-sky-600",     dot: "bg-sky-400",     border: "border-sky-100"     },
   gray:    { bg: "bg-gray-50",     text: "text-gray-400",    dot: "bg-gray-300",    border: "border-gray-100"    },
+  amber:   { bg: "bg-amber-50",    text: "text-amber-700",   dot: "bg-amber-400",   border: "border-amber-200"   },
 };
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
@@ -65,22 +66,19 @@ function formatShortDate(dateStr) {
 
 function getEventColor(ev) {
   if (ev.source === "milestone") return TW[(MILESTONE_CONFIG[ev.type] || MILESTONE_CONFIG.custom).tw];
-  if (ev.source === "stage_due")        return TW.indigo;
-  if (ev.source === "inspection_visit") return TW.sky;
+  if (ev.source === "todo")      return TW.amber;
   return TW.gray;
 }
 
 function getEventEmoji(ev) {
   if (ev.source === "milestone") return (MILESTONE_CONFIG[ev.type] || MILESTONE_CONFIG.custom).emoji;
-  if (ev.source === "stage_due")        return "📅";
-  if (ev.source === "inspection_visit") return "🔎";
+  if (ev.source === "todo")      return "☑";
   return "✓";
 }
 
 function getEventLabel(ev) {
   if (ev.source === "milestone") return ev.label || (MILESTONE_CONFIG[ev.type] || MILESTONE_CONFIG.custom).label;
-  if (ev.source === "stage_due")        return ev.stage_template?.name || "Stage due";
-  if (ev.source === "inspection_visit") return ev.title || ev.report_number || "Inspection";
+  if (ev.source === "todo")      return ev.title;
   return ev.title || "Task";
 }
 
@@ -310,7 +308,7 @@ function RescheduleModal({ milestone, onClose, onSaved }) {
 }
 
 // ─── Day Panel ────────────────────────────────────────────────────────────────
-function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete }) {
+function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete, onTodoDone }) {
   const navigate = useNavigate();
   const [expandedHistory, setExpandedHistory] = useState({});
   const [historyMap, setHistoryMap] = useState({});
@@ -330,6 +328,7 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete }) {
   };
 
   const milestones = events.filter(e => e.source === "milestone");
+  const todos      = events.filter(e => e.source === "todo");
 
   return (
     <div className="flex flex-col h-full">
@@ -456,6 +455,25 @@ function DayPanel({ dateStr, events, onClose, onAdd, onReschedule, onDelete }) {
               </div>
             )}
 
+            {/* Tasks with due date */}
+            {todos.length > 0 && (
+              <div>
+                <div className="text-xs font-semibold text-bgray-400 dark:text-bgray-500 uppercase tracking-wider mb-2">Tasks</div>
+                <div className="space-y-2">
+                  {todos.map(t => (
+                    <div key={t.id} className="rounded-xl border p-3 border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 flex items-start gap-2">
+                      <button
+                        onClick={() => onTodoDone(t.id)}
+                        className="mt-0.5 w-4 h-4 flex-shrink-0 rounded-full border-2 border-amber-400 hover:border-emerald-500 hover:bg-emerald-50 transition flex items-center justify-center"
+                        title="Mark done"
+                      />
+                      <span className="text-sm text-amber-800 dark:text-amber-300 leading-snug">{t.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
           </>
         )}
       </div>
@@ -531,6 +549,10 @@ function Legend() {
           {cfg.label}
         </span>
       ))}
+      <span className="flex items-center gap-1 text-[11px] text-bgray-500 dark:text-bgray-400">
+        <span className={`w-2 h-2 rounded-full ${TW.amber.dot}`} />
+        Task
+      </span>
     </div>
   );
 }
@@ -622,6 +644,17 @@ export default function CalendarPage() {
         }));
       }
 
+      // Fetch pending todos with due dates in this calendar range
+      const { data: todoData } = await supabase
+        .from("stage_todos")
+        .select("id, title, due_date")
+        .eq("is_done", false)
+        .not("due_date", "is", null)
+        .gte("due_date", startDate)
+        .lte("due_date", endDate);
+
+      (todoData || []).forEach(t => add(t.due_date, { ...t, source: "todo" }));
+
       setEvents(map);
     } catch (e) {
       console.error("Calendar load error:", e);
@@ -656,6 +689,13 @@ export default function CalendarPage() {
     sileo.success({ title: "Date rescheduled", description: `Moved to ${formatShortDate(updated.date)}` });
     loadEvents();
     setSelectedDate(updated.date);
+  };
+
+  const handleTodoDone = async (todoId) => {
+    const { error } = await supabase.rpc("update_stage_todo", { p_todo_id: todoId, p_done: true });
+    if (error) { sileo.error({ title: "Error", description: error.message }); return; }
+    sileo.success({ title: "Task done" });
+    loadEvents();
   };
 
   const handleDelete = async (milestone) => {
@@ -783,6 +823,7 @@ export default function CalendarPage() {
               onAdd={(date) => setAddModal(date)}
               onReschedule={(m) => setRescheduleModal(m)}
               onDelete={handleDelete}
+              onTodoDone={handleTodoDone}
             />
           </div>
         )}
