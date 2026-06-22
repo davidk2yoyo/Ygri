@@ -113,17 +113,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           // Pre-cache supplier products for existing items
           const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
           if (uniqueIds.length > 0) {
-            const { data: spData } = await supabase
-              .from("supplier_products")
-              .select("id, name, description, price, currency, unit, min_order_qty, supplier_id")
-              .in("supplier_id", uniqueIds)
-              .order("name");
-            const grouped = {};
-            (spData || []).forEach(p => {
-              if (!grouped[p.supplier_id]) grouped[p.supplier_id] = [];
-              grouped[p.supplier_id].push(p);
-            });
-            setSupplierProductsCache(grouped);
+            uniqueIds.forEach(id => fetchSupplierProducts(id));
           }
         }
       }
@@ -190,11 +180,38 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const fetchSupplierProducts = async (supplierId) => {
     if (!supplierId || supplierProductsCache[supplierId] !== undefined) return;
     const { data } = await supabase
-      .from("supplier_products")
-      .select("id, name, description, price, currency, unit, min_order_qty")
+      .from("quotation_items")
+      .select("id, item_number, description, picture_url, supplier_price, supplier_currency, moq, catalog_item_id, quotations(created_at)")
       .eq("supplier_id", supplierId)
-      .order("name");
-    setSupplierProductsCache(p => ({ ...p, [supplierId]: data || [] }));
+      .not("description", "is", null)
+      .neq("description", "");
+
+    // Deduplicate by catalog_item_id or item_number+description, keep most recent
+    const grouped = new Map();
+    (data || []).forEach(qi => {
+      const key = qi.catalog_item_id
+        ? `cat::${qi.catalog_item_id}`
+        : `raw::${qi.item_number || ""}::${qi.description}`;
+      const existing = grouped.get(key);
+      if (!existing) {
+        grouped.set(key, qi);
+      } else {
+        const existDate = existing.quotations?.created_at || "";
+        const newDate = qi.quotations?.created_at || "";
+        if (newDate > existDate) grouped.set(key, qi);
+      }
+    });
+
+    const products = [...grouped.values()].map(qi => ({
+      id: qi.id,
+      item_number: qi.item_number || "",
+      name: qi.description,
+      price: qi.supplier_price,
+      currency: qi.supplier_currency,
+      min_order_qty: qi.moq,
+    }));
+
+    setSupplierProductsCache(p => ({ ...p, [supplierId]: products }));
   };
 
   const withTimeout = (promise, ms = 15000) =>
@@ -341,36 +358,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { error: itemsError } = await supabase.from("quotation_items").insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
-      // Auto-sync quoted items into each supplier's product catalog
-      const supplierIds = [...new Set(itemsToInsert.filter(it => it.supplier_id && it.description).map(it => it.supplier_id))];
-      if (supplierIds.length > 0) {
-        const { data: existingProds } = await supabase
-          .from("supplier_products")
-          .select("supplier_id, name")
-          .in("supplier_id", supplierIds);
-        const existingSet = new Set((existingProds || []).map(p => `${p.supplier_id}::${p.name.toLowerCase()}`));
-        const seen = new Set();
-        const newProducts = itemsToInsert.filter(it => {
-          if (!it.supplier_id || !it.description) return false;
-          const key = `${it.supplier_id}::${it.description.toLowerCase()}`;
-          if (existingSet.has(key) || seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        }).map(it => ({
-          supplier_id: it.supplier_id,
-          name: it.description,
-          price: it.supplier_price || null,
-          currency: it.supplier_currency || currency,
-          min_order_qty: it.moq || null,
-        }));
-        if (newProducts.length > 0) {
-          await supabase.from("supplier_products").insert(newProducts);
-          setSupplierProductsCache(p => {
-            const updated = { ...p };
-            supplierIds.forEach(id => delete updated[id]);
-            return updated;
-          });
-        }
+      // Invalidate supplier product cache so picker reflects the new items
+      const affectedSuppliers = [...new Set(itemsToInsert.filter(it => it.supplier_id).map(it => it.supplier_id))];
+      if (affectedSuppliers.length > 0) {
+        setSupplierProductsCache(p => {
+          const updated = { ...p };
+          affectedSuppliers.forEach(id => delete updated[id]);
+          return updated;
+        });
       }
 
       if (onSaved) onSaved(grandTotal, currency);
@@ -1034,6 +1029,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                     onMouseDown={() => {
                                       setItems(prev => prev.map((it, i) => i === idx ? {
                                         ...it,
+                                        item_number: p.item_number || it.item_number,
                                         description: p.name,
                                         supplier_price: p.price?.toString() || it.supplier_price,
                                         supplier_currency: p.currency && p.currency !== currency ? p.currency : it.supplier_currency,
@@ -1043,18 +1039,18 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                     }}
                                     className="w-full text-left px-3 py-2.5 hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition border-b border-bgray-100 dark:border-darkblack-400 last:border-0"
                                   >
-                                    <div className="text-sm font-medium text-darkblack-700 dark:text-white truncate">{p.name}</div>
+                                    {p.item_number && (
+                                      <p className="text-xs font-mono text-bgray-400 mb-0.5">{p.item_number}</p>
+                                    )}
+                                    <div className="text-sm font-medium text-darkblack-700 dark:text-white line-clamp-2">{p.name}</div>
                                     <div className="flex items-center gap-3 mt-0.5">
                                       {p.price != null && (
-                                        <span className="text-xs text-amber-600 font-medium">{p.currency} {Number(p.price).toLocaleString()} / {p.unit || "unit"}</span>
+                                        <span className="text-xs text-amber-600 font-medium">{p.currency} {Number(p.price).toLocaleString()}</span>
                                       )}
                                       {p.min_order_qty && (
                                         <span className="text-xs text-bgray-400">MOQ: {p.min_order_qty}</span>
                                       )}
                                     </div>
-                                    {p.description && (
-                                      <p className="text-xs text-bgray-400 mt-0.5 line-clamp-1">{p.description}</p>
-                                    )}
                                   </button>
                                 ))}
                               </div>
