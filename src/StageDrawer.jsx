@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
+import { sileo } from "sileo";
 import QuotationForm from "./components/QuotationForm";
 
 // ─── Report Tab ───────────────────────────────────────────────────────────────
@@ -290,11 +291,13 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       // Reset form and reload data
       setFileUpload(null);
       setFileLabel("");
-      const { data } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
+      const { data } = await supabase.rpc("get_stage_detail", {
+        p_track_stage_id: stageId
       });
       setStageDetail(data);
+      sileo.success({ title: "File uploaded" });
     } catch (err) {
+      sileo.error({ title: "Upload failed", description: err.message });
       setError(err.message || "Failed to upload file");
     } finally {
       setUploadingFile(false);
@@ -625,8 +628,10 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       setTodoDraft("");
       setNewTodoDueDate("");
       setNewTodoAssignee("");
+      sileo.success({ title: "Task added" });
       onUpdate?.();
     } catch (e) {
+      sileo.error({ title: "Failed to add task", description: e.message });
       setError(e.message);
     } finally {
       setBusy(false);
@@ -641,13 +646,14 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
         p_todo_id: todoId,
         p_done: !currentDone
       });
-      
-      // Reload stage detail
-      const { data } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
+
+      const { data } = await supabase.rpc("get_stage_detail", {
+        p_track_stage_id: stageId
       });
       setStageDetail(data);
+      if (!currentDone) sileo.success({ title: "Task completed" });
     } catch (e) {
+      sileo.error({ title: "Failed to update task", description: e.message });
       setError(e.message);
     } finally {
       setBusy(false);
@@ -658,13 +664,14 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const handleCompleteStage = async () => {
     try {
       setBusy(true);
-      await supabase.rpc("complete_stage_and_advance", { 
-        p_track_stage_id: stageId 
+      await supabase.rpc("complete_stage_and_advance", {
+        p_track_stage_id: stageId
       });
-      
-      onUpdate?.(); // This will refresh the parent view
-      onClose?.(); // Close the drawer since stage has changed
+      sileo.success({ title: "Stage completed", description: "Moving to next stage" });
+      onUpdate?.();
+      onClose?.();
     } catch (e) {
+      sileo.error({ title: "Failed to complete stage", description: e.message });
       setError(e.message);
     } finally {
       setBusy(false);
