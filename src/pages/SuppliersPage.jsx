@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
 import AIClientScanner from "../components/AIClientScanner";
+import CountrySelect from "../components/CountrySelect";
 
-const EMPTY_SUPPLIER = { name: "", address: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" };
+const EMPTY_SUPPLIER = { name: "", address: "", city: "", state: "", country: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" };
 
 function SupplierDrawer({ supplier, onClose, onSaved }) {
   const [form, setForm] = useState(supplier ? { ...supplier } : { ...EMPTY_SUPPLIER });
@@ -49,14 +50,8 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
     }
   };
 
-  const fields = [
-    { key: "name", label: "Company Name *", placeholder: "Supplier Co. Ltd", type: "text" },
-    { key: "address", label: "Address", placeholder: "City, Country", type: "text" },
-    { key: "email", label: "Email", placeholder: "contact@supplier.com", type: "email" },
-    { key: "sales_person", label: "Sales Person", placeholder: "Full name", type: "text" },
-    { key: "wechat_or_whatsapp", label: "WeChat / WhatsApp", placeholder: "+86 123 456 7890", type: "text" },
-    { key: "website", label: "Website", placeholder: "www.supplier.com", type: "text" },
-  ];
+  const inputCls = "w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400";
+  const labelCls = "block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide";
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-end sm:items-center justify-center z-50" onClick={onClose}>
@@ -95,7 +90,8 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
               email: data.email || prev.email,
               wechat_or_whatsapp: data.phone || prev.wechat_or_whatsapp,
               website: data.website || prev.website,
-              address: [data.address, data.country].filter(Boolean).join(", ") || prev.address,
+              address: data.address || prev.address,
+              country: data.country || prev.country,
             }))}
             onClose={() => setShowScanner(false)}
           />
@@ -134,20 +130,59 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
               {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
 
               <div className="grid grid-cols-2 gap-4">
-                {fields.map(({ key, label, placeholder, type }) => (
-                  <div key={key} className={key === "name" || key === "address" ? "col-span-2" : ""}>
-                    <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
-                      {label}
-                    </label>
-                    <input
-                      type={type}
-                      value={form[key]}
-                      onChange={e => setForm(p => ({ ...p, [key]: e.target.value }))}
-                      placeholder={placeholder}
-                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                    />
-                  </div>
-                ))}
+                {/* Company Name */}
+                <div className="col-span-2">
+                  <label className={labelCls}>Company Name *</label>
+                  <input type="text" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} placeholder="Supplier Co. Ltd" className={inputCls} />
+                </div>
+
+                {/* Address */}
+                <div className="col-span-2">
+                  <label className={labelCls}>Street Address</label>
+                  <input type="text" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} placeholder="Building / street / floor" className={inputCls} />
+                </div>
+
+                {/* Country */}
+                <div>
+                  <label className={labelCls}>Country</label>
+                  <CountrySelect value={form.country} onChange={v => setForm(p => ({ ...p, country: v }))} className={inputCls} />
+                </div>
+
+                {/* City */}
+                <div>
+                  <label className={labelCls}>City</label>
+                  <input type="text" value={form.city} onChange={e => setForm(p => ({ ...p, city: e.target.value }))} placeholder="e.g. Shanghai" className={inputCls} />
+                </div>
+
+                {/* State / Province */}
+                <div>
+                  <label className={labelCls}>State / Province</label>
+                  <input type="text" value={form.state} onChange={e => setForm(p => ({ ...p, state: e.target.value }))} placeholder="e.g. Jiangsu" className={inputCls} />
+                </div>
+
+                {/* Email */}
+                <div>
+                  <label className={labelCls}>Email</label>
+                  <input type="email" value={form.email} onChange={e => setForm(p => ({ ...p, email: e.target.value }))} placeholder="contact@supplier.com" className={inputCls} />
+                </div>
+
+                {/* Sales Person */}
+                <div>
+                  <label className={labelCls}>Sales Person</label>
+                  <input type="text" value={form.sales_person} onChange={e => setForm(p => ({ ...p, sales_person: e.target.value }))} placeholder="Full name" className={inputCls} />
+                </div>
+
+                {/* WeChat / WhatsApp */}
+                <div>
+                  <label className={labelCls}>WeChat / WhatsApp</label>
+                  <input type="text" value={form.wechat_or_whatsapp} onChange={e => setForm(p => ({ ...p, wechat_or_whatsapp: e.target.value }))} placeholder="+86 123 456 7890" className={inputCls} />
+                </div>
+
+                {/* Website */}
+                <div className="col-span-2">
+                  <label className={labelCls}>Website</label>
+                  <input type="text" value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} placeholder="www.supplier.com" className={inputCls} />
+                </div>
               </div>
             </div>
           ) : (
@@ -238,7 +273,7 @@ export default function SuppliersPage() {
   };
 
   const filtered = suppliers.filter(s =>
-    !search || [s.name, s.email, s.sales_person, s.address].some(f => f?.toLowerCase().includes(search.toLowerCase()))
+    !search || [s.name, s.email, s.sales_person, s.city, s.country, s.address].some(f => f?.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -364,13 +399,13 @@ export default function SuppliersPage() {
                     <span className="truncate">{s.website}</span>
                   </div>
                 )}
-                {s.address && (
+                {(s.city || s.country) && (
                   <div className="flex items-center gap-2 text-xs text-bgray-500 dark:text-bgray-400">
                     <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
-                    <span className="truncate">{s.address}</span>
+                    <span className="truncate">{[s.city, s.country].filter(Boolean).join(", ")}</span>
                   </div>
                 )}
               </div>

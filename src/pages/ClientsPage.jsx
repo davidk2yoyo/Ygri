@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import AIClientScanner from "../components/AIClientScanner";
+import CountrySelect from "../components/CountrySelect";
 
 // CSV utility functions
 const downloadCSV = (data, filename) => {
@@ -283,6 +284,8 @@ export default function ClientsPage() {
     phone: "",
     website: "",
     address: "",
+    city: "",
+    state: "",
     country: "",
     remark: ""
   });
@@ -351,6 +354,8 @@ export default function ClientsPage() {
       phone: "",
       website: "",
       address: "",
+      city: "",
+      state: "",
       country: "",
       remark: ""
     });
@@ -371,6 +376,8 @@ export default function ClientsPage() {
       phone: client.phone || "",
       website: client.website || "",
       address: client.address || "",
+      city: client.city || "",
+      state: client.state || "",
       country: client.country || "",
       remark: client.remark || ""
     });
@@ -403,6 +410,8 @@ export default function ClientsPage() {
         phone: formData.phone.trim() || null,
         website: formData.website.trim() || null,
         address: formData.address.trim() || null,
+        city: formData.city.trim() || null,
+        state: formData.state.trim() || null,
         country: formData.country.trim() || null,
         remark: formData.remark.trim() || null
       };
@@ -785,12 +794,33 @@ export default function ClientsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       {t("country")}
                     </label>
-                    <input
-                      type="text"
+                    <CountrySelect
                       value={formData.country}
-                      onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      onChange={(v) => setFormData({ ...formData, country: v })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                      <input
+                        type="text"
+                        value={formData.city}
+                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                        placeholder="e.g. Bogotá"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">State / Department</label>
+                      <input
+                        type="text"
+                        value={formData.state}
+                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
+                        placeholder="e.g. Cundinamarca"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                      />
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
