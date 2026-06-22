@@ -1,14 +1,52 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
 import SupplierProductsTab from "../components/SupplierProductsTab";
 import AIClientScanner from "../components/AIClientScanner";
 import CountrySelect from "../components/CountrySelect";
 
-const EMPTY_SUPPLIER = { name: "", address: "", city: "", state: "", country: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" };
+const EMPTY_SUPPLIER = { name: "", address: "", city: "", state: "", country: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "", tags: [] };
+
+function TagInput({ tags, onChange }) {
+  const [input, setInput] = useState("");
+  const inputRef = useRef(null);
+  const add = (raw) => {
+    const tag = raw.trim().toLowerCase().replace(/\s+/g, "-");
+    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
+    setInput("");
+  };
+  const remove = (t) => onChange(tags.filter(x => x !== t));
+  const handleKey = (e) => {
+    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(input); }
+    if (e.key === "Backspace" && !input && tags.length) remove(tags[tags.length - 1]);
+  };
+  return (
+    <div
+      className="flex flex-wrap gap-1.5 min-h-[38px] px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg bg-white dark:bg-darkblack-600 cursor-text"
+      onClick={() => inputRef.current?.focus()}
+    >
+      {tags.map(t => (
+        <span key={t} className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
+          {t}
+          <button type="button" onClick={() => remove(t)} className="hover:text-primary/60 transition">×</button>
+        </span>
+      ))}
+      <input
+        ref={inputRef}
+        type="text"
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={handleKey}
+        onBlur={() => { if (input.trim()) add(input); }}
+        placeholder={tags.length === 0 ? "e.g. machinery, valves, textiles…" : ""}
+        className="flex-1 min-w-[140px] text-sm bg-transparent outline-none text-darkblack-700 dark:text-white placeholder-bgray-400"
+      />
+    </div>
+  );
+}
 
 function SupplierDrawer({ supplier, onClose, onSaved }) {
-  const [form, setForm] = useState(supplier ? { ...supplier } : { ...EMPTY_SUPPLIER });
+  const [form, setForm] = useState(supplier ? { ...supplier, tags: supplier.tags || [] } : { ...EMPTY_SUPPLIER });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("details");
@@ -195,6 +233,13 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
                 <div className="col-span-2">
                   <label className={labelCls}>Website</label>
                   <input type="text" value={form.website} onChange={e => setForm(p => ({ ...p, website: e.target.value }))} placeholder="www.supplier.com" className={inputCls} />
+                </div>
+
+                {/* Industry Tags */}
+                <div className="col-span-2">
+                  <label className={labelCls}>Industry / Tags</label>
+                  <TagInput tags={form.tags} onChange={v => setForm(p => ({ ...p, tags: v }))} />
+                  <p className="text-xs text-bgray-400 mt-1">Press Enter or comma to add. Used to identify what this supplier specializes in.</p>
                 </div>
               </div>
             </div>
@@ -424,6 +469,18 @@ export default function SuppliersPage() {
                   </div>
                 )}
               </div>
+
+              {/* Industry tags */}
+              {s.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-3">
+                  {s.tags.slice(0, 3).map(t => (
+                    <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">{t}</span>
+                  ))}
+                  {s.tags.length > 3 && (
+                    <span className="px-2 py-0.5 bg-bgray-100 dark:bg-darkblack-500 text-bgray-500 text-xs rounded-full">+{s.tags.length - 3}</span>
+                  )}
+                </div>
+              )}
 
               {/* Edit hint */}
               <div className="mt-4 pt-3 border-t border-bgray-100 dark:border-darkblack-400 flex items-center justify-end">

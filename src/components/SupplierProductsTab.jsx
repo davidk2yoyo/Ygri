@@ -1,58 +1,6 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
-
-// ── Tag input ────────────────────────────────────────────────────────────────
-function TagInput({ tags, onChange }) {
-  const [input, setInput] = useState("");
-  const inputRef = useRef(null);
-
-  const add = (raw) => {
-    const tag = raw.trim().toLowerCase().replace(/\s+/g, "-");
-    if (tag && !tags.includes(tag)) onChange([...tags, tag]);
-    setInput("");
-  };
-
-  const remove = (t) => onChange(tags.filter(x => x !== t));
-
-  const handleKey = (e) => {
-    if (e.key === "Enter" || e.key === ",") { e.preventDefault(); add(input); }
-    if (e.key === "Backspace" && !input && tags.length) remove(tags[tags.length - 1]);
-  };
-
-  return (
-    <div
-      className="flex flex-wrap gap-1.5 min-h-[38px] px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg bg-white dark:bg-darkblack-600 cursor-text"
-      onClick={() => inputRef.current?.focus()}
-    >
-      {tags.map(t => (
-        <span
-          key={t}
-          className="inline-flex items-center gap-1 px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium"
-        >
-          {t}
-          <button
-            type="button"
-            onClick={() => remove(t)}
-            className="hover:text-primary/60 transition"
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        ref={inputRef}
-        type="text"
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        onKeyDown={handleKey}
-        onBlur={() => { if (input.trim()) add(input); }}
-        placeholder={tags.length === 0 ? "Add tags, press Enter…" : ""}
-        className="flex-1 min-w-[120px] text-sm bg-transparent outline-none text-darkblack-700 dark:text-white placeholder-bgray-400"
-      />
-    </div>
-  );
-}
 
 // ── Product modal ────────────────────────────────────────────────────────────
 function ProductModal({ product, supplierId, onClose, onSaved }) {
@@ -61,7 +9,6 @@ function ProductModal({ product, supplierId, onClose, onSaved }) {
     name: product?.name || "",
     description: product?.description || "",
     specifications: product?.specifications || "",
-    tags: product?.tags || [],
     price: product?.price || "",
     currency: product?.currency || "USD",
     unit: product?.unit || "",
@@ -83,7 +30,6 @@ function ProductModal({ product, supplierId, onClose, onSaved }) {
         name: form.name.trim(),
         description: form.description.trim() || null,
         specifications: form.specifications.trim() || null,
-        tags: form.tags,
         price: form.price ? parseFloat(form.price) : null,
         currency: form.currency,
         unit: form.unit.trim() || null,
@@ -139,12 +85,6 @@ function ProductModal({ product, supplierId, onClose, onSaved }) {
               className={inputCls}
               autoFocus
             />
-          </div>
-
-          <div>
-            <label className={labelCls}>Tags</label>
-            <TagInput tags={form.tags} onChange={v => setForm(p => ({ ...p, tags: v }))} />
-            <p className="text-xs text-bgray-400 mt-1">Press Enter or comma to add. Used for search across all suppliers.</p>
           </div>
 
           <div>
@@ -279,16 +219,6 @@ function ProductCard({ product, onEdit, onDelete }) {
         <p className="text-xs text-bgray-500 dark:text-bgray-400 mb-2 line-clamp-2">{product.description}</p>
       )}
 
-      {product.tags?.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {product.tags.map(t => (
-            <span key={t} className="px-2 py-0.5 bg-primary/10 text-primary text-xs rounded-full font-medium">
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-
       <div className="flex items-center justify-between mt-auto pt-2 border-t border-bgray-100 dark:border-darkblack-400">
         {hasPrice ? (
           <span className="text-sm font-semibold text-darkblack-700 dark:text-white">
@@ -311,7 +241,6 @@ export default function SupplierProductsTab({ supplierId }) {
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [activeTag, setActiveTag] = useState("");
   const [modal, setModal] = useState(undefined); // undefined = closed, null = new, obj = edit
 
   useEffect(() => { load(); }, [supplierId]);
@@ -346,21 +275,14 @@ export default function SupplierProductsTab({ supplierId }) {
     setProducts(p => p.filter(x => x.id !== product.id));
   };
 
-  // All unique tags across this supplier's products
-  const allTags = [...new Set(products.flatMap(p => p.tags || []))].sort();
-
   const filtered = products.filter(p => {
-    if (activeTag && !p.tags?.includes(activeTag)) return false;
-    if (search) {
-      const q = search.toLowerCase();
-      return (
-        p.name.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q) ||
-        p.specifications?.toLowerCase().includes(q) ||
-        p.tags?.some(t => t.includes(q))
-      );
-    }
-    return true;
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      p.description?.toLowerCase().includes(q) ||
+      p.specifications?.toLowerCase().includes(q)
+    );
   });
 
   return (
@@ -397,35 +319,6 @@ export default function SupplierProductsTab({ supplierId }) {
           className="w-full pl-9 pr-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
         />
       </div>
-
-      {/* Tag filter pills */}
-      {allTags.length > 0 && (
-        <div className="flex flex-wrap gap-1.5 mb-5">
-          <button
-            onClick={() => setActiveTag("")}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-              !activeTag
-                ? "bg-primary text-white"
-                : "bg-bgray-100 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 hover:bg-bgray-200 dark:hover:bg-darkblack-400"
-            }`}
-          >
-            All
-          </button>
-          {allTags.map(t => (
-            <button
-              key={t}
-              onClick={() => setActiveTag(activeTag === t ? "" : t)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition ${
-                activeTag === t
-                  ? "bg-primary text-white"
-                  : "bg-bgray-100 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 hover:bg-bgray-200 dark:hover:bg-darkblack-400"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Content */}
       {loading ? (

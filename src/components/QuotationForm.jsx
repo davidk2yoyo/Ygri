@@ -58,6 +58,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [previewImage, setPreviewImage] = useState(null);
   const [supplierSearches, setSupplierSearches] = useState({});
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
+  const [supplierProductsCache, setSupplierProductsCache] = useState({});
+  const [showProductPicker, setShowProductPicker] = useState(null);
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -108,6 +110,21 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             tempId: qi.id,
             picturePreview: qi.picture_url || "",
           })));
+          // Pre-cache supplier products for existing items
+          const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
+          if (uniqueIds.length > 0) {
+            const { data: spData } = await supabase
+              .from("supplier_products")
+              .select("id, name, description, price, currency, unit, min_order_qty, supplier_id")
+              .in("supplier_id", uniqueIds)
+              .order("name");
+            const grouped = {};
+            (spData || []).forEach(p => {
+              if (!grouped[p.supplier_id]) grouped[p.supplier_id] = [];
+              grouped[p.supplier_id].push(p);
+            });
+            setSupplierProductsCache(grouped);
+          }
         }
       }
     } catch (e) {
@@ -168,6 +185,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setSupplierItemIndex(idx);
     setNewSupplier({ name: "", address: "", email: "", sales_person: "", wechat_or_whatsapp: "", website: "" });
     setShowSupplierModal(true);
+  };
+
+  const fetchSupplierProducts = async (supplierId) => {
+    if (!supplierId || supplierProductsCache[supplierId] !== undefined) return;
+    const { data } = await supabase
+      .from("supplier_products")
+      .select("id, name, description, price, currency, unit, min_order_qty")
+      .eq("supplier_id", supplierId)
+      .order("name");
+    setSupplierProductsCache(p => ({ ...p, [supplierId]: data || [] }));
   };
 
   const withTimeout = (promise, ms = 15000) =>
@@ -924,6 +951,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                           updateItem(idx, "supplier_id", s.id);
                                           setSupplierSearches(p => ({ ...p, [item.tempId]: s.name }));
                                           setShowSupplierDropdown(null);
+                                          fetchSupplierProducts(s.id);
                                         }}
                                         className={`w-full text-left px-3 py-2 text-sm hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition ${
                                           item.supplier_id === s.id ? "font-semibold text-primary" : "text-darkblack-700 dark:text-white"
@@ -948,6 +976,60 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                           + New
                         </button>
                       </div>
+
+                      {/* Supplier product picker */}
+                      {item.supplier_id && (() => {
+                        const prods = supplierProductsCache[item.supplier_id];
+                        if (!prods || prods.length === 0) return null;
+                        return (
+                          <div className="relative mt-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setShowProductPicker(showProductPicker === idx ? null : idx)}
+                              className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-medium transition"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                              </svg>
+                              Pick from {prods.length} product{prods.length !== 1 ? "s" : ""} in this supplier's catalog
+                            </button>
+                            {showProductPicker === idx && (
+                              <div className="absolute z-30 top-full left-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl w-80 max-h-64 overflow-y-auto">
+                                {prods.map(p => (
+                                  <button
+                                    key={p.id}
+                                    type="button"
+                                    onMouseDown={() => {
+                                      setItems(prev => prev.map((it, i) => i === idx ? {
+                                        ...it,
+                                        description: p.name,
+                                        supplier_price: p.price?.toString() || it.supplier_price,
+                                        supplier_currency: p.currency && p.currency !== currency ? p.currency : it.supplier_currency,
+                                        moq: p.min_order_qty?.toString() || it.moq,
+                                      } : it));
+                                      setShowProductPicker(null);
+                                    }}
+                                    className="w-full text-left px-3 py-2.5 hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition border-b border-bgray-100 dark:border-darkblack-400 last:border-0"
+                                  >
+                                    <div className="text-sm font-medium text-darkblack-700 dark:text-white truncate">{p.name}</div>
+                                    <div className="flex items-center gap-3 mt-0.5">
+                                      {p.price != null && (
+                                        <span className="text-xs text-amber-600 font-medium">{p.currency} {Number(p.price).toLocaleString()} / {p.unit || "unit"}</span>
+                                      )}
+                                      {p.min_order_qty && (
+                                        <span className="text-xs text-bgray-400">MOQ: {p.min_order_qty}</span>
+                                      )}
+                                    </div>
+                                    {p.description && (
+                                      <p className="text-xs text-bgray-400 mt-0.5 line-clamp-1">{p.description}</p>
+                                    )}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
                 </div>
