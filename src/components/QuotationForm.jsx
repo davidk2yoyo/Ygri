@@ -341,6 +341,38 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { error: itemsError } = await supabase.from("quotation_items").insert(itemsToInsert);
       if (itemsError) throw itemsError;
 
+      // Auto-sync quoted items into each supplier's product catalog
+      const supplierIds = [...new Set(itemsToInsert.filter(it => it.supplier_id && it.description).map(it => it.supplier_id))];
+      if (supplierIds.length > 0) {
+        const { data: existingProds } = await supabase
+          .from("supplier_products")
+          .select("supplier_id, name")
+          .in("supplier_id", supplierIds);
+        const existingSet = new Set((existingProds || []).map(p => `${p.supplier_id}::${p.name.toLowerCase()}`));
+        const seen = new Set();
+        const newProducts = itemsToInsert.filter(it => {
+          if (!it.supplier_id || !it.description) return false;
+          const key = `${it.supplier_id}::${it.description.toLowerCase()}`;
+          if (existingSet.has(key) || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        }).map(it => ({
+          supplier_id: it.supplier_id,
+          name: it.description,
+          price: it.supplier_price || null,
+          currency: it.supplier_currency || currency,
+          min_order_qty: it.moq || null,
+        }));
+        if (newProducts.length > 0) {
+          await supabase.from("supplier_products").insert(newProducts);
+          setSupplierProductsCache(p => {
+            const updated = { ...p };
+            supplierIds.forEach(id => delete updated[id]);
+            return updated;
+          });
+        }
+      }
+
       if (onSaved) onSaved(grandTotal, currency);
     } catch (e) {
       setError(e.message);
