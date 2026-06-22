@@ -1,6 +1,155 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 import QuotationForm from "./components/QuotationForm";
+
+// ─── Report Tab ───────────────────────────────────────────────────────────────
+const STATUS_COLORS = {
+  draft:                    "bg-gray-100 text-gray-600",
+  approved:                 "bg-green-100 text-green-700",
+  approved_with_observations: "bg-yellow-100 text-yellow-700",
+  rejected:                 "bg-red-100 text-red-700",
+};
+
+function ReportTab({ trackId, projectName, clientName, onClose }) {
+  const navigate = useNavigate();
+  const [reports, setReports] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    if (!trackId) return;
+    let cancelled = false;
+    setLoading(true);
+    supabase
+      .from("inspection_reports")
+      .select("id, report_number, title, status, visit_date, created_at")
+      .eq("track_id", trackId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        if (!cancelled) { setReports(data || []); setLoading(false); }
+      });
+    return () => { cancelled = true; };
+  }, [trackId]);
+
+  const handleCreate = async () => {
+    setCreating(true);
+    try {
+      // 1. Insert report linked to this track
+      const { data: rpt, error: rptErr } = await supabase
+        .from("inspection_reports")
+        .insert({
+          title: `${projectName || "Inspection"} — Report`,
+          track_id: trackId,
+        })
+        .select()
+        .single();
+      if (rptErr) throw rptErr;
+
+      // 2. Insert a cover block pre-filled with project + client
+      await supabase.from("report_blocks").insert({
+        report_id: rpt.id,
+        type: "cover",
+        sort_order: 0,
+        content: {
+          project_name: projectName || "",
+          client_name:  clientName  || "",
+          inspector_name: "", visit_date: "", supplier_id: null,
+          supplier_name: "", supplier_address: "", po_number: "",
+          country: "", report_type: "", attached_docs: [],
+        },
+      });
+
+      // 3. Navigate to editor (close drawer first)
+      onClose();
+      navigate(`/reports/${rpt.id}/edit`, { state: { from: "drawer" } });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const openReport = (rpt) => {
+    onClose();
+    navigate(`/reports/${rpt.id}/edit`, { state: { from: "drawer" } });
+  };
+
+  return (
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-bgray-500 dark:text-bgray-400">
+          {loading ? "Loading…" : `${reports.length} report${reports.length !== 1 ? "s" : ""} linked to this project`}
+        </p>
+        <button
+          onClick={handleCreate}
+          disabled={creating}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90 transition disabled:opacity-60"
+        >
+          {creating ? (
+            <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          ) : (
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          )}
+          {creating ? "Creating…" : "New Report"}
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8">
+          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : reports.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <div className="w-12 h-12 rounded-full bg-bgray-100 dark:bg-darkblack-500 flex items-center justify-center">
+            <svg className="w-6 h-6 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-sm font-medium text-darkblack-700 dark:text-white">No inspection reports yet</p>
+            <p className="text-xs text-bgray-400 mt-0.5">Click "New Report" to create one linked to this project</p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {reports.map(rpt => (
+            <button
+              key={rpt.id}
+              onClick={() => openReport(rpt)}
+              className="w-full text-left flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-bgray-200 dark:border-darkblack-400 hover:border-primary hover:bg-primary/5 transition group"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-darkblack-700 dark:text-white truncate">
+                  {rpt.title || rpt.report_number}
+                </p>
+                <p className="text-xs text-bgray-400 mt-0.5">
+                  {rpt.report_number}
+                  {rpt.visit_date ? ` · ${rpt.visit_date}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {rpt.status && (
+                  <span className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${STATUS_COLORS[rpt.status] || "bg-gray-100 text-gray-600"}`}>
+                    {rpt.status.replace(/_/g, " ")}
+                  </span>
+                )}
+                <svg className="w-4 h-4 text-bgray-300 group-hover:text-primary transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId }) {
   const [stageDetail, setStageDetail] = useState(null);
@@ -568,13 +717,9 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
           {stageDetail && trackId && (
             <div className="flex gap-0 px-6">
               {[
-                { key: "details", label: "Stage Details" },
-                {
-                  key: "quotation",
-                  label: stageDetail.stage?.name?.toLowerCase().includes("quotation")
-                    ? "📋 Quotation"
-                    : "📋 Quotation",
-                },
+                { key: "details",  label: "Stage Details" },
+                { key: "quotation", label: "📋 Quotation" },
+                { key: "report",    label: "📄 Report" },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -621,6 +766,16 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                 onClose={() => setActiveTab("details")}
               />
             </div>
+          )}
+
+          {/* Report Tab */}
+          {stageDetail && activeTab === "report" && trackId && (
+            <ReportTab
+              trackId={trackId}
+              projectName={projectName}
+              clientName={clientName}
+              onClose={onClose}
+            />
           )}
 
           {stageDetail && activeTab === "details" && (

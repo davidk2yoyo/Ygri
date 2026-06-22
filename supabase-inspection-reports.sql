@@ -1,3 +1,9 @@
+-- Link inspection reports to a project/track
+ALTER TABLE inspection_reports
+  ADD COLUMN IF NOT EXISTS track_id uuid REFERENCES tracks(track_id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS inspection_reports_track_id_idx ON inspection_reports(track_id);
+
 -- Add language column to inspection_reports
 ALTER TABLE inspection_reports
   ADD COLUMN IF NOT EXISTS language text NOT NULL DEFAULT 'en'
