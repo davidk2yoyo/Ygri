@@ -90,6 +90,22 @@ function map17Status(status) {
   return null;
 }
 
+function get17TrackCode(carrier) {
+  if (!carrier) return null;
+  const c = carrier.toLowerCase();
+  if (c.includes("dhl"))   return 100001;
+  if (c.includes("ups"))   return 100002;
+  if (c.includes("fedex")) return 100003;
+  if (c.includes("tnt"))   return 100004;
+  if (c.includes("sf"))    return 100012;
+  return null;
+}
+
+function buildTrackItem(trackingNumber, carrier) {
+  const code = get17TrackCode(carrier);
+  return code ? { number: trackingNumber, carrier: code } : { number: trackingNumber };
+}
+
 async function call17Track(action, numbers) {
   const res = await fetch("/api/17track", {
     method: "POST",
@@ -183,8 +199,8 @@ export default function ProjectShipmentsSection({ trackId }) {
       } else {
         const { error: err } = await supabase.from("shipments").insert([payload]);
         if (err) throw err;
-        // Auto-register with 17Track
-        call17Track("register", [payload.tracking_number]).catch(() => {});
+        // Auto-register with 17Track (include carrier code for detection)
+        call17Track("register", [buildTrackItem(payload.tracking_number, payload.carrier)]).catch(() => {});
       }
       closeModal();
       await fetchShipments();
@@ -209,7 +225,10 @@ export default function ProjectShipmentsSection({ trackId }) {
   const refreshTracking = async (shipment) => {
     setRefreshingId(shipment.id);
     try {
-      const data = await call17Track("gettrackinfo", [shipment.tracking_number]);
+      const item = buildTrackItem(shipment.tracking_number, shipment.carrier);
+      // Register first (idempotent — re-registering is fine, and needed if not yet registered)
+      await call17Track("register", [item]).catch(() => {});
+      const data = await call17Track("gettrackinfo", [item]);
       const accepted = data?.data?.accepted?.[0];
       if (!accepted) throw new Error("Tracking number not found in 17Track");
       const info = accepted.track_info;
@@ -219,6 +238,8 @@ export default function ProjectShipmentsSection({ trackId }) {
         ...(mappedStatus && { status: mappedStatus }),
         ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
         ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        ...(info?.shipping_info?.shipper_address?.country && !shipment.origin && { origin: info.shipping_info.shipper_address.country }),
+        ...(info?.shipping_info?.recipient_address?.city && !shipment.destination && { destination: info.shipping_info.recipient_address.city }),
         updated_at: new Date().toISOString(),
       };
       const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);

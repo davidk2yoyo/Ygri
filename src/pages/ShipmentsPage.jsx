@@ -79,6 +79,42 @@ function formatETA(dateStr) {
   }
 }
 
+function map17Status(status) {
+  if (!status) return null;
+  const s = status.toLowerCase();
+  if (s === "delivered") return "delivered";
+  if (["intransit", "pickedup", "outfordelivery", "availableforpickup"].includes(s)) return "in_transit";
+  if (["exception", "expired", "undelivered", "deliveryfailure", "attemptfail", "returning", "returned"].includes(s)) return "exception";
+  if (["inforeceived", "notfound"].includes(s)) return "pending";
+  return null;
+}
+
+function get17TrackCode(carrier) {
+  if (!carrier) return null;
+  const c = carrier.toLowerCase();
+  if (c.includes("dhl"))   return 100001;
+  if (c.includes("ups"))   return 100002;
+  if (c.includes("fedex")) return 100003;
+  if (c.includes("tnt"))   return 100004;
+  if (c.includes("sf"))    return 100012;
+  return null;
+}
+
+function buildTrackItem(trackingNumber, carrier) {
+  const code = get17TrackCode(carrier);
+  return code ? { number: trackingNumber, carrier: code } : { number: trackingNumber };
+}
+
+async function call17Track(action, items) {
+  const res = await fetch("/api/17track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, numbers: items }),
+  });
+  if (!res.ok) throw new Error(`17Track proxy error: ${res.status}`);
+  return res.json();
+}
+
 const BLANK_FORM = {
   tracking_number: "",
   carrier: "DHL",
@@ -209,6 +245,8 @@ export default function ShipmentsPage() {
       } else {
         const { error: err } = await supabase.from("shipments").insert([payload]);
         if (err) throw err;
+        // Auto-register with 17Track on create
+        call17Track("register", [buildTrackItem(payload.tracking_number, payload.carrier)]).catch(() => {});
       }
       closeModal();
       await fetchShipments();
@@ -233,24 +271,22 @@ export default function ShipmentsPage() {
   const refreshTracking = async (shipment) => {
     setRefreshingId(shipment.id);
     try {
-      const res = await fetch("/api/17track", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "gettrackinfo", numbers: [shipment.tracking_number] }),
-      });
-      if (!res.ok) throw new Error(`17Track proxy error: ${res.status}`);
-      const data = await res.json();
+      const item = buildTrackItem(shipment.tracking_number, shipment.carrier);
+      // Register first (idempotent — needed if not yet registered)
+      await call17Track("register", [item]).catch(() => {});
+      const data = await call17Track("gettrackinfo", [item]);
       const accepted = data?.data?.accepted?.[0];
       if (!accepted) throw new Error("Tracking number not found in 17Track");
       const info = accepted.track_info;
-      const statusMap = { delivered: "delivered", intransit: "in_transit", pickedup: "in_transit", outfordelivery: "in_transit", availableforpickup: "in_transit", exception: "exception", expired: "exception", undelivered: "exception", deliveryfailure: "exception", attemptfail: "exception", returning: "exception", returned: "exception" };
-      const raw = info?.latest_status?.status?.toLowerCase();
-      const mappedStatus = statusMap[raw] || null;
+      const mappedStatus = map17Status(info?.latest_status?.status);
       const latestEvent = info?.latest_event;
+      const shippingInfo = info?.shipping_info;
       const update = {
         ...(mappedStatus && { status: mappedStatus }),
         ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
         ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        ...(shippingInfo?.shipper_address?.country && !shipment.origin && { origin: shippingInfo.shipper_address.country }),
+        ...(shippingInfo?.recipient_address?.city && !shipment.destination && { destination: shippingInfo.recipient_address.city }),
         updated_at: new Date().toISOString(),
       };
       const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);

@@ -27,7 +27,7 @@ export default async function handler(req, res) {
         "17token": API_KEY,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(numbers.map(n => ({ number: n }))),
+      body: JSON.stringify(numbers.map(n => typeof n === "object" ? n : { number: n })),
     });
 
     const data = await response.json();
