@@ -104,6 +104,7 @@ export default function ShipmentsPage() {
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [refreshingId, setRefreshingId] = useState(null);
 
   const fetchShipments = useCallback(async () => {
     setLoading(true);
@@ -226,6 +227,39 @@ export default function ShipmentsPage() {
       await fetchShipments();
     } catch (e) {
       alert("Error deleting shipment: " + e.message);
+    }
+  };
+
+  const refreshTracking = async (shipment) => {
+    setRefreshingId(shipment.id);
+    try {
+      const res = await fetch("/api/17track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "gettrackinfo", numbers: [shipment.tracking_number] }),
+      });
+      if (!res.ok) throw new Error(`17Track proxy error: ${res.status}`);
+      const data = await res.json();
+      const accepted = data?.data?.accepted?.[0];
+      if (!accepted) throw new Error("Tracking number not found in 17Track");
+      const info = accepted.track_info;
+      const statusMap = { delivered: "delivered", intransit: "in_transit", pickedup: "in_transit", outfordelivery: "in_transit", availableforpickup: "in_transit", exception: "exception", expired: "exception", undelivered: "exception", deliveryfailure: "exception", attemptfail: "exception", returning: "exception", returned: "exception" };
+      const raw = info?.latest_status?.status?.toLowerCase();
+      const mappedStatus = statusMap[raw] || null;
+      const latestEvent = info?.latest_event;
+      const update = {
+        ...(mappedStatus && { status: mappedStatus }),
+        ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
+        ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        updated_at: new Date().toISOString(),
+      };
+      const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);
+      if (err) throw err;
+      await fetchShipments();
+    } catch (e) {
+      alert("Tracking refresh failed: " + e.message);
+    } finally {
+      setRefreshingId(null);
     }
   };
 
@@ -418,6 +452,20 @@ export default function ShipmentsPage() {
                       {/* Actions */}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
+                          <button
+                            onClick={() => refreshTracking(s)}
+                            disabled={refreshingId === s.id}
+                            className="p-1.5 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-900/30 text-blue-500 dark:text-blue-400 transition disabled:opacity-50"
+                            title="Refresh tracking"
+                          >
+                            <svg
+                              className={`w-4 h-4 ${refreshingId === s.id ? "animate-spin" : ""}`}
+                              fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                          </button>
                           <button
                             onClick={() => openEditModal(s)}
                             className="p-1.5 rounded-lg hover:bg-bgray-200 dark:hover:bg-darkblack-400 text-bgray-500 dark:text-bgray-300 transition"
