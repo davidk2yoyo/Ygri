@@ -141,6 +141,7 @@ export default function ShipmentsPage() {
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
+  const [selectedShipment, setSelectedShipment] = useState(null);
 
   const fetchShipments = useCallback(async () => {
     setLoading(true);
@@ -294,6 +295,8 @@ export default function ShipmentsPage() {
       if (isDelivered && transitDays) detailParts.push(`(${transitDays}d transit)`);
       const statusDetailStr = detailParts.join(" ");
 
+      const events = info?.tracking?.providers?.[0]?.events || [];
+
       const update = {
         ...(mappedStatus && { status: mappedStatus }),
         ...(statusDetailStr && { status_detail: statusDetailStr }),
@@ -302,11 +305,14 @@ export default function ShipmentsPage() {
         ...(!isDelivered && info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
         ...(shippingInfo?.shipper_address?.country && !shipment.origin && { origin: shippingInfo.shipper_address.country }),
         ...(shippingInfo?.recipient_address?.city && !shipment.destination && { destination: shippingInfo.recipient_address.city }),
+        ...(events.length && { tracking_events: events }),
         updated_at: new Date().toISOString(),
       };
       const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);
       if (err) throw err;
       await fetchShipments();
+      // Update drawer if this shipment is open
+      setSelectedShipment(prev => prev?.id === shipment.id ? { ...prev, ...update } : prev);
     } catch (e) {
       alert("Tracking refresh failed: " + e.message);
     } finally {
@@ -423,7 +429,8 @@ export default function ShipmentsPage() {
                   return (
                     <tr
                       key={s.id}
-                      className="hover:bg-bgray-50 dark:hover:bg-darkblack-500/50 transition group"
+                      onClick={() => setSelectedShipment(s)}
+                      className="hover:bg-bgray-50 dark:hover:bg-darkblack-500/50 transition cursor-pointer group"
                     >
                       {/* Carrier */}
                       <td className="px-4 py-3">
@@ -442,6 +449,7 @@ export default function ShipmentsPage() {
                             href={trackUrl}
                             target="_blank"
                             rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
                             className="text-xs font-mono text-primary hover:underline"
                             title={s.tracking_number}
                           >
@@ -466,7 +474,7 @@ export default function ShipmentsPage() {
                       <td className="px-4 py-3">
                         {projectName ? (
                           <button
-                            onClick={() => navigate("/projects", { state: { activeTrackId: s.track_id } })}
+                            onClick={(e) => { e.stopPropagation(); navigate("/projects", { state: { activeTrackId: s.track_id } }); }}
                             className="text-xs font-semibold text-primary hover:underline bg-primary/10 px-2 py-1 rounded-lg truncate max-w-[120px] block text-left"
                             title={projectName}
                           >
@@ -513,8 +521,8 @@ export default function ShipmentsPage() {
                       </td>
 
                       {/* Actions */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition">
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1">
                           <button
                             onClick={() => refreshTracking(s)}
                             disabled={refreshingId === s.id}
@@ -574,6 +582,168 @@ export default function ShipmentsPage() {
           </div>
         )}
       </div>
+
+      {/* Shipment Detail Drawer */}
+      {selectedShipment && (() => {
+        const s = selectedShipment;
+        const badge = getCarrierBadge(s.carrier);
+        const trackUrl = getTrackingUrl(s.carrier, s.tracking_number);
+        const statusLabel = STATUS_OPTIONS.find(o => o.value === s.status)?.label || s.status;
+        const events = s.tracking_events || [];
+        const projectName = s.tracks?.name;
+
+        const stageColor = (sub) => {
+          if (!sub) return "bg-bgray-300 dark:bg-bgray-600";
+          const x = sub.toLowerCase();
+          if (x.includes("delivered")) return "bg-green-500";
+          if (x.includes("intransit") || x.includes("departure") || x.includes("arrival") || x.includes("pickedup") || x.includes("outfor")) return "bg-blue-500";
+          if (x.includes("exception") || x.includes("fail") || x.includes("return")) return "bg-red-500";
+          if (x.includes("inforeceived") || x.includes("notfound")) return "bg-gray-400";
+          return "bg-bgray-400";
+        };
+
+        return (
+          <div className="fixed inset-0 z-40 flex justify-end">
+            <div className="flex-1 bg-black/30 backdrop-blur-sm" onClick={() => setSelectedShipment(null)} />
+            <div className="w-[420px] bg-white dark:bg-darkblack-600 shadow-2xl flex flex-col h-full border-l border-bgray-200 dark:border-darkblack-400">
+              {/* Drawer Header */}
+              <div className="flex items-start justify-between px-5 py-4 border-b border-bgray-200 dark:border-darkblack-400">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold flex-shrink-0 ${badge.colorClass}`}>
+                    {badge.abbrev}
+                  </div>
+                  <div>
+                    <p className="text-xs text-bgray-400 dark:text-bgray-500">{s.carrier}</p>
+                    {trackUrl ? (
+                      <a href={trackUrl} target="_blank" rel="noopener noreferrer"
+                        className="text-sm font-mono font-bold text-primary hover:underline">
+                        {s.tracking_number}
+                      </a>
+                    ) : (
+                      <p className="text-sm font-mono font-bold text-darkblack-700 dark:text-white">{s.tracking_number}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${getStatusChip(s.status)}`}>{statusLabel}</span>
+                  <button onClick={() => setSelectedShipment(null)}
+                    className="p-1.5 rounded-lg hover:bg-bgray-100 dark:hover:bg-darkblack-500 text-bgray-500 dark:text-bgray-300">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* Summary Info */}
+              <div className="px-5 py-3 bg-bgray-50 dark:bg-darkblack-700 border-b border-bgray-200 dark:border-darkblack-400 grid grid-cols-2 gap-3 text-xs">
+                {s.description && (
+                  <div className="col-span-2">
+                    <p className="text-bgray-400 dark:text-bgray-500 uppercase tracking-wide text-[10px] font-semibold mb-0.5">Description</p>
+                    <p className="text-darkblack-600 dark:text-bgray-200">{s.description}</p>
+                  </div>
+                )}
+                {(s.origin || s.destination) && (
+                  <div className="col-span-2">
+                    <p className="text-bgray-400 dark:text-bgray-500 uppercase tracking-wide text-[10px] font-semibold mb-0.5">Route</p>
+                    <div className="flex items-center gap-1.5 text-darkblack-600 dark:text-bgray-200 font-medium">
+                      <span>{s.origin || "—"}</span>
+                      <svg className="w-3 h-3 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                      </svg>
+                      <span>{s.destination || "—"}</span>
+                    </div>
+                  </div>
+                )}
+                {s.estimated_delivery && (
+                  <div>
+                    <p className="text-bgray-400 dark:text-bgray-500 uppercase tracking-wide text-[10px] font-semibold mb-0.5">
+                      {s.status === "delivered" ? "Delivered" : "ETA"}
+                    </p>
+                    <p className={`font-semibold ${s.status === "delivered" ? "text-green-600 dark:text-green-400" : "text-darkblack-600 dark:text-bgray-200"}`}>
+                      {formatDate(s.estimated_delivery)}
+                    </p>
+                  </div>
+                )}
+                {projectName && (
+                  <div>
+                    <p className="text-bgray-400 dark:text-bgray-500 uppercase tracking-wide text-[10px] font-semibold mb-0.5">Project</p>
+                    <p className="text-primary font-semibold truncate">{projectName}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Timeline */}
+              <div className="flex-1 overflow-y-auto px-5 py-4">
+                {events.length === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="text-bgray-400 dark:text-bgray-500 text-sm">No tracking events yet.</p>
+                    <button
+                      onClick={() => refreshTracking(s)}
+                      disabled={refreshingId === s.id}
+                      className="mt-3 px-4 py-2 text-xs font-semibold bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 transition"
+                    >
+                      {refreshingId === s.id ? "Refreshing..." : "Refresh Tracking"}
+                    </button>
+                  </div>
+                ) : (
+                  <div>
+                    <p className="text-xs font-semibold text-bgray-400 dark:text-bgray-500 uppercase tracking-wide mb-3">
+                      Tracking Events · {events.length} updates
+                    </p>
+                    <div className="space-y-0">
+                      {events.map((ev, i) => (
+                        <div key={i} className="flex gap-3">
+                          {/* Timeline line + dot */}
+                          <div className="flex flex-col items-center flex-shrink-0 w-4">
+                            <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${i === 0 ? stageColor(ev.sub_status) : "bg-bgray-300 dark:bg-bgray-600"}`} />
+                            {i < events.length - 1 && <div className="w-px flex-1 bg-bgray-200 dark:bg-darkblack-400 mt-1 min-h-[20px]" />}
+                          </div>
+                          {/* Event content */}
+                          <div className={`pb-4 flex-1 min-w-0 ${i === 0 ? "" : "opacity-70"}`}>
+                            <p className={`text-xs font-medium leading-snug ${i === 0 ? "text-darkblack-700 dark:text-white" : "text-bgray-600 dark:text-bgray-300"}`}>
+                              {ev.description}
+                            </p>
+                            {ev.location && (
+                              <p className="text-[11px] text-bgray-400 dark:text-bgray-500 mt-0.5">{ev.location}</p>
+                            )}
+                            <p className="text-[11px] text-bgray-400 dark:text-bgray-500 mt-0.5">
+                              {ev.time_raw?.date ? `${ev.time_raw.date}${ev.time_raw.time ? ` · ${ev.time_raw.time.slice(0, 5)}` : ""}` : ""}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="px-5 py-3 border-t border-bgray-200 dark:border-darkblack-400 flex items-center justify-between gap-2">
+                <button
+                  onClick={() => refreshTracking(s)}
+                  disabled={refreshingId === s.id}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 disabled:opacity-50 transition"
+                >
+                  <svg className={`w-3.5 h-3.5 ${refreshingId === s.id ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  {refreshingId === s.id ? "Refreshing..." : "Refresh"}
+                </button>
+                <button
+                  onClick={() => { setSelectedShipment(null); openEditModal(s); }}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-bgray-600 dark:text-bgray-300 bg-bgray-100 dark:bg-darkblack-500 rounded-lg hover:bg-bgray-200 transition"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  Edit
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Add / Edit Modal */}
       {modalOpen && (
