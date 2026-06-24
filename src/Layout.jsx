@@ -284,36 +284,36 @@ export default function Layout() {
   ];
 
   return (
-    <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900 font-urbanist">
+    <div className="flex min-h-screen bg-[#f8f9fb] dark:bg-gray-950 font-urbanist">
       {/* Sidebar */}
-      <aside className={`fixed top-0 left-0 z-30 h-full w-72 bg-white dark:bg-gray-800 transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-200 dark:border-gray-700 flex flex-col`}>
+      <aside className={`fixed top-0 left-0 z-30 h-full w-64 bg-white dark:bg-gray-900 transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-100 dark:border-white/5 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.3)]`}>
         {/* Sidebar Header */}
-        <div className="flex items-center justify-between h-20 px-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center space-x-3">
+        <div className="flex items-center justify-between h-16 px-5 border-b border-gray-100 dark:border-white/5 flex-shrink-0">
+          <div className="flex items-center space-x-2.5">
             <img
               src={logoShort}
               alt="Ygri CRM"
-              className="h-8 w-auto"
+              className="h-7 w-auto"
             />
-            <span className="text-xl font-semibold text-gray-800 dark:text-white">{t("appName")}</span>
+            <span className="text-base font-bold text-gray-900 dark:text-white tracking-tight">{t("appName")}</span>
           </div>
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+            className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-400 dark:text-gray-500 transition-colors"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Navigation - Scrollable */}
-        <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
-          <div className="mb-6">
-            <h4 className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-4 border-b border-gray-200 dark:border-gray-700 pb-2">
+        <nav className="flex-1 overflow-y-auto px-3 py-5">
+          <div className="mb-2">
+            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-widest px-4 mb-2">
               {t("menu")}
-            </h4>
-            <ul className="space-y-1">
+            </p>
+            <ul className="space-y-0.5">
               {navItems.map((item) => {
                 const isActive = location.pathname === item.path;
                 return (
@@ -333,36 +333,36 @@ export default function Layout() {
         </nav>
 
         {/* User Section */}
-        <div className="flex-shrink-0 p-4 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex-shrink-0 p-3 border-t border-gray-100 dark:border-white/5">
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-red-600 hover:bg-red-50 dark:hover:bg-gray-700 rounded-lg transition-all duration-200"
+            className="w-full flex items-center space-x-3 px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all duration-200 text-sm font-medium"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
             </svg>
-            <span className="font-medium">{t("signOut")}</span>
+            <span>{t("signOut")}</span>
           </button>
         </div>
       </aside>
 
       {/* Mobile Overlay */}
       {sidebarOpen && (
-        <div 
-          className="fixed inset-0 z-20 bg-black/50 lg:hidden"
+        <div
+          className="fixed inset-0 z-20 bg-black/40 backdrop-blur-sm lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Main Content */}
-      <main className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'lg:ml-72' : 'lg:ml-0'}`}>
+      <main className={`flex-1 transition-all duration-300 ${sidebarOpen ? 'lg:ml-64' : 'lg:ml-0'} flex flex-col min-h-screen`}>
         {/* Top Bar */}
-        <header className="h-20 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6">
+        <header className="h-16 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-gray-100 dark:border-white/5 flex items-center justify-between px-6 sticky top-0 z-20 shadow-sm">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 lg:hidden"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 lg:hidden transition-colors"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
@@ -371,9 +371,9 @@ export default function Layout() {
             {!sidebarOpen && (
               <button
                 onClick={() => setSidebarOpen(true)}
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300"
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 transition-colors"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                 </svg>
               </button>
@@ -381,19 +381,17 @@ export default function Layout() {
           </div>
 
           {/* Right side - Language toggle, Dark mode toggle and user */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2">
             <button
               onClick={toggleLanguage}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+              className="px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 transition-colors text-xs font-semibold tracking-wide"
               title={`${i18n.language === 'en' ? 'Español' : 'English'}`}
             >
-              <span className="text-sm font-medium">
-                {i18n.language === 'en' ? 'ES' : 'EN'}
-              </span>
+              {i18n.language === 'en' ? 'ES' : 'EN'}
             </button>
             <button
               onClick={toggleDarkMode}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 transition-colors"
               title={t("switchToMode", { mode: t(darkMode ? "lightMode" : "darkMode") })}
             >
               {darkMode ? (
@@ -406,8 +404,8 @@ export default function Layout() {
                 </svg>
               )}
             </button>
-            <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-              <span className="text-white text-sm font-medium">U</span>
+            <div className="w-8 h-8 bg-gradient-to-br from-green-400 to-emerald-600 rounded-full flex items-center justify-center ring-2 ring-green-200 dark:ring-green-500/30 shadow-sm">
+              <span className="text-white text-xs font-bold">U</span>
             </div>
           </div>
         </header>
