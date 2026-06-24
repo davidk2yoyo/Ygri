@@ -10,6 +10,7 @@ import NetworkGraphView from "../components/NetworkGraphView";
 import PipelineView from "../components/PipelineView";
 import { nodeTypes } from "../components/FlowNodes";
 import HorizontalWorkflow from "../components/HorizontalWorkflow";
+import ProjectShipmentsSection from "../components/ProjectShipmentsSection";
 
 // Vertical Stepper View Component
 function VerticalStepperView({ stages, onStageClick }) {
@@ -1456,6 +1457,13 @@ export default function ProjectsPage() {
                         )}
                       </div>
                     )}
+                  </div>
+                )}
+
+                {/* Shipments */}
+                {detail && activeTrackId && (
+                  <div className="card p-4">
+                    <ProjectShipmentsSection trackId={activeTrackId} />
                   </div>
                 )}
 

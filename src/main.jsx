@@ -23,6 +23,7 @@ import InspectionReportsPage from "./pages/InspectionReportsPage";
 import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
 import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
 import CalendarPage from "./pages/CalendarPage";
+import ShipmentsPage from "./pages/ShipmentsPage";
 import "./index.css";
 import "./i18n";
 
@@ -50,6 +51,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/emails" element={<EmailThreadsPage />} />
           <Route path="/items" element={<ItemsPage />} />
           <Route path="/reports" element={<InspectionReportsPage />} />
+          <Route path="/shipments" element={<ShipmentsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
