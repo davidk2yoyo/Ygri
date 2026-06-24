@@ -57,20 +57,40 @@ export default function Layout() {
         .filter(t => !dismissed.has(`todo_${t.id}`))
         .slice(0, 5)
         .forEach(todo => {
+          const dismissTodo = (tid) => {
+            const list = JSON.parse(localStorage.getItem(key) || "[]");
+            list.push(`todo_${todo.id}`);
+            localStorage.setItem(key, JSON.stringify(list));
+            sileo.dismiss(tid);
+          };
+
           let tid;
           tid = sileo.warning({
             title: "Overdue Task",
-            description: todo.title,
+            description: (
+              <div>
+                <div className="text-sm font-medium mb-2">{todo.title}</div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={async () => {
+                      await supabase.rpc("update_stage_todo", { p_todo_id: todo.id, p_done: true });
+                      sileo.dismiss(tid);
+                      sileo.success({ title: "Task done!", description: todo.title });
+                    }}
+                    className="flex-1 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition"
+                  >
+                    Mark Done
+                  </button>
+                  <button
+                    onClick={() => dismissTodo(tid)}
+                    className="flex-1 py-1 text-xs border border-amber-400 text-amber-700 rounded-lg font-medium hover:bg-amber-50 transition"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            ),
             duration: null,
-            button: {
-              title: "Dismiss",
-              onClick: () => {
-                const list = JSON.parse(localStorage.getItem(key) || "[]");
-                list.push(`todo_${todo.id}`);
-                localStorage.setItem(key, JSON.stringify(list));
-                sileo.dismiss(tid);
-              },
-            },
           });
         });
 
