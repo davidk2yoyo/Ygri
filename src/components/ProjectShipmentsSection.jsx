@@ -59,11 +59,11 @@ function getTrackingUrl(carrier, trackingNumber) {
   return null;
 }
 
-function formatETA(dateStr) {
+function formatDate(dateStr) {
   if (!dateStr) return null;
   try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const d = dateStr.includes("T") ? new Date(dateStr) : new Date(dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return dateStr;
   }
@@ -234,10 +234,23 @@ export default function ProjectShipmentsSection({ trackId }) {
       const info = accepted.track_info;
       const mappedStatus = map17Status(info?.latest_status?.status);
       const latestEvent = info?.latest_event;
+      const isDelivered = mappedStatus === "delivered";
+      const eventDate = latestEvent?.time_raw?.date;
+      const eventTime = latestEvent?.time_raw?.time?.slice(0, 5);
+      const transitDays = info?.time_metrics?.days_of_transit_done;
+
+      const detailParts = [];
+      if (latestEvent?.description) detailParts.push(latestEvent.description);
+      if (isDelivered && eventTime) detailParts.push(`at ${eventTime}`);
+      if (latestEvent?.location) detailParts.push(`— ${latestEvent.location}`);
+      if (isDelivered && transitDays) detailParts.push(`(${transitDays}d transit)`);
+      const statusDetailStr = detailParts.join(" ");
+
       const update = {
         ...(mappedStatus && { status: mappedStatus }),
-        ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
-        ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        ...(statusDetailStr && { status_detail: statusDetailStr }),
+        ...(isDelivered && eventDate && { estimated_delivery: eventDate }),
+        ...(!isDelivered && info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
         ...(info?.shipping_info?.shipper_address?.country && !shipment.origin && { origin: info.shipping_info.shipper_address.country }),
         ...(info?.shipping_info?.recipient_address?.city && !shipment.destination && { destination: info.shipping_info.recipient_address.city }),
         updated_at: new Date().toISOString(),
@@ -358,10 +371,20 @@ export default function ProjectShipmentsSection({ trackId }) {
                   <span className="truncate">{s.destination || "—"}</span>
                 </div>
 
-                {/* ETA */}
-                <div className="flex-shrink-0 text-xs text-bgray-500 dark:text-bgray-400 w-14 text-right">
+                {/* ETA / Delivered */}
+                <div className="flex-shrink-0 text-xs w-20 text-right">
                   {s.estimated_delivery ? (
-                    <span title={s.estimated_delivery}>{formatETA(s.estimated_delivery)}</span>
+                    s.status === "delivered" ? (
+                      <div>
+                        <p className="font-semibold text-green-600 dark:text-green-400">Delivered</p>
+                        <p className="text-bgray-400 dark:text-bgray-500">{formatDate(s.estimated_delivery)}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="text-bgray-400 dark:text-bgray-500">ETA</p>
+                        <p className="text-bgray-600 dark:text-bgray-300">{formatDate(s.estimated_delivery)}</p>
+                      </div>
+                    )
                   ) : (
                     <span className="text-bgray-300 dark:text-bgray-600">—</span>
                   )}

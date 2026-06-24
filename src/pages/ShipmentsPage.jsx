@@ -69,11 +69,11 @@ function getTrackingUrl(carrier, trackingNumber) {
   return null;
 }
 
-function formatETA(dateStr) {
+function formatDate(dateStr) {
   if (!dateStr) return null;
   try {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const d = dateStr.includes("T") ? new Date(dateStr) : new Date(dateStr + "T12:00:00");
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   } catch {
     return dateStr;
   }
@@ -281,10 +281,25 @@ export default function ShipmentsPage() {
       const mappedStatus = map17Status(info?.latest_status?.status);
       const latestEvent = info?.latest_event;
       const shippingInfo = info?.shipping_info;
+      const isDelivered = mappedStatus === "delivered";
+      const eventDate = latestEvent?.time_raw?.date;
+      const eventTime = latestEvent?.time_raw?.time?.slice(0, 5);
+      const transitDays = info?.time_metrics?.days_of_transit_done;
+
+      // Build a rich status detail line
+      const detailParts = [];
+      if (latestEvent?.description) detailParts.push(latestEvent.description);
+      if (isDelivered && eventTime) detailParts.push(`at ${eventTime}`);
+      if (latestEvent?.location) detailParts.push(`— ${latestEvent.location}`);
+      if (isDelivered && transitDays) detailParts.push(`(${transitDays}d transit)`);
+      const statusDetailStr = detailParts.join(" ");
+
       const update = {
         ...(mappedStatus && { status: mappedStatus }),
-        ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
-        ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        ...(statusDetailStr && { status_detail: statusDetailStr }),
+        // For delivered: save actual delivery date; for in-transit: save ETA
+        ...(isDelivered && eventDate && { estimated_delivery: eventDate }),
+        ...(!isDelivered && info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
         ...(shippingInfo?.shipper_address?.country && !shipment.origin && { origin: shippingInfo.shipper_address.country }),
         ...(shippingInfo?.recipient_address?.city && !shipment.destination && { destination: shippingInfo.recipient_address.city }),
         updated_at: new Date().toISOString(),
@@ -393,7 +408,7 @@ export default function ShipmentsPage() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Project</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Status</th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Route</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">ETA</th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">ETA / Delivered</th>
                   <th className="px-4 py-3 text-right text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
@@ -480,9 +495,21 @@ export default function ShipmentsPage() {
                         </div>
                       </td>
 
-                      {/* ETA */}
-                      <td className="px-4 py-3 text-xs text-bgray-500 dark:text-bgray-400 whitespace-nowrap">
-                        {s.estimated_delivery ? formatETA(s.estimated_delivery) : "—"}
+                      {/* ETA / Delivered */}
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {s.estimated_delivery ? (
+                          s.status === "delivered" ? (
+                            <div>
+                              <p className="text-xs font-semibold text-green-600 dark:text-green-400">Delivered</p>
+                              <p className="text-xs text-bgray-500 dark:text-bgray-400">{formatDate(s.estimated_delivery)}</p>
+                            </div>
+                          ) : (
+                            <div>
+                              <p className="text-xs text-bgray-400 dark:text-bgray-500">ETA</p>
+                              <p className="text-xs text-bgray-600 dark:text-bgray-300">{formatDate(s.estimated_delivery)}</p>
+                            </div>
+                          )
+                        ) : "—"}
                       </td>
 
                       {/* Actions */}
