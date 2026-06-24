@@ -80,6 +80,26 @@ const BLANK_FORM = {
   estimated_delivery: "",
 };
 
+function map17Status(status) {
+  if (!status) return null;
+  const s = status.toLowerCase();
+  if (s === "delivered") return "delivered";
+  if (["intransit", "pickedup", "outfordelivery", "availableforpickup"].includes(s)) return "in_transit";
+  if (["exception", "expired", "undelivered", "deliveryfailure", "attemptfail", "returning", "returned"].includes(s)) return "exception";
+  if (["inforeceived", "notfound"].includes(s)) return "pending";
+  return null;
+}
+
+async function call17Track(action, numbers) {
+  const res = await fetch("/api/17track", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, numbers }),
+  });
+  if (!res.ok) throw new Error(`17Track proxy error: ${res.status}`);
+  return res.json();
+}
+
 export default function ProjectShipmentsSection({ trackId }) {
   const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,6 +109,7 @@ export default function ProjectShipmentsSection({ trackId }) {
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [refreshingId, setRefreshingId] = useState(null);
 
   const fetchShipments = useCallback(async () => {
     if (!trackId) return;
@@ -162,6 +183,8 @@ export default function ProjectShipmentsSection({ trackId }) {
       } else {
         const { error: err } = await supabase.from("shipments").insert([payload]);
         if (err) throw err;
+        // Auto-register with 17Track
+        call17Track("register", [payload.tracking_number]).catch(() => {});
       }
       closeModal();
       await fetchShipments();
@@ -180,6 +203,31 @@ export default function ProjectShipmentsSection({ trackId }) {
       await fetchShipments();
     } catch (e) {
       alert("Error deleting shipment: " + e.message);
+    }
+  };
+
+  const refreshTracking = async (shipment) => {
+    setRefreshingId(shipment.id);
+    try {
+      const data = await call17Track("gettrackinfo", [shipment.tracking_number]);
+      const accepted = data?.data?.accepted?.[0];
+      if (!accepted) throw new Error("Tracking number not found in 17Track");
+      const info = accepted.track_info;
+      const mappedStatus = map17Status(info?.latest_status?.status);
+      const latestEvent = info?.latest_event;
+      const update = {
+        ...(mappedStatus && { status: mappedStatus }),
+        ...(latestEvent?.description && { status_detail: `${latestEvent.description}${latestEvent.location ? ` — ${latestEvent.location}` : ""}` }),
+        ...(info?.time_metrics?.estimated_delivery_date?.from && { estimated_delivery: info.time_metrics.estimated_delivery_date.from }),
+        updated_at: new Date().toISOString(),
+      };
+      const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);
+      if (err) throw err;
+      await fetchShipments();
+    } catch (e) {
+      alert("Tracking refresh failed: " + e.message);
+    } finally {
+      setRefreshingId(null);
     }
   };
 
@@ -300,6 +348,21 @@ export default function ProjectShipmentsSection({ trackId }) {
 
                 {/* Actions */}
                 <div className="flex-shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
+                  {/* Refresh from 17Track */}
+                  <button
+                    onClick={() => refreshTracking(s)}
+                    disabled={refreshingId === s.id}
+                    className="p-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 text-bgray-500 dark:text-bgray-300 hover:text-blue-600 transition"
+                    title="Refresh tracking status"
+                  >
+                    {refreshingId === s.id ? (
+                      <div className="w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    )}
+                  </button>
                   <button
                     onClick={() => openEditModal(s)}
                     className="p-1.5 rounded-lg hover:bg-bgray-200 dark:hover:bg-darkblack-400 text-bgray-500 dark:text-bgray-300 transition"
