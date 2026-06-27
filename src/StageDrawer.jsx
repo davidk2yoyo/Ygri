@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabaseClient";
 import { sileo } from "sileo";
 import QuotationForm from "./components/QuotationForm";
+import TrackDocumentsTab from "./components/TrackDocumentsTab";
 
 // ─── Key Dates Section ────────────────────────────────────────────────────────
 const MILESTONE_CONFIG = {
@@ -963,9 +964,10 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
           {stageDetail && trackId && (
             <div className="flex gap-0 px-6">
               {[
-                { key: "details",  label: "Stage Details" },
+                { key: "details",   label: "Stage Details" },
                 { key: "quotation", label: "📋 Quotation" },
                 { key: "report",    label: "📄 Report" },
+                { key: "documents", label: "📁 Documents" },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -1012,6 +1014,11 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                 onClose={() => setActiveTab("details")}
               />
             </div>
+          )}
+
+          {/* Documents Tab */}
+          {stageDetail && activeTab === "documents" && trackId && (
+            <TrackDocumentsTab trackId={trackId} />
           )}
 
           {/* Report Tab */}
