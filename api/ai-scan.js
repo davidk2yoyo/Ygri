@@ -273,7 +273,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
+        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "table" ? 3000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
         messages,
       }),
     });
