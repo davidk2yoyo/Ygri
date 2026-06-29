@@ -1,5 +1,5 @@
 const API_KEY = process.env.TRACK17_API_KEY;
-const BASE = "https://api.17track.net/track/v2.2";
+const BASE = "https://api.17track.net/track/v2.4";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

@@ -118,11 +118,14 @@ const BLANK_FORM = {
 
 function map17Status(status) {
   if (!status) return null;
-  const s = status.toLowerCase();
-  if (s === "delivered") return "delivered";
-  if (["intransit", "pickedup", "outfordelivery", "availableforpickup"].includes(s)) return "in_transit";
-  if (["exception", "expired", "undelivered", "deliveryfailure", "attemptfail", "returning", "returned"].includes(s)) return "exception";
-  if (["inforeceived", "notfound"].includes(s)) return "pending";
+  const s = status.toLowerCase().replace(/_/g, "");
+  if (s === "delivered")                                                          return "delivered";
+  if (s.startsWith("intransitcustoms") || s === "intransitcustomsprocessing")    return "customs";
+  if (["intransit","intransitpickedup","intransitdeparture","intransitarrival",
+       "outfordelivery","availableforpickup"].some(x => s.startsWith(x)))        return "in_transit";
+  if (["exception","expired","deliveryfailure","nopickup","returning","returned",
+       "lost","damageed"].some(x => s.startsWith(x)))                            return "exception";
+  if (s === "inforeceived" || s === "notfound")                                  return "pending";
   return null;
 }
 
@@ -253,7 +256,7 @@ export default function ProjectShipmentsSection({ trackId }) {
       const payload = {
         tracking_number: form.tracking_number.trim(),
         carrier: form.carrier,
-        carrier_param: form.carrier_param?.trim() || null,
+        ...(form.carrier_param?.trim() ? { carrier_param: form.carrier_param.trim() } : {}),
         description: form.description.trim(),
         status: form.status,
         status_detail: form.status_detail.trim(),
