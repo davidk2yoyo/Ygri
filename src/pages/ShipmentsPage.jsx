@@ -3,17 +3,32 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 
 const CARRIERS = [
-  "DHL",
-  "DHL Express",
-  "FedEx",
-  "UPS",
-  "SF Express",
-  "EMS",
-  "China Post",
-  "Maersk",
-  "COSCO",
-  "MSC",
-  "Other",
+  // International express
+  { value: "DHL Express",              zh: "",          group: "International" },
+  { value: "FedEx",                    zh: "",          group: "International" },
+  { value: "UPS",                      zh: "",          group: "International" },
+  { value: "TNT",                      zh: "",          group: "International" },
+  // Chinese express — international
+  { value: "SF Express",               zh: "顺丰速运",   group: "China Express" },
+  { value: "ZTO Express",              zh: "中通快递",   group: "China Express" },
+  { value: "YTO Express",              zh: "圆通速递",   group: "China Express" },
+  { value: "STO Express",              zh: "申通快递",   group: "China Express" },
+  { value: "Yunda Express",            zh: "韵达快递",   group: "China Express" },
+  { value: "Deppon",                   zh: "德邦快递",   group: "China Express" },
+  { value: "JD Logistics",             zh: "京东物流",   group: "China Express" },
+  { value: "Cainiao",                  zh: "菜鸟",       group: "China Express" },
+  { value: "J&T Express",              zh: "极兔速递",   group: "China Express" },
+  // Chinese logistics / e-commerce shipping
+  { value: "4PX",                      zh: "递四方",     group: "China Logistics" },
+  { value: "YANWEN",                   zh: "燕文物流",   group: "China Logistics" },
+  { value: "YunExpress",               zh: "云途物流",   group: "China Logistics" },
+  { value: "China EMS",                zh: "中国邮政EMS", group: "China Logistics" },
+  { value: "China Post",               zh: "中国邮政",   group: "China Logistics" },
+  // Ocean freight
+  { value: "Maersk",                   zh: "马士基",     group: "Ocean" },
+  { value: "COSCO",                    zh: "中远海运",   group: "Ocean" },
+  { value: "MSC",                      zh: "",          group: "Ocean" },
+  { value: "Other",                    zh: "",          group: "Other" },
 ];
 
 const STATUS_OPTIONS = [
@@ -36,15 +51,27 @@ const FILTER_CHIPS = [
 function getCarrierBadge(carrier) {
   if (!carrier) return { abbrev: "??", colorClass: "bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300" };
   const c = carrier.toLowerCase();
-  if (c.includes("dhl"))    return { abbrev: "DH", colorClass: "bg-yellow-400 text-yellow-900" };
-  if (c.includes("fedex"))  return { abbrev: "FX", colorClass: "bg-purple-600 text-white" };
-  if (c.includes("ups"))    return { abbrev: "UP", colorClass: "bg-amber-700 text-white" };
-  if (c.includes("sf"))     return { abbrev: "SF", colorClass: "bg-red-600 text-white" };
-  if (c.includes("ems"))    return { abbrev: "EM", colorClass: "bg-green-600 text-white" };
-  if (c.includes("maersk")) return { abbrev: "MK", colorClass: "bg-blue-700 text-white" };
-  if (c.includes("cosco"))  return { abbrev: "CO", colorClass: "bg-blue-500 text-white" };
-  if (c.includes("msc"))    return { abbrev: "MC", colorClass: "bg-indigo-600 text-white" };
-  if (c.includes("china"))  return { abbrev: "CP", colorClass: "bg-red-400 text-white" };
+  if (c.includes("dhl"))        return { abbrev: "DH", colorClass: "bg-yellow-400 text-yellow-900" };
+  if (c.includes("fedex"))      return { abbrev: "FX", colorClass: "bg-purple-600 text-white" };
+  if (c.includes("ups"))        return { abbrev: "UP", colorClass: "bg-amber-700 text-white" };
+  if (c.includes("tnt"))        return { abbrev: "TT", colorClass: "bg-orange-500 text-white" };
+  if (c.includes("maersk"))     return { abbrev: "MK", colorClass: "bg-blue-700 text-white" };
+  if (c.includes("cosco"))      return { abbrev: "CO", colorClass: "bg-blue-500 text-white" };
+  if (c.includes("msc"))        return { abbrev: "MC", colorClass: "bg-indigo-600 text-white" };
+  if (c.includes("sf"))         return { abbrev: "SF", colorClass: "bg-red-600 text-white" };
+  if (c.includes("china ems") || (c.includes("ems") && !c.includes("kintetsu"))) return { abbrev: "EM", colorClass: "bg-green-600 text-white" };
+  if (c.includes("china post")) return { abbrev: "CP", colorClass: "bg-red-400 text-white" };
+  if (c.includes("zto"))        return { abbrev: "ZT", colorClass: "bg-green-500 text-white" };
+  if (c.includes("yto"))        return { abbrev: "YT", colorClass: "bg-blue-500 text-white" };
+  if (c.includes("sto"))        return { abbrev: "ST", colorClass: "bg-violet-500 text-white" };
+  if (c.includes("yunda"))      return { abbrev: "YD", colorClass: "bg-teal-500 text-white" };
+  if (c.includes("deppon"))     return { abbrev: "DP", colorClass: "bg-orange-600 text-white" };
+  if (c.includes("jd"))         return { abbrev: "JD", colorClass: "bg-red-500 text-white" };
+  if (c.includes("cainiao"))    return { abbrev: "CN", colorClass: "bg-amber-500 text-white" };
+  if (c.includes("j&t"))        return { abbrev: "JT", colorClass: "bg-pink-500 text-white" };
+  if (c.includes("4px"))        return { abbrev: "4P", colorClass: "bg-indigo-500 text-white" };
+  if (c.includes("yanwen"))     return { abbrev: "YW", colorClass: "bg-cyan-600 text-white" };
+  if (c.includes("yunex"))      return { abbrev: "YE", colorClass: "bg-sky-500 text-white" };
   return { abbrev: carrier.slice(0, 2).toUpperCase(), colorClass: "bg-gray-300 text-gray-700 dark:bg-gray-600 dark:text-gray-200" };
 }
 
@@ -62,10 +89,22 @@ function getStatusChip(status) {
 function getTrackingUrl(carrier, trackingNumber) {
   if (!carrier || !trackingNumber) return null;
   const c = carrier.toLowerCase();
-  if (c.includes("dhl"))   return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNumber}`;
-  if (c.includes("fedex")) return `https://www.fedex.com/apps/fedextrack/?tracknumbers=${trackingNumber}`;
-  if (c.includes("ups"))   return `https://www.ups.com/track?tracknum=${trackingNumber}`;
-  if (c.includes("sf"))    return `https://www.sf-express.com/en_US/dynamic_function/waybill/#search/bill-number/${trackingNumber}`;
+  if (c.includes("dhl"))        return `https://www.dhl.com/en/express/tracking.html?AWB=${trackingNumber}`;
+  if (c.includes("fedex"))      return `https://www.fedex.com/apps/fedextrack/?tracknumbers=${trackingNumber}`;
+  if (c.includes("ups"))        return `https://www.ups.com/track?tracknum=${trackingNumber}`;
+  if (c.includes("sf"))         return `https://intl.sf-express.com/sfexpresslite/index.html#/main/index?tabActive=0&bizType=1&queryNo=${trackingNumber}`;
+  if (c.includes("zto"))        return `https://www.zto.com/express/expressDetails.html?billCode=${trackingNumber}`;
+  if (c.includes("yto"))        return `https://www.yto.net.cn/track.html?billCode=${trackingNumber}`;
+  if (c.includes("sto"))        return `https://www.sto.cn/query.html?billCode=${trackingNumber}`;
+  if (c.includes("yunda"))      return `https://www.yundaex.com/query.html?num=${trackingNumber}`;
+  if (c.includes("jd"))         return `https://www.jdl.com/orderTrace/waybillNo=${trackingNumber}`;
+  if (c.includes("cainiao"))    return `https://global.cainiao.com/newDetail.htm?mailNoList=${trackingNumber}`;
+  if (c.includes("j&t"))        return `https://www.jet-logistics.com/track?waybillno=${trackingNumber}`;
+  if (c.includes("4px"))        return `https://track.4px.com/#/result/0/${trackingNumber}`;
+  if (c.includes("yanwen"))     return `https://track.yanwen.com/en/result?waybill_no=${trackingNumber}`;
+  if (c.includes("yunex"))      return `https://www.yunexpress.com/track?waybillno=${trackingNumber}`;
+  if (c.includes("china ems") || c.includes("ems")) return `https://www.ems.com.cn/mailtracking/mapflow?mailNum=${trackingNumber}`;
+  if (c.includes("china post")) return `https://www.ems.com.cn/qps/yjcx?mailNum=${trackingNumber}`;
   return null;
 }
 
@@ -89,20 +128,48 @@ function map17Status(status) {
   return null;
 }
 
+// 17Track numeric carrier codes from integrations/17track/apicarrier.all.json
 function get17TrackCode(carrier) {
   if (!carrier) return null;
   const c = carrier.toLowerCase();
-  if (c.includes("dhl"))   return 100001;
-  if (c.includes("ups"))   return 100002;
-  if (c.includes("fedex")) return 100003;
-  if (c.includes("tnt"))   return 100004;
-  if (c.includes("sf"))    return 100012;
+  if (c.includes("dhl"))        return 100001; // DHL Express
+  if (c.includes("ups"))        return 100002;
+  if (c.includes("fedex"))      return 100003;
+  if (c.includes("tnt"))        return 100004;
+  if (c.includes("maersk"))     return 100768;
+  if (c.includes("sf"))         return 100012; // SF Express international
+  if (c.includes("zto"))        return 190175; // ZTO International (no extra param)
+  if (c.includes("yto"))        return 190157;
+  if (c.includes("sto"))        return 190324;
+  if (c.includes("yunda"))      return 191197;
+  if (c.includes("deppon"))     return 190174;
+  if (c.includes("jd"))         return 191121;
+  if (c.includes("cainiao"))    return 190271;
+  if (c.includes("j&t"))        return 100295; // J&T International
+  if (c.includes("4px"))        return 190094;
+  if (c.includes("yanwen"))     return 190012;
+  if (c.includes("yunex"))      return 190008;
+  if (c.includes("china ems") || c.includes("ems")) return 3013;
+  if (c.includes("china post")) return 3011;
   return null;
 }
 
-function buildTrackItem(trackingNumber, carrier) {
+// Carriers that require phone_number_last_4 for domestic China tracking
+const CARRIERS_NEED_PHONE = ["zto", "sf express", "jd log", "jd express"];
+
+function needsPhoneParam(carrier) {
+  if (!carrier) return false;
+  const c = carrier.toLowerCase();
+  return CARRIERS_NEED_PHONE.some(k => c.includes(k));
+}
+
+function buildTrackItem(trackingNumber, carrier, carrierParam) {
   const code = get17TrackCode(carrier);
-  return code ? { number: trackingNumber, carrier: code } : { number: trackingNumber };
+  const item = code ? { number: trackingNumber, carrier: code } : { number: trackingNumber };
+  if (carrierParam && needsPhoneParam(carrier)) {
+    item.phone_number_last_4 = carrierParam;
+  }
+  return item;
 }
 
 async function call17Track(action, items) {
@@ -117,7 +184,8 @@ async function call17Track(action, items) {
 
 const BLANK_FORM = {
   tracking_number: "",
-  carrier: "DHL",
+  carrier: "DHL Express",
+  carrier_param: "",
   description: "",
   status: "pending",
   status_detail: "",
@@ -252,7 +320,8 @@ export default function ShipmentsPage() {
     setEditingId(shipment.id);
     setForm({
       tracking_number: shipment.tracking_number || "",
-      carrier: shipment.carrier || "DHL",
+      carrier: shipment.carrier || "DHL Express",
+      carrier_param: shipment.carrier_param || "",
       description: shipment.description || "",
       status: shipment.status || "pending",
       status_detail: shipment.status_detail || "",
@@ -278,6 +347,7 @@ export default function ShipmentsPage() {
       const payload = {
         tracking_number: form.tracking_number.trim(),
         carrier: form.carrier,
+        carrier_param: form.carrier_param.trim() || null,
         description: form.description.trim(),
         status: form.status,
         status_detail: form.status_detail.trim(),
@@ -293,7 +363,7 @@ export default function ShipmentsPage() {
         const { error: err } = await supabase.from("shipments").insert([payload]);
         if (err) throw err;
         // Auto-register with 17Track on create
-        call17Track("register", [buildTrackItem(payload.tracking_number, payload.carrier)]).catch(() => {});
+        call17Track("register", [buildTrackItem(payload.tracking_number, payload.carrier, payload.carrier_param)]).catch(() => {});
       }
       closeModal();
       await fetchShipments();
@@ -318,7 +388,7 @@ export default function ShipmentsPage() {
   const refreshTracking = async (shipment) => {
     setRefreshingId(shipment.id);
     try {
-      const item = buildTrackItem(shipment.tracking_number, shipment.carrier);
+      const item = buildTrackItem(shipment.tracking_number, shipment.carrier, shipment.carrier_param);
       // Register first (idempotent — needed if not yet registered)
       await call17Track("register", [item]).catch(() => {});
       const data = await call17Track("gettrackinfo", [item]);
@@ -847,12 +917,21 @@ export default function ShipmentsPage() {
                   <label className={labelClass}>Carrier</label>
                   <select
                     value={form.carrier}
-                    onChange={(e) => setForm(f => ({ ...f, carrier: e.target.value }))}
+                    onChange={(e) => setForm(f => ({ ...f, carrier: e.target.value, carrier_param: "" }))}
                     className={inputClass}
                   >
-                    {CARRIERS.map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
+                    {["International", "China Express", "China Logistics", "Ocean", "Other"].map(group => {
+                      const groupCarriers = CARRIERS.filter(c => c.group === group);
+                      return (
+                        <optgroup key={group} label={group}>
+                          {groupCarriers.map(c => (
+                            <option key={c.value} value={c.value}>
+                              {c.zh ? `${c.value} · ${c.zh}` : c.value}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
                   </select>
                 </div>
                 <div>
@@ -868,6 +947,24 @@ export default function ShipmentsPage() {
                   </select>
                 </div>
               </div>
+
+              {/* Carrier param — only for carriers that need phone last 4 */}
+              {needsPhoneParam(form.carrier) && (
+                <div>
+                  <label className={labelClass}>Phone Last 4 Digits</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    value={form.carrier_param}
+                    onChange={(e) => setForm(f => ({ ...f, carrier_param: e.target.value.replace(/\D/g, "") }))}
+                    className={inputClass}
+                    placeholder="e.g. 1234"
+                  />
+                  <p className="text-[11px] text-bgray-400 dark:text-bgray-500 mt-1">
+                    Required for domestic {form.carrier} tracking — last 4 digits of recipient phone
+                  </p>
+                </div>
+              )}
 
               {/* Description */}
               <div>
