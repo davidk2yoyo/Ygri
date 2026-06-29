@@ -126,6 +126,14 @@ export default function ProjectShipmentsSection({ trackId }) {
   const [saving, setSaving] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const toast = (message, type = "error") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  };
+  const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
 
   const fetchShipments = useCallback(async () => {
     if (!trackId) return;
@@ -205,7 +213,7 @@ export default function ProjectShipmentsSection({ trackId }) {
       closeModal();
       await fetchShipments();
     } catch (e) {
-      alert("Error saving shipment: " + e.message);
+      toast("Error saving shipment: " + e.message);
     } finally {
       setSaving(false);
     }
@@ -218,7 +226,7 @@ export default function ProjectShipmentsSection({ trackId }) {
       setDeleteConfirmId(null);
       await fetchShipments();
     } catch (e) {
-      alert("Error deleting shipment: " + e.message);
+      toast("Error deleting shipment: " + e.message);
     }
   };
 
@@ -258,8 +266,9 @@ export default function ProjectShipmentsSection({ trackId }) {
       const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);
       if (err) throw err;
       await fetchShipments();
+      toast("Tracking updated successfully", "success");
     } catch (e) {
-      alert("Tracking refresh failed: " + e.message);
+      toast("Tracking refresh failed: " + e.message);
     } finally {
       setRefreshingId(null);
     }
@@ -270,6 +279,27 @@ export default function ProjectShipmentsSection({ trackId }) {
 
   return (
     <div>
+      {/* Toast notifications */}
+      {toasts.length > 0 && (
+        <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none">
+          {toasts.map((t) => (
+            <div key={t.id} className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm text-sm font-medium
+              ${t.type === "error"
+                ? "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300"
+                : "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+              }`}>
+              {t.type === "error"
+                ? <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                : <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              }
+              <span className="flex-1">{t.message}</span>
+              <button onClick={() => dismissToast(t.id)} className="opacity-50 hover:opacity-100">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       {/* Section Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">

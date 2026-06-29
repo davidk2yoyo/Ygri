@@ -127,12 +127,58 @@ const BLANK_FORM = {
   track_id: "",
 };
 
+function Toast({ toasts, dismiss }) {
+  if (!toasts.length) return null;
+  return (
+    <div className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2 pointer-events-none">
+      {toasts.map((t) => (
+        <div
+          key={t.id}
+          className={`pointer-events-auto flex items-start gap-3 px-4 py-3 rounded-xl shadow-lg border max-w-sm text-sm font-medium transition-all
+            ${t.type === "error"
+              ? "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700 text-red-700 dark:text-red-300"
+              : t.type === "success"
+              ? "bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700 text-green-700 dark:text-green-300"
+              : "bg-white dark:bg-darkblack-600 border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white"
+            }`}
+        >
+          {t.type === "error" && (
+            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          {t.type === "success" && (
+            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          )}
+          <span className="flex-1">{t.message}</span>
+          <button onClick={() => dismiss(t.id)} className="opacity-50 hover:opacity-100 flex-shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function ShipmentsPage() {
   const navigate = useNavigate();
   const [shipments, setShipments] = useState([]);
   const [tracks, setTracks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [toasts, setToasts] = useState([]);
+
+  const toast = (message, type = "error") => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4000);
+  };
+  const dismissToast = (id) => setToasts((prev) => prev.filter((t) => t.id !== id));
+
   const [activeFilter, setActiveFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -252,7 +298,7 @@ export default function ShipmentsPage() {
       closeModal();
       await fetchShipments();
     } catch (e) {
-      alert("Error saving shipment: " + e.message);
+      toast("Error saving shipment: " + e.message);
     } finally {
       setSaving(false);
     }
@@ -265,7 +311,7 @@ export default function ShipmentsPage() {
       setDeleteConfirmId(null);
       await fetchShipments();
     } catch (e) {
-      alert("Error deleting shipment: " + e.message);
+      toast("Error deleting shipment: " + e.message);
     }
   };
 
@@ -311,10 +357,10 @@ export default function ShipmentsPage() {
       const { error: err } = await supabase.from("shipments").update(update).eq("id", shipment.id);
       if (err) throw err;
       await fetchShipments();
-      // Update drawer if this shipment is open
       setSelectedShipment(prev => prev?.id === shipment.id ? { ...prev, ...update } : prev);
+      toast("Tracking updated successfully", "success");
     } catch (e) {
-      alert("Tracking refresh failed: " + e.message);
+      toast("Tracking refresh failed: " + e.message);
     } finally {
       setRefreshingId(null);
     }
@@ -325,6 +371,7 @@ export default function ShipmentsPage() {
 
   return (
     <div className="p-6 min-h-screen bg-gray-50 dark:bg-gray-900">
+      <Toast toasts={toasts} dismiss={dismissToast} />
       {/* Page Header */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
         <div>
