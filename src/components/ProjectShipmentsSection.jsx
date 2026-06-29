@@ -186,6 +186,7 @@ export default function ProjectShipmentsSection({ trackId }) {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(BLANK_FORM);
   const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [refreshingId, setRefreshingId] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -252,6 +253,7 @@ export default function ProjectShipmentsSection({ trackId }) {
     e.preventDefault();
     if (!form.tracking_number.trim()) return;
     setSaving(true);
+    setFormError(null);
     try {
       const payload = {
         tracking_number: form.tracking_number.trim(),
@@ -277,7 +279,7 @@ export default function ProjectShipmentsSection({ trackId }) {
       closeModal();
       await fetchShipments();
     } catch (e) {
-      toast("Error saving shipment: " + e.message);
+      setFormError(e.message);
     } finally {
       setSaving(false);
     }
@@ -687,6 +689,9 @@ export default function ProjectShipmentsSection({ trackId }) {
 
               {/* Modal Footer */}
               <div className="flex justify-end gap-2 pt-2">
+                {formError && (
+                  <p className="text-xs text-red-500 dark:text-red-400 flex-1 mr-3 leading-tight">{formError}</p>
+                )}
                 <button
                   type="button"
                   onClick={closeModal}
