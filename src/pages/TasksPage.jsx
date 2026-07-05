@@ -230,6 +230,8 @@ export default function TasksPage() {
     const { data } = await supabase
       .from("tracks")
       .select("id, name")
+      .not("status", "eq", "cancelled")
+      .not("name", "like", "[CANCELLED]%")
       .order("name");
     setProjects(data || []);
   }, []);
