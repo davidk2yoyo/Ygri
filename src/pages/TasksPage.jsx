@@ -136,6 +136,8 @@ export default function TasksPage() {
   const [assignees, setAssignees] = useState([]);
   const [selectedStageId, setSelectedStageId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState("");
+  const [formClients, setFormClients] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const loadTasks = useCallback(async () => {
@@ -227,13 +229,20 @@ export default function TasksPage() {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const { data } = await supabase
-      .from("tracks")
-      .select("id, name")
-      .not("status", "eq", "cancelled")
-      .not("name", "like", "[CANCELLED]%")
-      .order("name");
-    setProjects(data || []);
+    const [projectsRes, clientsRes] = await Promise.all([
+      supabase
+        .from("tracks")
+        .select("id, name, client_id")
+        .not("status", "eq", "cancelled")
+        .not("name", "like", "[CANCELLED]%")
+        .order("name"),
+      supabase
+        .from("clients")
+        .select("id, company_name")
+        .order("company_name"),
+    ]);
+    setProjects(projectsRes.data || []);
+    setFormClients(clientsRes.data || []);
   }, []);
 
   const loadStagesForProject = useCallback(async (trackId) => {
@@ -313,6 +322,7 @@ export default function TasksPage() {
       });
       const addedTitle = newTask.title.trim();
       setNewTask({ title: "", due_date: "" });
+      setSelectedClientId("");
       setSelectedProjectId("");
       setSelectedStageId("");
       setShowAddForm(false);
@@ -384,7 +394,21 @@ export default function TasksPage() {
             className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             required
           />
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <select
+              value={selectedClientId}
+              onChange={(e) => {
+                setSelectedClientId(e.target.value);
+                setSelectedProjectId("");
+                setSelectedStageId("");
+              }}
+              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">All clients...</option>
+              {formClients.map((c) => (
+                <option key={c.id} value={c.id}>{c.company_name}</option>
+              ))}
+            </select>
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -392,9 +416,11 @@ export default function TasksPage() {
               required
             >
               <option value="">Select project...</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
+              {projects
+                .filter((p) => !selectedClientId || p.client_id === selectedClientId)
+                .map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
             </select>
             <select
               value={selectedStageId}
