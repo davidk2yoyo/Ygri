@@ -1,9 +1,71 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
 
 const STATUS_FILTERS = ["all", "pending", "done", "overdue"];
+
+function SearchableSelect({ options, value, onChange, placeholder, disabled }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  const selected = options.find(o => o.value === value);
+
+  useEffect(() => { if (!open) setQuery(""); }, [open]);
+
+  useEffect(() => {
+    const h = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  const filtered = options.filter(o => !query || o.label.toLowerCase().includes(query.toLowerCase()));
+  const inputCls = "flex-1 bg-transparent text-gray-900 dark:text-white text-sm outline-none placeholder-gray-400 min-w-0";
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        onClick={() => !disabled && setOpen(true)}
+        className={`flex items-center gap-1 px-3 py-2 rounded-lg border ${disabled ? "opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800" : "cursor-text bg-white dark:bg-gray-700"} border-gray-200 dark:border-gray-600`}
+      >
+        {open ? (
+          <input autoFocus value={query} onChange={e => setQuery(e.target.value)}
+            placeholder={selected?.label || placeholder} className={inputCls} />
+        ) : (
+          <span className={`flex-1 text-sm truncate ${selected ? "text-gray-900 dark:text-white" : "text-gray-400"}`}>
+            {selected?.label || placeholder}
+          </span>
+        )}
+        {value && !open && (
+          <button type="button" onMouseDown={e => { e.stopPropagation(); onChange(""); }}
+            className="text-gray-300 hover:text-gray-500 flex-shrink-0">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </div>
+      {open && !disabled && (
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg max-h-52 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="px-3 py-2 text-sm text-gray-400">No results</div>
+          ) : (
+            filtered.map(o => (
+              <button key={o.value} type="button"
+                onMouseDown={e => { e.preventDefault(); onChange(o.value); setOpen(false); }}
+                className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors ${o.value === value ? "text-blue-600 dark:text-blue-400 font-medium bg-blue-50 dark:bg-blue-900/20" : "text-gray-900 dark:text-white"}`}>
+                {o.label}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 const PRIORITY_COLORS = {
   overdue: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
@@ -137,7 +199,9 @@ export default function TasksPage() {
   const [selectedStageId, setSelectedStageId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedClientId, setSelectedClientId] = useState("");
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState("");
   const [formClients, setFormClients] = useState([]);
+  const [formProfiles, setFormProfiles] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
 
   const loadTasks = useCallback(async () => {
@@ -229,7 +293,7 @@ export default function TasksPage() {
   }, []);
 
   const loadProjects = useCallback(async () => {
-    const [projectsRes, clientsRes] = await Promise.all([
+    const [projectsRes, clientsRes, profilesRes] = await Promise.all([
       supabase
         .from("tracks")
         .select("id, name, client_id")
@@ -240,9 +304,14 @@ export default function TasksPage() {
         .from("clients")
         .select("id, company_name")
         .order("company_name"),
+      supabase
+        .from("profiles")
+        .select("id, full_name")
+        .order("full_name"),
     ]);
     setProjects(projectsRes.data || []);
     setFormClients(clientsRes.data || []);
+    setFormProfiles((profilesRes.data || []).filter(p => p.full_name));
   }, []);
 
   const loadStagesForProject = useCallback(async (trackId) => {
@@ -317,7 +386,7 @@ export default function TasksPage() {
         p_track_stage_id: selectedStageId,
         p_title: newTask.title.trim(),
         p_due: newTask.due_date || null,
-        p_assignee: null,
+        p_assignee: selectedAssigneeId || null,
         p_user: user.id,
       });
       const addedTitle = newTask.title.trim();
@@ -325,6 +394,7 @@ export default function TasksPage() {
       setSelectedClientId("");
       setSelectedProjectId("");
       setSelectedStageId("");
+      setSelectedAssigneeId("");
       setShowAddForm(false);
       await loadTasks();
       sileo.success({ title: "Task added", description: addedTitle });
@@ -395,33 +465,20 @@ export default function TasksPage() {
             required
           />
           <div className="grid grid-cols-2 gap-3">
-            <select
+            <SearchableSelect
+              placeholder="All clients..."
               value={selectedClientId}
-              onChange={(e) => {
-                setSelectedClientId(e.target.value);
-                setSelectedProjectId("");
-                setSelectedStageId("");
-              }}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All clients...</option>
-              {formClients.map((c) => (
-                <option key={c.id} value={c.id}>{c.company_name}</option>
-              ))}
-            </select>
-            <select
+              options={formClients.map(c => ({ value: c.id, label: c.company_name }))}
+              onChange={(v) => { setSelectedClientId(v); setSelectedProjectId(""); setSelectedStageId(""); }}
+            />
+            <SearchableSelect
+              placeholder="Select project..."
               value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              <option value="">Select project...</option>
-              {projects
-                .filter((p) => !selectedClientId || p.client_id === selectedClientId)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-            </select>
+              options={projects
+                .filter(p => !selectedClientId || p.client_id === selectedClientId)
+                .map(p => ({ value: p.id, label: p.name }))}
+              onChange={(v) => setSelectedProjectId(v)}
+            />
             <select
               value={selectedStageId}
               onChange={(e) => setSelectedStageId(e.target.value)}
@@ -430,17 +487,23 @@ export default function TasksPage() {
               disabled={!stages.length}
             >
               <option value="">
-                {!selectedProjectId ? "Select project first..." : stages.length === 0 ? "No stages available" : "Select stage..."}
+                {!selectedProjectId ? "Select project first..." : stages.length === 0 ? "No stages" : "Select stage..."}
               </option>
               {stages.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+            <SearchableSelect
+              placeholder="Assignee (optional)"
+              value={selectedAssigneeId}
+              options={formProfiles.map(p => ({ value: p.id, label: p.full_name }))}
+              onChange={setSelectedAssigneeId}
+            />
             <input
               type="date"
               value={newTask.due_date}
               onChange={(e) => setNewTask({ ...newTask, due_date: e.target.value })}
-              className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="col-span-2 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
           <div className="flex justify-end gap-2">
