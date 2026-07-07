@@ -615,6 +615,7 @@ export default function ProjectsPage() {
   const [viewMode, setViewMode] = useState("flow");
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarViewMode, setSidebarViewMode] = useState("network"); // "network" or "list"
+  const [compactKanban, setCompactKanban] = useState(false);
   const [remarksDraft, setRemarksDraft] = useState("");
   const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [savingRemarks, setSavingRemarks] = useState(false);
@@ -657,39 +658,49 @@ export default function ProjectsPage() {
   const fetchTracksOverview = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("v_tracks_overview")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      const rows = (data ?? []).map((r) => ({
+      const [overviewRes, quotRes, shipRes, stagesRes, todosRes] = await Promise.all([
+        supabase.from("v_tracks_overview").select("*").order("created_at", { ascending: false }),
+        supabase.from("quotations").select("track_id"),
+        supabase.from("shipments").select("track_id, status"),
+        supabase.from("track_stages").select("id, track_id"),
+        supabase.from("stage_todos").select("track_stage_id, is_done"),
+      ]);
+      if (overviewRes.error) throw overviewRes.error;
+
+      // Build count maps
+      const quotCounts = {};
+      (quotRes.data ?? []).forEach(q => { if (q.track_id) quotCounts[q.track_id] = (quotCounts[q.track_id] || 0) + 1; });
+
+      const shipCounts = {};
+      (shipRes.data ?? []).forEach(s => { if (s.track_id) shipCounts[s.track_id] = (shipCounts[s.track_id] || 0) + 1; });
+
+      const stageToTrack = {};
+      (stagesRes.data ?? []).forEach(s => { stageToTrack[s.id] = s.track_id; });
+      const taskCounts = {};
+      (todosRes.data ?? []).forEach(t => {
+        const tid = stageToTrack[t.track_stage_id];
+        if (tid && !t.is_done) taskCounts[tid] = (taskCounts[tid] || 0) + 1;
+      });
+
+      const rows = (overviewRes.data ?? []).map((r) => ({
         ...r,
         progress_pct: typeof r.progress_pct === "string" ? parseFloat(r.progress_pct) : r.progress_pct,
+        quotation_count: quotCounts[r.track_id] || 0,
+        shipment_count: shipCounts[r.track_id] || 0,
+        task_count: taskCounts[r.track_id] || 0,
       }));
-      
-      // Debug: log the data to see what we're working with
-      console.log('All projects data:', rows);
-      if (rows.length > 0) {
-        console.log('First project fields:', Object.keys(rows[0]));
-        console.log('First project status field:', rows[0].status);
-      }
-      
-      // Separate active and cancelled projects
-      // Try different possible field names for status
-      const activeProjects = rows.filter(r => 
-        r.status !== 'cancelled' && 
+
+      const activeProjects = rows.filter(r =>
+        r.status !== 'cancelled' &&
         r.track_status !== 'cancelled' &&
         !r.track_name?.startsWith('[CANCELLED]')
       );
-      const cancelledProjects = rows.filter(r => 
-        r.status === 'cancelled' || 
+      const cancelledProjects = rows.filter(r =>
+        r.status === 'cancelled' ||
         r.track_status === 'cancelled' ||
         r.track_name?.startsWith('[CANCELLED]')
       );
-      
-      console.log('Active projects:', activeProjects);
-      console.log('Cancelled projects:', cancelledProjects);
-      
+
       setOverview(activeProjects);
       setCancelledProjects(cancelledProjects);
 
@@ -1068,11 +1079,22 @@ export default function ProjectsPage() {
                     {filteredOverview.length}/{overview.length} {t("total")}
                   </span>
 
+                  {/* Compact toggle — only when kanban is visible */}
+                  {sidebarViewMode === "network" && (
+                    <button
+                      onClick={() => setCompactKanban(c => !c)}
+                      className={`p-1.5 rounded transition-colors text-xs font-medium border ${compactKanban ? "bg-blue-50 border-blue-300 text-blue-600" : "border-bgray-200 dark:border-darkblack-400 text-bgray-500 hover:bg-bgray-100"}`}
+                      title={compactKanban ? "Normal view" : "Compact view"}
+                    >
+                      {compactKanban ? "Compact" : "Normal"}
+                    </button>
+                  )}
+
                   {/* View Toggle */}
                   <button
                     onClick={() => setSidebarViewMode(sidebarViewMode === "network" ? "list" : "network")}
                     className="p-1.5 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded transition-colors"
-                    title={sidebarViewMode === "network" ? "Switch to list view" : "Switch to network view"}
+                    title={sidebarViewMode === "network" ? "Switch to list view" : "Switch to kanban view"}
                   >
                     {sidebarViewMode === "network" ? (
                       <svg className="w-4 h-4 text-bgray-600 dark:text-bgray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1080,7 +1102,7 @@ export default function ProjectsPage() {
                       </svg>
                     ) : (
                       <svg className="w-4 h-4 text-bgray-600 dark:text-bgray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
                       </svg>
                     )}
                   </button>
@@ -1125,87 +1147,121 @@ export default function ProjectsPage() {
                     onProjectSelect={setActiveTrackId}
                     activeProjectId={activeTrackId}
                     searchQuery={searchQuery}
+                    compact={compactKanban}
+                    onRename={(project) => { setRenamingTrackId(project.track_id); setRenameValue(project.track_name); }}
+                    onCancel={(project) => handleDeleteProject(project)}
                   />
                 </div>
               ) : (
-                <div className="space-y-2 max-h-96 overflow-y-auto scrollbar-thin">
-                  {!loading && filteredOverview.map((t) => (
-                    <div
-                      key={t.track_id}
-                      className={`w-full relative p-4 rounded-lg border transition-all duration-200 hover:shadow-sm group ${
-                        activeTrackId === t.track_id
-                          ? "border-primary bg-success-50 dark:bg-darkblack-500 shadow-sm"
-                          : "border-bgray-200 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 hover:border-primary"
-                      }`}
-                    >
-                      <button
-                        onClick={() => setActiveTrackId(t.track_id)}
-                        className="w-full text-left"
-                      >
-                        <div className="text-xs text-bgray-500 dark:text-bgray-400 mb-1">{t.client_name}</div>
-                        {renamingTrackId === t.track_id ? (
-                          <input
-                            autoFocus
-                            value={renameValue}
-                            onChange={e => setRenameValue(e.target.value)}
-                            onKeyDown={e => {
-                              if (e.key === "Enter") handleRenameProject(t.track_id, t.track_name);
-                              if (e.key === "Escape") setRenamingTrackId(null);
-                            }}
-                            onBlur={() => handleRenameProject(t.track_id, t.track_name)}
-                            onClick={e => e.stopPropagation()}
-                            className="w-full font-semibold text-darkblack-700 dark:text-white mb-2 border-b-2 border-primary bg-transparent focus:outline-none text-sm pb-0.5"
-                          />
-                        ) : (
-                          <div className="font-semibold text-darkblack-700 dark:text-white mb-2">{t.track_name}</div>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <div className="text-xs text-bgray-600 dark:text-bgray-300">
-                            {t.workflow_kind}
-                          </div>
-                          <div className={`text-xs px-2 py-1 rounded font-medium ${
-                            Number(t.progress_pct) >= 80 ? "bg-success-100 text-success-400" :
-                            Number(t.progress_pct) >= 50 ? "bg-warning-100 text-warning-300" :
-                            "bg-bgray-200 text-bgray-600 dark:bg-darkblack-500 dark:text-bgray-300"
-                          }`}>
-                            {Number(t.progress_pct).toFixed(0)}%
-                          </div>
-                        </div>
-                        <div className="text-xs text-bgray-500 dark:text-bgray-400 mt-2">
-                          Due: {t.next_due_date ?? "No due date"}
-                        </div>
-                      </button>
-
-                      {/* Rename Button - Hidden by default, shown on hover */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setRenamingTrackId(t.track_id);
-                          setRenameValue(t.track_name);
-                        }}
-                        className="absolute top-2 right-8 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-blue-100 dark:hover:bg-blue-900 rounded text-blue-500 hover:text-blue-700"
-                        title="Rename project"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                        </svg>
-                      </button>
-
-                      {/* Delete Button - Hidden by default, shown on hover */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteProject(t);
-                        }}
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 p-1 hover:bg-red-100 dark:hover:bg-red-900 rounded text-red-600 hover:text-red-700"
-                        title="Cancel project"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
+                /* List view — table format */
+                <div className="overflow-x-auto max-h-[520px] overflow-y-auto scrollbar-thin">
+                  {!loading && (
+                    <table className="w-full text-sm min-w-[640px]">
+                      <thead className="sticky top-0 bg-bgray-50 dark:bg-darkblack-500 z-10">
+                        <tr className="border-b border-bgray-200 dark:border-darkblack-400">
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Project</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Client</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Stage</th>
+                          <th className="text-center py-2 px-2 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Tasks</th>
+                          <th className="text-center py-2 px-2 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Quotes</th>
+                          <th className="text-center py-2 px-2 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Ships</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Progress</th>
+                          <th className="text-left py-2 px-3 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Due</th>
+                          <th className="py-2 px-2"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredOverview.map((t) => {
+                          const pct = Number(t.progress_pct) || 0;
+                          const overdue = t.next_due_date && new Date(t.next_due_date) < new Date();
+                          const isActive = activeTrackId === t.track_id;
+                          return (
+                            <tr
+                              key={t.track_id}
+                              onClick={() => setActiveTrackId(t.track_id)}
+                              className={`border-b border-bgray-100 dark:border-darkblack-400 cursor-pointer transition-colors ${
+                                isActive
+                                  ? "bg-blue-50 dark:bg-blue-900/20"
+                                  : "hover:bg-bgray-50 dark:hover:bg-darkblack-500"
+                              }`}
+                            >
+                              <td className="py-2.5 px-3 font-medium text-darkblack-700 dark:text-white max-w-[180px]">
+                                {renamingTrackId === t.track_id ? (
+                                  <input
+                                    autoFocus
+                                    value={renameValue}
+                                    onChange={e => setRenameValue(e.target.value)}
+                                    onKeyDown={e => {
+                                      if (e.key === "Enter") handleRenameProject(t.track_id, t.track_name);
+                                      if (e.key === "Escape") setRenamingTrackId(null);
+                                    }}
+                                    onBlur={() => handleRenameProject(t.track_id, t.track_name)}
+                                    onClick={e => e.stopPropagation()}
+                                    className="w-full border-b-2 border-primary bg-transparent focus:outline-none text-sm"
+                                  />
+                                ) : (
+                                  <span className="truncate block">{t.track_name}</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-3 text-bgray-500 dark:text-bgray-400 text-xs truncate max-w-[120px]">{t.client_name}</td>
+                              <td className="py-2.5 px-3">
+                                {t.current_stage_name ? (
+                                  <span className="text-xs bg-bgray-100 dark:bg-darkblack-400 text-bgray-600 dark:text-bgray-300 px-2 py-0.5 rounded-full whitespace-nowrap">{t.current_stage_name}</span>
+                                ) : (
+                                  <span className="text-xs text-bgray-400">—</span>
+                                )}
+                              </td>
+                              <td className="py-2.5 px-2 text-center">
+                                {t.task_count > 0 ? <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">{t.task_count}</span> : <span className="text-bgray-300 text-xs">—</span>}
+                              </td>
+                              <td className="py-2.5 px-2 text-center">
+                                {t.quotation_count > 0 ? <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">{t.quotation_count}</span> : <span className="text-bgray-300 text-xs">—</span>}
+                              </td>
+                              <td className="py-2.5 px-2 text-center">
+                                {t.shipment_count > 0 ? <span className="text-xs font-semibold text-teal-600 bg-teal-50 px-1.5 py-0.5 rounded">{t.shipment_count}</span> : <span className="text-bgray-300 text-xs">—</span>}
+                              </td>
+                              <td className="py-2.5 px-3 w-28">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1.5 bg-bgray-100 dark:bg-darkblack-500 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${pct >= 75 ? "bg-emerald-500" : pct >= 50 ? "bg-blue-500" : pct >= 25 ? "bg-amber-500" : "bg-bgray-300"}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-xs text-bgray-500 w-7 text-right">{pct}%</span>
+                                </div>
+                              </td>
+                              <td className={`py-2.5 px-3 text-xs whitespace-nowrap ${overdue ? "text-red-600 font-semibold" : "text-bgray-400"}`}>
+                                {t.next_due_date ? new Date(t.next_due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
+                              </td>
+                              <td className="py-2.5 px-2">
+                                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                  <button
+                                    onClick={() => { setRenamingTrackId(t.track_id); setRenameValue(t.track_name); }}
+                                    className="p-1 rounded text-bgray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                    title="Rename"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                                    </svg>
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteProject(t)}
+                                    className="p-1 rounded text-bgray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                    title="Cancel project"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                    </svg>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               )}
 

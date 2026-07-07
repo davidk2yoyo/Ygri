@@ -1,63 +1,133 @@
-import React, { useState, useMemo } from "react";
+import React, { useRef, useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 
 const PIPELINES = {
-  Service: [
-    "Lead or Inquiry",
-    "Quotation",
-    "Service delivery",
-    "Payment",
-  ],
+  Service: ["Lead or Inquiry", "Quotation", "Service delivery", "Payment"],
   Product: [
-    "Lead or Inquiry",
-    "Quotation",
-    "Samples approval",
-    "Deposit payment",
-    "Production",
-    "Goods inspection",
-    "Balance payment",
-    "Shipment",
+    "Lead or Inquiry", "Quotation", "Samples approval", "Deposit payment",
+    "Production", "Goods inspection", "Balance payment", "Shipment",
   ],
 };
 
-// Column colors: subtle gradient tones per stage index
 const COLUMN_COLORS = {
   Service: [
-    { bg: "bg-violet-50", border: "border-violet-200", header: "bg-violet-100", text: "text-violet-700", accent: "#7c3aed" },
-    { bg: "bg-blue-50", border: "border-blue-200", header: "bg-blue-100", text: "text-blue-700", accent: "#2563eb" },
-    { bg: "bg-cyan-50", border: "border-cyan-200", header: "bg-cyan-100", text: "text-cyan-700", accent: "#0891b2" },
-    { bg: "bg-emerald-50", border: "border-emerald-200", header: "bg-emerald-100", text: "text-emerald-700", accent: "#059669" },
+    { bg: "bg-violet-50", border: "border-violet-200", header: "bg-violet-100", text: "text-violet-700" },
+    { bg: "bg-blue-50", border: "border-blue-200", header: "bg-blue-100", text: "text-blue-700" },
+    { bg: "bg-cyan-50", border: "border-cyan-200", header: "bg-cyan-100", text: "text-cyan-700" },
+    { bg: "bg-emerald-50", border: "border-emerald-200", header: "bg-emerald-100", text: "text-emerald-700" },
   ],
   Product: [
-    { bg: "bg-violet-50", border: "border-violet-200", header: "bg-violet-100", text: "text-violet-700", accent: "#7c3aed" },
-    { bg: "bg-blue-50", border: "border-blue-200", header: "bg-blue-100", text: "text-blue-700", accent: "#2563eb" },
-    { bg: "bg-indigo-50", border: "border-indigo-200", header: "bg-indigo-100", text: "text-indigo-700", accent: "#4f46e5" },
-    { bg: "bg-cyan-50", border: "border-cyan-200", header: "bg-cyan-100", text: "text-cyan-700", accent: "#0891b2" },
-    { bg: "bg-teal-50", border: "border-teal-200", header: "bg-teal-100", text: "text-teal-700", accent: "#0d9488" },
-    { bg: "bg-emerald-50", border: "border-emerald-200", header: "bg-emerald-100", text: "text-emerald-700", accent: "#059669" },
-    { bg: "bg-amber-50", border: "border-amber-200", header: "bg-amber-100", text: "text-amber-700", accent: "#d97706" },
-    { bg: "bg-orange-50", border: "border-orange-200", header: "bg-orange-100", text: "text-orange-700", accent: "#ea580c" },
+    { bg: "bg-violet-50", border: "border-violet-200", header: "bg-violet-100", text: "text-violet-700" },
+    { bg: "bg-blue-50", border: "border-blue-200", header: "bg-blue-100", text: "text-blue-700" },
+    { bg: "bg-indigo-50", border: "border-indigo-200", header: "bg-indigo-100", text: "text-indigo-700" },
+    { bg: "bg-cyan-50", border: "border-cyan-200", header: "bg-cyan-100", text: "text-cyan-700" },
+    { bg: "bg-teal-50", border: "border-teal-200", header: "bg-teal-100", text: "text-teal-700" },
+    { bg: "bg-emerald-50", border: "border-emerald-200", header: "bg-emerald-100", text: "text-emerald-700" },
+    { bg: "bg-amber-50", border: "border-amber-200", header: "bg-amber-100", text: "text-amber-700" },
+    { bg: "bg-orange-50", border: "border-orange-200", header: "bg-orange-100", text: "text-orange-700" },
   ],
 };
 
 function getProgressColor(pct) {
-  if (pct >= 75) return { bg: "bg-emerald-500", text: "text-emerald-700", light: "bg-emerald-100" };
-  if (pct >= 50) return { bg: "bg-blue-500", text: "text-blue-700", light: "bg-blue-100" };
-  if (pct >= 25) return { bg: "bg-amber-500", text: "text-amber-700", light: "bg-amber-100" };
-  return { bg: "bg-bgray-300", text: "text-bgray-600", light: "bg-bgray-100" };
+  if (pct >= 75) return { bg: "bg-emerald-500", text: "text-emerald-700" };
+  if (pct >= 50) return { bg: "bg-blue-500", text: "text-blue-700" };
+  if (pct >= 25) return { bg: "bg-amber-500", text: "text-amber-700" };
+  return { bg: "bg-bgray-300", text: "text-bgray-500" };
 }
 
-function isOverdue(nextDueDate) {
-  if (!nextDueDate) return false;
-  return new Date(nextDueDate) < new Date();
+function isOverdue(d) {
+  return d ? new Date(d) < new Date() : false;
 }
 
-// Individual project card inside a pipeline column
-function ProjectCard({ project, isActive, onClick }) {
+function KebabMenu({ onRename, onCancel }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (!ref.current?.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative" onClick={e => e.stopPropagation()}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="p-0.5 rounded hover:bg-bgray-100 dark:hover:bg-darkblack-400 text-bgray-400 hover:text-bgray-600 transition-colors"
+      >
+        <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="currentColor">
+          <circle cx="8" cy="3" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="8" cy="13" r="1.2"/>
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-5 z-50 w-36 bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-lg shadow-lg py-1 text-sm">
+          <button
+            onClick={() => { setOpen(false); onRename?.(); }}
+            className="w-full text-left px-3 py-1.5 text-bgray-700 dark:text-bgray-200 hover:bg-bgray-50 dark:hover:bg-darkblack-500 flex items-center gap-2"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+            </svg>
+            Rename
+          </button>
+          <button
+            onClick={() => { setOpen(false); onCancel?.(); }}
+            className="w-full text-left px-3 py-1.5 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+            </svg>
+            Cancel project
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function StatPill({ count, label, color }) {
+  if (!count) return null;
+  return (
+    <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${color}`}>
+      {count} {label}
+    </span>
+  );
+}
+
+function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel }) {
   const progress = Number(project.progress_pct) || 0;
   const progressColor = getProgressColor(progress);
   const overdue = isOverdue(project.next_due_date);
+
+  if (compact) {
+    return (
+      <motion.div
+        layout
+        layoutId={`card-${project.track_id}`}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.2 }}
+        onClick={onClick}
+        className={`relative cursor-pointer rounded-lg border transition-all duration-150 group
+          ${isActive ? "bg-white border-blue-500 shadow-sm ring-1 ring-blue-400/40" : "bg-white border-bgray-200 hover:border-blue-300 hover:shadow-sm"}`}
+      >
+        <div className="px-2.5 py-2 flex items-center justify-between gap-2">
+          <div className="min-w-0">
+            <div className="font-medium text-darkblack-700 dark:text-white text-xs leading-tight truncate">{project.track_name}</div>
+            <div className="text-[10px] text-bgray-400 truncate">{project.client_name}</div>
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {overdue && <span className="text-[9px] font-bold text-red-500 bg-red-50 px-1 py-0.5 rounded">LATE</span>}
+            <span className={`text-[10px] font-semibold ${progressColor.text}`}>{progress}%</span>
+            <KebabMenu onRename={onRename} onCancel={onCancel} />
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -69,26 +139,15 @@ function ProjectCard({ project, isActive, onClick }) {
       transition={{ duration: 0.25, type: "spring", stiffness: 260, damping: 20 }}
       onClick={onClick}
       className={`relative cursor-pointer rounded-xl border transition-all duration-200 group
-        ${isActive
-          ? "bg-white border-blue-500 shadow-md ring-2 ring-blue-400/40"
-          : "bg-white border-bgray-200 hover:border-blue-300 hover:shadow-sm"
-        }
-      `}
+        ${isActive ? "bg-white border-blue-500 shadow-md ring-2 ring-blue-400/40" : "bg-white border-bgray-200 hover:border-blue-300 hover:shadow-sm"}`}
     >
-      {/* Overdue ribbon */}
-      {overdue && (
-        <div className="absolute top-0 right-0 w-0 h-0 overflow-hidden">
-          <div className="absolute -top-1 -right-1 w-16 h-16 bg-red-100 rotate-45 origin-top-right"></div>
-          <span className="absolute top-1.5 right-1 text-[9px] font-bold text-red-600 rotate-45 whitespace-nowrap" style={{ transform: "rotate(45deg)", top: "2px", right: "-2px" }}>
-            LATE
-          </span>
-        </div>
-      )}
-
       <div className="p-3">
-        {/* Project name */}
-        <div className="font-semibold text-darkblack-700 dark:text-white text-sm leading-tight mb-1 pr-4 line-clamp-2">
-          {project.track_name}
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-1 mb-0.5">
+          <div className="font-semibold text-darkblack-700 dark:text-white text-sm leading-tight line-clamp-2 flex-1">
+            {project.track_name}
+          </div>
+          <KebabMenu onRename={onRename} onCancel={onCancel} />
         </div>
 
         {/* Client */}
@@ -98,41 +157,42 @@ function ProjectCard({ project, isActive, onClick }) {
 
         {/* Progress bar */}
         <div className="w-full h-1.5 bg-bgray-100 dark:bg-darkblack-500 rounded-full overflow-hidden mb-2">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${progressColor.bg}`}
-            style={{ width: `${progress}%` }}
-          />
+          <div className={`h-full rounded-full transition-all duration-500 ${progressColor.bg}`} style={{ width: `${progress}%` }} />
         </div>
 
-        {/* Footer: progress % + due date */}
-        <div className="flex items-center justify-between">
-          <span className={`text-xs font-semibold ${progressColor.text}`}>
-            {progress}%
-          </span>
+        {/* Footer row */}
+        <div className="flex items-center justify-between mb-2">
+          <span className={`text-xs font-semibold ${progressColor.text}`}>{progress}%</span>
           {project.next_due_date && (
-            <span className={`text-xs ${overdue ? "text-red-600 font-semibold" : "text-bgray-400 dark:text-bgray-500"}`}>
-              {overdue ? "⚠ " : ""}
+            <span className={`text-xs ${overdue ? "text-red-600 font-semibold" : "text-bgray-400"}`}>
+              {overdue && <span className="mr-0.5">!</span>}
               {new Date(project.next_due_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             </span>
           )}
         </div>
+
+        {/* Stat pills */}
+        {(project.task_count > 0 || project.quotation_count > 0 || project.shipment_count > 0) && (
+          <div className="flex flex-wrap gap-1 pt-1.5 border-t border-bgray-100">
+            <StatPill count={project.task_count} label="tasks" color="bg-amber-50 text-amber-700" />
+            <StatPill count={project.quotation_count} label="quotes" color="bg-blue-50 text-blue-700" />
+            <StatPill count={project.shipment_count} label="ships" color="bg-teal-50 text-teal-700" />
+          </div>
+        )}
       </div>
     </motion.div>
   );
 }
 
-// Single pipeline column
-function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect }) {
+function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect, compact, onRename, onCancel }) {
+  const colWidth = compact ? "w-44" : "w-56";
   return (
-    <div className="flex-shrink-0 w-56 flex flex-col">
-      {/* Column header */}
-      <div className={`${color.header} border-b ${color.border} rounded-t-xl px-3 py-2.5 sticky top-0 z-10`}>
-        <div className={`font-semibold text-sm ${color.text}`}>{stageName}</div>
-        <div className="text-xs text-bgray-500 mt-0.5">{projects.length} project{projects.length !== 1 ? "s" : ""}</div>
+    <div className={`flex-shrink-0 ${colWidth} flex flex-col`}>
+      <div className={`${color.header} border-b ${color.border} rounded-t-xl px-3 py-2 sticky top-0 z-10`}>
+        <div className={`font-semibold text-xs ${color.text}`}>{stageName}</div>
+        <div className="text-[10px] text-bgray-500 mt-0.5">{projects.length} project{projects.length !== 1 ? "s" : ""}</div>
       </div>
-
-      {/* Cards */}
-      <div className={`${color.bg} border-l border-r border-b ${color.border} rounded-b-xl p-2 flex-1 min-h-[180px] overflow-y-auto scrollbar-thin space-y-2`}>
+      <div className={`${color.bg} border-l border-r border-b ${color.border} rounded-b-xl p-2 flex-1 min-h-[160px] overflow-y-auto scrollbar-thin space-y-1.5`}>
         <AnimatePresence>
           {projects.map((project) => (
             <ProjectCard
@@ -140,73 +200,58 @@ function PipelineColumn({ stageName, color, projects, activeProjectId, onProject
               project={project}
               isActive={activeProjectId === project.track_id}
               onClick={() => onProjectSelect(project.track_id)}
+              compact={compact}
+              onRename={() => onRename?.(project)}
+              onCancel={() => onCancel?.(project)}
             />
           ))}
         </AnimatePresence>
-
         {projects.length === 0 && (
-          <div className="text-center py-6 text-bgray-400 text-xs">
-            No projects
-          </div>
+          <div className="text-center py-5 text-bgray-400 text-xs">No projects</div>
         )}
       </div>
     </div>
   );
 }
 
-export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "" }) {
+export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "", compact = false, onRename, onCancel }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("Product");
 
-  // Filter by search
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return projects;
     const q = searchQuery.toLowerCase();
-    return projects.filter(
-      (p) =>
-        p.track_name?.toLowerCase().includes(q) ||
-        p.client_name?.toLowerCase().includes(q)
-    );
+    return projects.filter(p => p.track_name?.toLowerCase().includes(q) || p.client_name?.toLowerCase().includes(q));
   }, [projects, searchQuery]);
 
-  // Split by workflow_kind
-  const byKind = useMemo(() => {
-    const service = filtered.filter((p) => p.workflow_kind === "Service");
-    const product = filtered.filter((p) => p.workflow_kind === "Product");
-    return { Service: service, Product: product };
-  }, [filtered]);
+  const byKind = useMemo(() => ({
+    Service: filtered.filter(p => p.workflow_kind === "Service"),
+    Product: filtered.filter(p => p.workflow_kind === "Product"),
+  }), [filtered]);
 
-  // Group current tab's projects into columns by current_stage_name
-  // Completed projects (current_stage_name === null && progress 100) go to a "Completed" column
   const columns = useMemo(() => {
     const stages = PIPELINES[activeTab];
     const colors = COLUMN_COLORS[activeTab];
     const projectsForTab = byKind[activeTab];
-
     const result = stages.map((stage, idx) => ({
       stageName: stage,
       color: colors[idx],
-      projects: projectsForTab.filter((p) => p.current_stage_name === stage),
+      projects: projectsForTab.filter(p => p.current_stage_name === stage),
     }));
-
-    // Add "Completed" column at the end
-    const completed = projectsForTab.filter(
-      (p) => p.current_stage_name === null && Number(p.progress_pct) >= 100
-    );
+    const completed = projectsForTab.filter(p => p.current_stage_name === null && Number(p.progress_pct) >= 100);
     if (completed.length > 0) {
       result.push({
         stageName: "Completed",
-        color: { bg: "bg-emerald-50", border: "border-emerald-300", header: "bg-emerald-100", text: "text-emerald-800", accent: "#16a34a" },
+        color: { bg: "bg-emerald-50", border: "border-emerald-300", header: "bg-emerald-100", text: "text-emerald-800" },
         projects: completed,
       });
     }
-
     return result;
   }, [activeTab, byKind]);
 
   const tabs = [
-    { key: "Product", label: t("product") || "Product", icon: "📦", count: byKind.Product.length },
-    { key: "Service", label: t("service") || "Service", icon: "⚙️", count: byKind.Service.length },
+    { key: "Product", label: "Product", count: byKind.Product.length },
+    { key: "Service", label: "Service", count: byKind.Service.length },
   ];
 
   return (
@@ -217,27 +262,22 @@ export default function PipelineView({ projects, onProjectSelect, activeProjectI
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all duration-200
               ${activeTab === tab.key
                 ? "bg-blue-600 text-white shadow-sm"
-                : "bg-bgray-100 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 hover:bg-bgray-200 dark:hover:bg-darkblack-400"
-              }
-            `}
+                : "bg-bgray-100 dark:bg-darkblack-500 text-bgray-600 dark:text-bgray-300 hover:bg-bgray-200"}`}
           >
-            <span>{tab.icon}</span>
             <span>{tab.label}</span>
-            <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-              activeTab === tab.key ? "bg-white/25" : "bg-bgray-200 dark:bg-darkblack-400"
-            }`}>
+            <span className={`text-xs px-1.5 py-0.5 rounded-full ${activeTab === tab.key ? "bg-white/25" : "bg-bgray-200 dark:bg-darkblack-400"}`}>
               {tab.count}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Pipeline columns — horizontal scroll */}
-      <div className="flex-1 overflow-x-auto overflow-y-auto scrollbar-thin pb-2 px-1">
-        <div className="flex gap-3 min-w-max h-full">
+      {/* Pipeline columns */}
+      <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin pb-2 px-1">
+        <div className="flex gap-2.5 min-w-max h-full">
           {columns.map((col) => (
             <PipelineColumn
               key={col.stageName}
@@ -246,6 +286,9 @@ export default function PipelineView({ projects, onProjectSelect, activeProjectI
               projects={col.projects}
               activeProjectId={activeProjectId}
               onProjectSelect={onProjectSelect}
+              compact={compact}
+              onRename={onRename}
+              onCancel={onCancel}
             />
           ))}
         </div>
