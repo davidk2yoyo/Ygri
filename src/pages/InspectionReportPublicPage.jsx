@@ -389,7 +389,7 @@ function buildPdfHtml({ report, blocks }) {
 <style>
   *, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  @page { size: A4; margin: 0; }
+  @page { size: A4; margin: 14mm 18mm 12mm; }
 
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -400,10 +400,11 @@ function buildPdfHtml({ report, blocks }) {
     background: white;
   }
 
-  /* ── Document header ── */
+  /* ── Document header — bleeds to edge with negative margins ── */
   .doc-header {
     background: #1e3a5f;
-    padding: 16px 44px;
+    padding: 16px 18mm;
+    margin: -14mm -18mm 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -411,11 +412,11 @@ function buildPdfHtml({ report, blocks }) {
   .doc-header img { height: 44px; object-fit: contain; }
   .company-name { color: white; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
   .company-web  { color: #93c5fd; font-size: 9px; margin-top: 3px; }
-  .accent-line  { background: #2563eb; height: 3px; }
+  .accent-line  { background: #2563eb; height: 3px; margin: 0 -18mm; }
 
   /* ── Cover ── */
   .cover {
-    padding: 22px 44px 18px;
+    padding: 22px 0 18px;
     border-bottom: 2px solid #eef2f7;
     display: flex;
     justify-content: space-between;
@@ -437,7 +438,7 @@ function buildPdfHtml({ report, blocks }) {
 
   /* ── Content blocks ── */
   .content-block {
-    padding: 16px 44px 4px;
+    padding: 16px 0 4px;
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -472,17 +473,17 @@ function buildPdfHtml({ report, blocks }) {
   .checklist-table tr.odd td,
   .data-table tr.odd td { background: #f8fafc; }
 
-  /* ── Footer ── */
+  /* ── Footer — bleeds to edge ── */
   .doc-footer {
     background: #eef2f7;
     border-top: 2px solid #1e3a5f;
-    padding: 9px 44px;
+    padding: 9px 18mm;
+    margin: 28px -18mm -12mm;
     display: flex;
     justify-content: space-between;
     font-size: 8.5px;
     color: #64748b;
     font-weight: 600;
-    margin-top: 28px;
   }
 </style>
 </head>
