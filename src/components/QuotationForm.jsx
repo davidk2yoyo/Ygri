@@ -25,7 +25,7 @@ const emptyItem = () => ({
   picturePreview: "",
 });
 
-export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved }) {
+export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved, quotationId }) {
   const navigate = useNavigate();
   const [documentType, setDocumentType] = useState("quotation");
   const [type, setType] = useState("product");
@@ -53,6 +53,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [savedQuotation, setSavedQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quoteNumber, setQuoteNumber] = useState("");
+  const [purpose, setPurpose] = useState("");
   const fileRefs = useRef({});
   const [dragOver, setDragOver] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
@@ -68,10 +69,27 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
   useEffect(() => {
     loadInitialData();
-  }, [trackId]);
+  }, [trackId, quotationId]);
 
   const loadInitialData = async () => {
     setLoading(true);
+    // Reset form state before loading
+    setSavedQuotation(null);
+    setQuoteNumber("");
+    setPurpose("");
+    setDocumentType("quotation");
+    setType("product");
+    setCurrency("USD");
+    setIncoterm("");
+    setIncotermLocation("");
+    setDeliveryTime("");
+    setSupplierExchangeRate("");
+    setValidUntil("");
+    setNegotiationTerm("");
+    setNotes("");
+    setCommissionPct(0);
+    setShowCommission(false);
+    setItems([emptyItem()]);
     try {
       // Load suppliers
       const { data: suppData } = await supabase.from("suppliers").select("*").order("name");
@@ -81,16 +99,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { data: catData } = await supabase.from("catalog_items").select("*").order("description");
       setCatalogItems(catData || []);
 
-      // Load existing quotation for this track
-      const { data: quotData } = await supabase
-        .from("quotations")
-        .select("*, quotation_items(*)")
-        .eq("track_id", trackId)
-        .maybeSingle();
+      // Load specific quotation by ID, or the first one for this track if no ID given
+      const quotQuery = supabase.from("quotations").select("*, quotation_items(*)");
+      if (quotationId) {
+        quotQuery.eq("id", quotationId);
+      } else {
+        quotQuery.eq("track_id", trackId).order("created_at", { ascending: false }).limit(1);
+      }
+      const { data: quotRaw } = await quotQuery;
+      const quotData = Array.isArray(quotRaw) ? quotRaw[0] : quotRaw;
 
       if (quotData) {
         setSavedQuotation(quotData);
         setQuoteNumber(quotData.quote_number || "");
+        setPurpose(quotData.purpose || "");
         setDocumentType(quotData.document_type || "quotation");
         setType(quotData.type || "product");
         setCurrency(quotData.currency || "USD");
@@ -264,6 +286,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       // 1. Upsert quotation header
       const quotPayload = {
         track_id: trackId,
+        purpose: purpose.trim() || null,
         type,
         currency,
         incoterm: type === "product" ? incoterm : null,
@@ -414,7 +437,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           <h3 className="text-lg font-bold text-darkblack-700 dark:text-white">
             {savedQuotation ? `${DOC_STEPS[currentStepIdx].label} ${quoteNumber}` : "New Quotation"}
           </h3>
-          <p className="text-xs text-bgray-500">{projectName} · {clientName}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            <p className="text-xs text-bgray-500">{projectName} · {clientName}</p>
+            <input
+              type="text"
+              value={purpose}
+              onChange={e => setPurpose(e.target.value)}
+              placeholder="Label (e.g. Samples, Additional order...)"
+              className="text-xs text-bgray-600 dark:text-bgray-300 bg-transparent border-b border-dashed border-bgray-300 dark:border-darkblack-400 focus:outline-none focus:border-primary w-48 pb-0.5 placeholder-bgray-300"
+            />
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap justify-end">
           {savedQuotation && (

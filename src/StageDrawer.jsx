@@ -423,6 +423,8 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
   // Quotation tab state
   const [activeTab, setActiveTab] = useState("details"); // "details" | "quotation"
+  const [quotations, setQuotations] = useState([]);
+  const [selectedQuotationId, setSelectedQuotationId] = useState(null); // null = new, uuid = existing
   const [quotationAmount, setQuotationAmount] = useState(null);
   const [quotationCurrency, setQuotationCurrency] = useState("USD");
 
@@ -469,22 +471,33 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     loadStageDetail();
   }, [stageId]);
 
-  // Load existing quotation amount for display in non-quotation stages
-  useEffect(() => {
+  // Load all quotations for this track
+  const loadQuotations = useCallback(async () => {
     if (!trackId) return;
-    const loadQuotationAmount = async () => {
-      const { data } = await supabase
-        .from("quotations")
-        .select("total_amount, currency")
-        .eq("track_id", trackId)
-        .maybeSingle();
-      if (data) {
-        setQuotationAmount(data.total_amount);
-        setQuotationCurrency(data.currency || "USD");
-      }
-    };
-    loadQuotationAmount();
+    const { data } = await supabase
+      .from("quotations")
+      .select("id, quote_number, document_type, total_amount, currency, purpose, created_at")
+      .eq("track_id", trackId)
+      .order("created_at", { ascending: true });
+    const list = data || [];
+    setQuotations(list);
+    // Active = highest doc type (invoice > proforma > quotation), fallback to most recent
+    const priority = { invoice: 3, proforma: 2, quotation: 1 };
+    const active = list.slice().sort((a, b) =>
+      (priority[b.document_type] || 0) - (priority[a.document_type] || 0)
+    )[0];
+    if (active) {
+      setQuotationAmount(active.total_amount);
+      setQuotationCurrency(active.currency || "USD");
+      // Auto-select the most recent quotation when loading
+      setSelectedQuotationId(prev => prev === null && list.length > 0 ? list[list.length - 1].id : prev);
+    }
   }, [trackId]);
+
+  useEffect(() => {
+    setSelectedQuotationId(null);
+    loadQuotations();
+  }, [loadQuotations]);
 
   // Helper functions for files
   const isImageFile = (filePath) => {
@@ -1002,17 +1015,64 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
           {/* Quotation Tab */}
           {stageDetail && activeTab === "quotation" && trackId && (
-            <div className="p-6">
-              <QuotationForm
-                trackId={trackId}
-                clientName={clientName}
-                projectName={projectName}
-                onSaved={(amount, currency) => {
-                  setQuotationAmount(amount);
-                  setQuotationCurrency(currency);
-                }}
-                onClose={() => setActiveTab("details")}
-              />
+            <div className="flex flex-col h-full">
+              {/* Quotation list header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-bgray-100 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-500 flex-shrink-0">
+                <div className="flex items-center gap-2 overflow-x-auto scrollbar-thin pb-0.5">
+                  {quotations.map((q) => {
+                    const docLabel = q.document_type === "invoice" ? "Invoice" : q.document_type === "proforma" ? "Proforma" : "Quote";
+                    const isSelected = selectedQuotationId === q.id;
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => setSelectedQuotationId(q.id)}
+                        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                          isSelected
+                            ? "bg-white dark:bg-darkblack-600 border-blue-400 text-blue-700 dark:text-blue-400 shadow-sm"
+                            : "border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-bgray-400"
+                        }`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                          q.document_type === "invoice" ? "bg-emerald-500" :
+                          q.document_type === "proforma" ? "bg-blue-500" : "bg-amber-400"
+                        }`} />
+                        <span>{docLabel} {q.quote_number}</span>
+                        {q.purpose && <span className="text-bgray-400 dark:text-bgray-500">· {q.purpose}</span>}
+                      </button>
+                    );
+                  })}
+                  <button
+                    onClick={() => setSelectedQuotationId(null)}
+                    className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                      selectedQuotationId === null && quotations.length > 0
+                        ? "bg-white dark:bg-darkblack-600 border-blue-400 text-blue-700 shadow-sm"
+                        : "border-dashed border-bgray-300 dark:border-darkblack-400 text-bgray-500 hover:border-primary hover:text-primary"
+                    }`}
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+                    </svg>
+                    New
+                  </button>
+                </div>
+              </div>
+
+              {/* Form */}
+              <div className="flex-1 overflow-y-auto p-6">
+                <QuotationForm
+                  key={selectedQuotationId ?? "new"}
+                  trackId={trackId}
+                  clientName={clientName}
+                  projectName={projectName}
+                  quotationId={selectedQuotationId}
+                  onSaved={(amount, currency) => {
+                    setQuotationAmount(amount);
+                    setQuotationCurrency(currency);
+                    loadQuotations();
+                  }}
+                  onClose={() => setActiveTab("details")}
+                />
+              </div>
             </div>
           )}
 
