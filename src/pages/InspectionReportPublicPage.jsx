@@ -389,7 +389,7 @@ function buildPdfHtml({ report, blocks }) {
 <style>
   *, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  @page { size: A4; margin: 14mm 18mm 12mm; }
+  @page { size: A4; margin: 0; }
 
   body {
     font-family: Arial, Helvetica, sans-serif;
@@ -400,11 +400,10 @@ function buildPdfHtml({ report, blocks }) {
     background: white;
   }
 
-  /* ── Document header — bleeds to edge with negative margins ── */
+  /* ── Document header — full bleed ── */
   .doc-header {
     background: #1e3a5f;
     padding: 16px 18mm;
-    margin: -14mm -18mm 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -412,11 +411,11 @@ function buildPdfHtml({ report, blocks }) {
   .doc-header img { height: 44px; object-fit: contain; }
   .company-name { color: white; font-size: 12.5px; font-weight: 700; letter-spacing: .02em; }
   .company-web  { color: #93c5fd; font-size: 9px; margin-top: 3px; }
-  .accent-line  { background: #2563eb; height: 3px; margin: 0 -18mm; }
+  .accent-line  { background: #2563eb; height: 3px; }
 
   /* ── Cover ── */
   .cover {
-    padding: 22px 0 18px;
+    padding: 22px 18mm 18px;
     border-bottom: 2px solid #eef2f7;
     display: flex;
     justify-content: space-between;
@@ -429,7 +428,7 @@ function buildPdfHtml({ report, blocks }) {
   .cover-date  { font-size: 9.5px; color: #6b7280; text-align: right; flex-shrink: 0; padding-left: 20px; margin: 0; }
 
   /* ── Info grid ── */
-  .cover-info { border-bottom: 1px solid #eef2f7; }
+  .cover-info { border-bottom: 1px solid #eef2f7; padding: 0 18mm; }
   .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0; }
   .info-cell { padding: 7px 12px; border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; }
   .info-cell:nth-child(even) { border-right: none; }
@@ -438,7 +437,7 @@ function buildPdfHtml({ report, blocks }) {
 
   /* ── Content blocks ── */
   .content-block {
-    padding: 16px 0 4px;
+    padding: 16px 18mm 4px;
     break-inside: avoid;
     page-break-inside: avoid;
   }
@@ -473,17 +472,17 @@ function buildPdfHtml({ report, blocks }) {
   .checklist-table tr.odd td,
   .data-table tr.odd td { background: #f8fafc; }
 
-  /* ── Footer — bleeds to edge ── */
+  /* ── Footer — full bleed ── */
   .doc-footer {
     background: #eef2f7;
     border-top: 2px solid #1e3a5f;
     padding: 9px 18mm;
-    margin: 28px -18mm -12mm;
     display: flex;
     justify-content: space-between;
     font-size: 8.5px;
     color: #64748b;
     font-weight: 600;
+    margin-top: 28px;
   }
 </style>
 </head>
