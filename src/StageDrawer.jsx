@@ -424,7 +424,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   // Quotation tab state
   const [activeTab, setActiveTab] = useState("details"); // "details" | "quotation"
   const [quotations, setQuotations] = useState([]);
-  const [selectedQuotationId, setSelectedQuotationId] = useState(null); // null = new, uuid = existing
+  const [selectedQuotationId, setSelectedQuotationId] = useState("unset"); // "unset" = not yet loaded, null = new, uuid = existing
   const [quotationAmount, setQuotationAmount] = useState(null);
   const [quotationCurrency, setQuotationCurrency] = useState("USD");
 
@@ -489,13 +489,18 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     if (active) {
       setQuotationAmount(active.total_amount);
       setQuotationCurrency(active.currency || "USD");
-      // Auto-select the most recent quotation when loading
-      setSelectedQuotationId(prev => prev === null && list.length > 0 ? list[list.length - 1].id : prev);
     }
+    // Auto-select most recent on first load only (when no selection has been made yet)
+    // Use a ref-based flag so clicking New doesn't get overridden by the refresh after save
+    setSelectedQuotationId(prev => {
+      if (prev === "unset" && list.length > 0) return list[list.length - 1].id;
+      if (prev === "unset") return null;
+      return prev;
+    });
   }, [trackId]);
 
   useEffect(() => {
-    setSelectedQuotationId(null);
+    setSelectedQuotationId("unset");
     loadQuotations();
   }, [loadQuotations]);
 
@@ -1044,7 +1049,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                   <button
                     onClick={() => setSelectedQuotationId(null)}
                     className={`flex-shrink-0 flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                      selectedQuotationId === null && quotations.length > 0
+                      (selectedQuotationId === null) && quotations.length > 0
                         ? "bg-white dark:bg-darkblack-600 border-blue-400 text-blue-700 shadow-sm"
                         : "border-dashed border-bgray-300 dark:border-darkblack-400 text-bgray-500 hover:border-primary hover:text-primary"
                     }`}
@@ -1060,11 +1065,11 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
               {/* Form */}
               <div className="flex-1 overflow-y-auto p-6">
                 <QuotationForm
-                  key={selectedQuotationId ?? "new"}
+                  key={selectedQuotationId === "unset" ? "loading" : (selectedQuotationId ?? "new")}
                   trackId={trackId}
                   clientName={clientName}
                   projectName={projectName}
-                  quotationId={selectedQuotationId}
+                  quotationId={selectedQuotationId === "unset" ? undefined : selectedQuotationId}
                   onSaved={(amount, currency) => {
                     setQuotationAmount(amount);
                     setQuotationCurrency(currency);

@@ -99,15 +99,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { data: catData } = await supabase.from("catalog_items").select("*").order("description");
       setCatalogItems(catData || []);
 
-      // Load specific quotation by ID, or the first one for this track if no ID given
-      const quotQuery = supabase.from("quotations").select("*, quotation_items(*)");
+      // Only load if a specific quotation ID is provided — null means new blank form
+      let quotData = null;
       if (quotationId) {
-        quotQuery.eq("id", quotationId);
-      } else {
-        quotQuery.eq("track_id", trackId).order("created_at", { ascending: false }).limit(1);
+        const { data } = await supabase
+          .from("quotations")
+          .select("*, quotation_items(*)")
+          .eq("id", quotationId)
+          .single();
+        quotData = data;
       }
-      const { data: quotRaw } = await quotQuery;
-      const quotData = Array.isArray(quotRaw) ? quotRaw[0] : quotRaw;
 
       if (quotData) {
         setSavedQuotation(quotData);
