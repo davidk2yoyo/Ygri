@@ -143,10 +143,31 @@ const STATUS_OPTIONS = [
 ];
 
 // ─── Upload helper ────────────────────────────────────────────────────────────
+const compressImage = (file, maxPx = 1920, quality = 0.85) =>
+  new Promise((resolve) => {
+    if (!file.type.startsWith("image/")) { resolve(file); return; }
+    const img = new Image();
+    const objUrl = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      const ratio = Math.min(1, maxPx / Math.max(img.width, img.height));
+      const w = Math.round(img.width * ratio);
+      const h = Math.round(img.height * ratio);
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+      canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: "image/jpeg" })), "image/jpeg", quality);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objUrl); resolve(file); };
+    img.src = objUrl;
+  });
+
 const uploadFile = async (file, prefix) => {
-  const ext = file.name.split(".").pop();
+  const compressed = await compressImage(file);
+  const ext = compressed.name.split(".").pop();
   const path = `${prefix}-${Date.now()}.${ext}`;
-  await supabase.storage.from("report-images").upload(path, file, { upsert: true });
+  await supabase.storage.from("report-images").upload(path, compressed, { upsert: true });
   return supabase.storage.from("report-images").getPublicUrl(path).data.publicUrl;
 };
 
