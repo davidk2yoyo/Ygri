@@ -1070,7 +1070,7 @@ export default function ProjectsPage() {
         </div>
 
         <div ref={containerRef} className="flex transition-all duration-300" style={{ userSelect: isResizing.current ? "none" : "auto" }}>
-          <aside className="space-y-4 flex-shrink-0 overflow-hidden" style={{ width: activeTrackId && detail ? `${sidebarWidth}%` : "100%" }}>
+          <aside className="space-y-4 flex-shrink-0 overflow-hidden" style={{ width: activeTrackId && detail ? "0%" : "100%", display: activeTrackId && detail ? "none" : undefined }}>
             <div className="card p-4">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("activeProjects")}</h2>
@@ -1313,18 +1313,26 @@ export default function ProjectsPage() {
             </div>
           </aside>
 
-          {/* Resizable divider */}
-          {activeTrackId && detail && (
-            <div
-              onMouseDown={handleResizeStart}
-              className="flex-shrink-0 w-1.5 cursor-col-resize bg-bgray-200 dark:bg-darkblack-400 hover:bg-blue-400 dark:hover:bg-blue-500 transition-colors rounded-full mx-1"
-            />
-          )}
-
           {/* Show Workflow Canvas only when a project is selected */}
           {activeTrackId && detail && (
             <main className="flex-1 min-w-0 space-y-6 transition-all duration-300">
               <>
+                {/* Back button + project title */}
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setActiveTrackId(null)}
+                    className="flex items-center gap-1.5 text-sm text-bgray-500 hover:text-darkblack-700 dark:hover:text-white transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
+                    </svg>
+                    Back to projects
+                  </button>
+                  <span className="text-bgray-300 dark:text-darkblack-400">|</span>
+                  <span className="text-sm font-semibold text-darkblack-700 dark:text-white">{detail?.track?.name}</span>
+                  {detail?.client?.company_name && <span className="text-sm text-bgray-500">· {detail.client.company_name}</span>}
+                </div>
+
                 {/* Workflow Canvas */}
                 <div className="card">
                   <div className="p-4 border-b border-bgray-200 dark:border-darkblack-400">
