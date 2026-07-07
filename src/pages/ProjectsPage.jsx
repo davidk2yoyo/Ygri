@@ -719,39 +719,33 @@ export default function ProjectsPage() {
   }, []);
 
   const handleMoveProject = async (project, targetStageName) => {
-    // Optimistic update in UI
+    // Optimistic update
     setOverview(prev => prev.map(p =>
       p.track_id === project.track_id ? { ...p, current_stage_name: targetStageName } : p
     ));
     try {
+      // track_stages has no name — join stage_templates to get it
       const { data: stages, error } = await supabase
         .from("track_stages")
-        .select("id, name, order_index, status")
+        .select("id, order_index, status, stage_templates(name)")
         .eq("track_id", project.track_id)
         .order("order_index");
       if (error) throw error;
 
-      const targetStage = stages.find(s => s.name === targetStageName);
+      const targetStage = stages.find(s => s.stage_templates?.name === targetStageName);
       if (!targetStage) throw new Error(`Stage "${targetStageName}" not found for this project`);
 
-      const updates = stages
-        .filter(s => {
-          const newStatus = s.order_index < targetStage.order_index ? "done"
-            : s.order_index === targetStage.order_index ? "in_progress"
-            : "not_started";
-          return s.status !== newStatus;
-        })
-        .map(s => {
-          const newStatus = s.order_index < targetStage.order_index ? "done"
-            : s.order_index === targetStage.order_index ? "in_progress"
-            : "not_started";
-          return supabase.from("track_stages").update({ status: newStatus }).eq("id", s.id);
-        });
+      const updates = stages.map(s => {
+        const newStatus = s.order_index < targetStage.order_index ? "done"
+          : s.order_index === targetStage.order_index ? "in_progress"
+          : "not_started";
+        if (s.status === newStatus) return null;
+        return supabase.from("track_stages").update({ status: newStatus }).eq("id", s.id);
+      }).filter(Boolean);
 
       await Promise.all(updates);
       await fetchTracksOverview();
     } catch (e) {
-      // Revert optimistic update on error
       await fetchTracksOverview();
       console.error("Failed to move project:", e.message);
     }
