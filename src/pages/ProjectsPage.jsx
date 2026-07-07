@@ -718,6 +718,45 @@ export default function ProjectsPage() {
     fetchTracksOverview();
   }, []);
 
+  const handleMoveProject = async (project, targetStageName) => {
+    // Optimistic update in UI
+    setOverview(prev => prev.map(p =>
+      p.track_id === project.track_id ? { ...p, current_stage_name: targetStageName } : p
+    ));
+    try {
+      const { data: stages, error } = await supabase
+        .from("track_stages")
+        .select("id, name, order_index, status")
+        .eq("track_id", project.track_id)
+        .order("order_index");
+      if (error) throw error;
+
+      const targetStage = stages.find(s => s.name === targetStageName);
+      if (!targetStage) throw new Error(`Stage "${targetStageName}" not found for this project`);
+
+      const updates = stages
+        .filter(s => {
+          const newStatus = s.order_index < targetStage.order_index ? "done"
+            : s.order_index === targetStage.order_index ? "in_progress"
+            : "not_started";
+          return s.status !== newStatus;
+        })
+        .map(s => {
+          const newStatus = s.order_index < targetStage.order_index ? "done"
+            : s.order_index === targetStage.order_index ? "in_progress"
+            : "not_started";
+          return supabase.from("track_stages").update({ status: newStatus }).eq("id", s.id);
+        });
+
+      await Promise.all(updates);
+      await fetchTracksOverview();
+    } catch (e) {
+      // Revert optimistic update on error
+      await fetchTracksOverview();
+      console.error("Failed to move project:", e.message);
+    }
+  };
+
   // Handle "New Project" navigation from ClientsPage
   useEffect(() => {
     if (location.state?.newProjectClientId) {
@@ -1150,6 +1189,7 @@ export default function ProjectsPage() {
                     compact={compactKanban}
                     onRename={(project) => { setRenamingTrackId(project.track_id); setRenameValue(project.track_name); }}
                     onCancel={(project) => handleDeleteProject(project)}
+                    onMoveProject={handleMoveProject}
                   />
                 </div>
               ) : (

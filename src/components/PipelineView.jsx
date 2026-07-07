@@ -96,7 +96,7 @@ function StatPill({ count, label, color }) {
   );
 }
 
-function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel }) {
+function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, onDragStart }) {
   const progress = Number(project.progress_pct) || 0;
   const progressColor = getProgressColor(progress);
   const overdue = isOverdue(project.next_due_date);
@@ -111,7 +111,9 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel }
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2 }}
         onClick={onClick}
-        className={`relative cursor-pointer rounded-lg border transition-all duration-150 group
+        draggable
+        onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart?.(); }}
+        className={`relative cursor-grab active:cursor-grabbing rounded-lg border transition-all duration-150 group
           ${isActive ? "bg-white border-blue-500 shadow-sm ring-1 ring-blue-400/40" : "bg-white border-bgray-200 hover:border-blue-300 hover:shadow-sm"}`}
       >
         <div className="px-2.5 py-2 flex items-center justify-between gap-2">
@@ -138,7 +140,9 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel }
       exit={{ opacity: 0, y: -8 }}
       transition={{ duration: 0.25, type: "spring", stiffness: 260, damping: 20 }}
       onClick={onClick}
-      className={`relative cursor-pointer rounded-xl border transition-all duration-200 group
+      draggable
+      onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart?.(); }}
+      className={`relative cursor-grab active:cursor-grabbing rounded-xl border transition-all duration-200 group
         ${isActive ? "bg-white border-blue-500 shadow-md ring-2 ring-blue-400/40" : "bg-white border-bgray-200 hover:border-blue-300 hover:shadow-sm"}`}
     >
       <div className="p-3">
@@ -184,15 +188,37 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel }
   );
 }
 
-function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect, compact, onRename, onCancel }) {
+function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect, compact, onRename, onCancel, draggingProject, onDrop, onDragStart }) {
+  const [isDragOver, setIsDragOver] = useState(false);
   const colWidth = compact ? "w-44" : "w-56";
+
+  const handleDragOver = (e) => {
+    if (!draggingProject || draggingProject.current_stage_name === stageName) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setIsDragOver(true);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (!draggingProject || draggingProject.current_stage_name === stageName) return;
+    onDrop?.(draggingProject, stageName);
+  };
+
   return (
     <div className={`flex-shrink-0 ${colWidth} flex flex-col`}>
       <div className={`${color.header} border-b ${color.border} rounded-t-xl px-3 py-2 sticky top-0 z-10`}>
         <div className={`font-semibold text-xs ${color.text}`}>{stageName}</div>
         <div className="text-[10px] text-bgray-500 mt-0.5">{projects.length} project{projects.length !== 1 ? "s" : ""}</div>
       </div>
-      <div className={`${color.bg} border-l border-r border-b ${color.border} rounded-b-xl p-2 flex-1 min-h-[160px] overflow-y-auto scrollbar-thin space-y-1.5`}>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={() => setIsDragOver(false)}
+        onDrop={handleDrop}
+        className={`${color.bg} border-l border-r border-b ${color.border} rounded-b-xl p-2 flex-1 min-h-[160px] overflow-y-auto scrollbar-thin space-y-1.5 transition-all duration-150
+          ${isDragOver ? "ring-2 ring-blue-400 ring-inset brightness-95" : ""}`}
+      >
         <AnimatePresence>
           {projects.map((project) => (
             <ProjectCard
@@ -203,20 +229,24 @@ function PipelineColumn({ stageName, color, projects, activeProjectId, onProject
               compact={compact}
               onRename={() => onRename?.(project)}
               onCancel={() => onCancel?.(project)}
+              onDragStart={() => onDragStart?.(project)}
             />
           ))}
         </AnimatePresence>
         {projects.length === 0 && (
-          <div className="text-center py-5 text-bgray-400 text-xs">No projects</div>
+          <div className={`text-center py-5 text-xs transition-colors ${isDragOver ? "text-blue-500 font-medium" : "text-bgray-400"}`}>
+            {isDragOver ? "Drop here" : "No projects"}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "", compact = false, onRename, onCancel }) {
+export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "", compact = false, onRename, onCancel, onMoveProject }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("Product");
+  const [draggingProject, setDraggingProject] = useState(null);
 
   const filtered = useMemo(() => {
     if (!searchQuery.trim()) return projects;
@@ -276,7 +306,10 @@ export default function PipelineView({ projects, onProjectSelect, activeProjectI
       </div>
 
       {/* Pipeline columns */}
-      <div className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin pb-2 px-1">
+      <div
+        className="flex-1 overflow-x-auto overflow-y-hidden scrollbar-thin pb-2 px-1"
+        onDragEnd={() => setDraggingProject(null)}
+      >
         <div className="flex gap-2.5 min-w-max h-full">
           {columns.map((col) => (
             <PipelineColumn
@@ -289,6 +322,12 @@ export default function PipelineView({ projects, onProjectSelect, activeProjectI
               compact={compact}
               onRename={onRename}
               onCancel={onCancel}
+              draggingProject={draggingProject}
+              onDragStart={setDraggingProject}
+              onDrop={(project, targetStage) => {
+                setDraggingProject(null);
+                onMoveProject?.(project, targetStage);
+              }}
             />
           ))}
         </div>
