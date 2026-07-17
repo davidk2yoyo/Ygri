@@ -303,7 +303,8 @@ export default function QuotationPDF({
     pageEnds.forEach((end, i) => {
       const sliceH = Math.ceil(end - prev);
       if (sliceH <= 0) return;
-      const tmp = document.createElement("canvas");
+      // window.document: a local JSX variable named `document` shadows the global here
+      const tmp = window.document.createElement("canvas");
       tmp.width = canvas.width;
       tmp.height = sliceH;
       const ctx = tmp.getContext("2d");
