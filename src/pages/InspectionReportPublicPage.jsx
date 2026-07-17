@@ -461,8 +461,13 @@ function buildPdfHtml({ report, blocks }) {
   .caption { font-size: 8px; color: #9ca3af; margin: 3px 0 0; text-align: center; }
 
   /* ── Tables ── */
+  /* Tables may break across pages, but never mid-row; header repeats on each page */
   .checklist-table,
-  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; break-inside: avoid; page-break-inside: avoid; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .checklist-table thead,
+  .data-table thead { display: table-header-group; }
+  .checklist-table tr,
+  .data-table tr { break-inside: avoid; page-break-inside: avoid; }
   .checklist-table th,
   .data-table th { background: #1e3a5f; color: white; padding: 6px 12px; text-align: left; font-size: 8.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
   .checklist-table td,

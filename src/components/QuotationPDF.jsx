@@ -262,23 +262,59 @@ export default function QuotationPDF({
     el.style.minHeight = "auto";
     await new Promise(r => setTimeout(r, 50));
 
-    const canvas = await html2canvas(el, { scale: 1.5, useCORS: true, backgroundColor: "#ffffff" });
+    const scale = 1.5;
+    const canvas = await html2canvas(el, { scale, useCORS: true, backgroundColor: "#ffffff" });
+
+    // Measure unbreakable blocks (table rows + tagged sections) in canvas pixels,
+    // while the DOM is still in the same layout state as the capture
+    const elTop = el.getBoundingClientRect().top;
+    const blocks = [...el.querySelectorAll("tbody tr, .pdf-block")].map(b => {
+      const r = b.getBoundingClientRect();
+      return { top: (r.top - elTop) * scale, bottom: (r.bottom - elTop) * scale };
+    });
 
     el.style.minHeight = prevMinH;
 
-    // JPEG at 85% quality keeps file small (~1-2 MB instead of 10 MB)
-    const imgData = canvas.toDataURL("image/jpeg", 0.85);
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfW = pdf.internal.pageSize.getWidth();
     const pdfPageH = pdf.internal.pageSize.getHeight();
-    const imgTotalH = (canvas.height * pdfW) / canvas.width;
+    const pageHpx = (pdfPageH / pdfW) * canvas.width; // one PDF page in canvas pixels
 
-    let yOffset = 0;
-    while (yOffset < imgTotalH) {
-      pdf.addImage(imgData, "JPEG", 0, -yOffset, pdfW, imgTotalH);
-      yOffset += pdfPageH;
-      if (yOffset < imgTotalH) pdf.addPage();
+    // Compute cut positions that never slice through a block: if the natural cut
+    // lands inside a row/section, move the cut up to that block's top edge
+    const cuts = [];
+    let cursor = 0;
+    while (cursor + pageHpx < canvas.height) {
+      let cut = cursor + pageHpx;
+      const straddling = blocks.filter(b => b.top < cut && b.bottom > cut && b.top > cursor);
+      if (straddling.length) {
+        const minTop = Math.min(...straddling.map(b => b.top));
+        // Only pull the cut up if it doesn't create a mostly-empty page
+        // (a block taller than a page can't be protected)
+        if (minTop > cursor + pageHpx * 0.25) cut = minTop;
+      }
+      cuts.push(cut);
+      cursor = cut;
     }
+
+    // Slice the canvas at the computed cuts, one JPEG per page
+    const pageEnds = [...cuts, canvas.height];
+    let prev = 0;
+    pageEnds.forEach((end, i) => {
+      const sliceH = Math.ceil(end - prev);
+      if (sliceH <= 0) return;
+      const tmp = document.createElement("canvas");
+      tmp.width = canvas.width;
+      tmp.height = sliceH;
+      const ctx = tmp.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(canvas, 0, prev, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+      const img = tmp.toDataURL("image/jpeg", 0.85);
+      if (i > 0) pdf.addPage();
+      pdf.addImage(img, "JPEG", 0, 0, pdfW, (sliceH * pdfW) / canvas.width);
+      prev = end;
+    });
 
     pdf.save(`Quotation_${quotation.quote_number || "draft"}_${clientName?.replace(/\s+/g, "_") || "client"}.pdf`);
   };
@@ -292,6 +328,8 @@ export default function QuotationPDF({
       body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; }
       img { max-width: 100%; }
       @page { size: letter; margin: 0.5in; }
+      tr, .pdf-block { page-break-inside: avoid; break-inside: avoid; }
+      thead { display: table-header-group; }
     </style></head><body>${el.outerHTML}</body></html>`);
     win.document.close();
     win.onload = () => { win.print(); };
@@ -529,7 +567,7 @@ export default function QuotationPDF({
       </table>
 
       {/* ── Totals ── */}
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "28px" }}>
+      <div className="pdf-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "28px" }}>
         <div style={{ minWidth: "260px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #e8eaed", fontSize: "13px" }}>
             <span style={{ color: "#555" }}>Subtotal:</span>
@@ -556,7 +594,7 @@ export default function QuotationPDF({
 
       {/* ── Notes / Terms ── */}
       {(quotation.notes || quotation.negotiation_term) && (
-        <div style={{ marginBottom: "28px" }}>
+        <div className="pdf-block" style={{ marginBottom: "28px" }}>
           <div style={{ fontSize: "11px", color: "#888", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", fontWeight: "700" }}>
             Notes / Terms
           </div>
@@ -572,7 +610,7 @@ export default function QuotationPDF({
       )}
 
       {/* ── Bank Details ── */}
-      <div style={{
+      <div className="pdf-block" style={{
         backgroundColor: "#f7f8fa",
         border: "1px solid #e0e4ea",
         borderRadius: "8px",
