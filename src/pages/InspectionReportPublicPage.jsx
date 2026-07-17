@@ -409,7 +409,10 @@ function buildPdfHtml({ report, blocks }) {
 <style>
   *, *::before, *::after { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 
-  @page { size: A4; margin: 0; }
+  /* Vertical margins so content never touches the paper edge on page breaks;
+     horizontal stays 0 so the header/footer remain full-bleed */
+  @page { size: A4; margin: 12mm 0 14mm; }
+  @page :first { margin-top: 0; }
 
   body {
     font-family: Arial, Helvetica, sans-serif;
