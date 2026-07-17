@@ -186,18 +186,38 @@ function buildPdfHtml({ report, blocks }) {
       if (!images.length) return "";
       const tmpl = content.template || "g3";
       const cols = { g1: 1, g2: 2, g3: 3, g4: 4 }[tmpl] || 3;
-      const pct = Math.floor(100 / cols);
+      const imgH = cols === 1 ? "360px" : cols === 2 ? "200px" : "140px";
+
+      // Chunk images into rows so each row breaks as a unit — the gallery as a
+      // whole can flow across pages instead of being pushed entirely to the next one
+      const rows = [];
+      let current = [], used = 0;
+      images.forEach(img => {
+        const span = img.featured ? Math.min(2, cols) : 1;
+        if (used + span > cols && current.length) { rows.push(current); current = []; used = 0; }
+        current.push(img);
+        used += span;
+      });
+      if (current.length) rows.push(current);
+
+      const rowHtml = (row) => `
+        <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:7px;margin-bottom:7px;break-inside:avoid;page-break-inside:avoid;">
+          ${row.map(img => `
+            <div style="${img.featured ? "grid-column:span 2;" : ""}">
+              <img src="${esc(img.url)}" alt="${esc(img.caption || "")}" crossorigin="anonymous" data-pdf
+                style="width:100%;height:${imgH};object-fit:cover;border-radius:5px;border:1px solid #e2e8f0;display:block;" />
+              ${img.caption ? `<p class="caption">${esc(img.caption)}</p>` : ""}
+            </div>`).join("")}
+        </div>`;
+
+      // Heading stays glued to the first row; remaining rows flow freely
       return `
-        <div class="content-block">
-          ${heading(content.title || "Photos")}
-          <div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:7px;break-inside:avoid;page-break-inside:avoid;">
-            ${images.map(img => `
-              <div style="${img.featured ? "grid-column:span 2;" : ""}">
-                <img src="${esc(img.url)}" alt="${esc(img.caption || "")}" crossorigin="anonymous" data-pdf
-                  style="width:100%;height:${cols === 1 ? "360px" : cols === 2 ? "200px" : "140px"};object-fit:cover;border-radius:5px;border:1px solid #e2e8f0;display:block;" />
-                ${img.caption ? `<p class="caption">${esc(img.caption)}</p>` : ""}
-              </div>`).join("")}
+        <div class="content-block" style="break-inside:auto;page-break-inside:auto;">
+          <div style="break-inside:avoid;page-break-inside:avoid;">
+            ${heading(content.title || "Photos")}
+            ${rows.length ? rowHtml(rows[0]) : ""}
           </div>
+          ${rows.slice(1).map(rowHtml).join("")}
         </div>`;
     }
 
