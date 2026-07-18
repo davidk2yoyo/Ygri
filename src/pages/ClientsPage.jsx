@@ -267,6 +267,118 @@ function BulkImportModal({ isOpen, onClose, onSuccess }) {
   );
 }
 
+function PortalAccessModal({ client, onClose }) {
+  const [email, setEmail] = useState(client.email || "");
+  const [password, setPassword] = useState("");
+  const [hasAccess, setHasAccess] = useState(null);
+  const [currentEmail, setCurrentEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null); // { type: 'success'|'error', text }
+
+  useEffect(() => {
+    async function check() {
+      const { data } = await supabase.rpc("admin_get_client_portal_info", { p_client_id: client.id });
+      if (data?.length) {
+        setHasAccess(data[0].has_access);
+        if (data[0].email) { setCurrentEmail(data[0].email); setEmail(data[0].email); }
+      }
+    }
+    check();
+  }, [client.id]);
+
+  async function handleSave() {
+    if (!email.trim() || !password) { setMsg({ type: "error", text: "Correo y contraseña son obligatorios." }); return; }
+    setBusy(true); setMsg(null);
+    const { error } = await supabase.rpc("admin_upsert_client_portal_user", {
+      p_client_id: client.id, p_email: email.trim(), p_password: password,
+    });
+    setBusy(false);
+    if (error) { setMsg({ type: "error", text: error.message }); return; }
+    setMsg({ type: "success", text: hasAccess ? "Contraseña actualizada." : "Acceso al portal creado." });
+    setHasAccess(true); setCurrentEmail(email.trim()); setPassword("");
+  }
+
+  async function handleRevoke() {
+    if (!window.confirm(`¿Eliminar acceso al portal de ${client.company_name}?`)) return;
+    setBusy(true);
+    await supabase.rpc("admin_remove_client_portal_user", { p_client_id: client.id });
+    setBusy(false);
+    setHasAccess(false); setCurrentEmail(""); setPassword("");
+    setMsg({ type: "success", text: "Acceso eliminado." });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Acceso al Portal</h2>
+            <p className="text-sm text-gray-500">{client.company_name}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-100">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {hasAccess && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg">
+            <span className="w-2 h-2 rounded-full bg-green-500" />
+            <span className="text-sm text-green-700 font-medium">Tiene acceso activo</span>
+            <span className="text-xs text-green-600 ml-1">— {currentEmail}</span>
+          </div>
+        )}
+        {hasAccess === false && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg">
+            <span className="w-2 h-2 rounded-full bg-gray-400" />
+            <span className="text-sm text-gray-600">Sin acceso al portal</span>
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Correo electrónico</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {hasAccess ? "Nueva contraseña" : "Contraseña"}
+            </label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+              placeholder="Mínimo 8 caracteres"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+          </div>
+        </div>
+
+        {msg && (
+          <div className={`mt-4 px-3 py-2 rounded-lg text-sm ${msg.type === "error" ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"}`}>
+            {msg.text}
+          </div>
+        )}
+
+        <div className="flex gap-2 mt-5">
+          <button onClick={handleSave} disabled={busy}
+            className="flex-1 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 transition">
+            {busy ? "Guardando..." : hasAccess ? "Actualizar contraseña" : "Crear acceso"}
+          </button>
+          {hasAccess && (
+            <button onClick={handleRevoke} disabled={busy}
+              className="px-4 py-2.5 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 disabled:opacity-50 border border-red-200 transition">
+              Revocar
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-gray-400 text-center mt-4">
+          El cliente ingresa en <span className="font-mono">/clientes/login</span>
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function ClientsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -293,6 +405,7 @@ export default function ClientsPage() {
   const [submitLoading, setSubmitLoading] = useState(false);
   const [showBulkImportModal, setShowBulkImportModal] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
+  const [portalModalClient, setPortalModalClient] = useState(null);
 
   const itemsPerPage = 10;
 
@@ -619,6 +732,15 @@ export default function ClientsPage() {
                         <td className="px-6 py-4 whitespace-nowrap text-right">
                           <div className="flex items-center justify-end gap-1.5">
                             <button
+                              onClick={() => setPortalModalClient(client)}
+                              className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
+                              title="Gestionar acceso al portal"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                              </svg>
+                            </button>
+                            <button
                               onClick={() => navigate("/projects", { state: { newProjectClientId: client.id, newProjectClientName: client.company_name } })}
                               className="p-1.5 rounded-lg bg-green-50 text-green-600 hover:bg-green-100 transition-colors"
                               title="Create project for this client"
@@ -878,6 +1000,12 @@ export default function ClientsPage() {
           setShowBulkImportModal(false);
         }}
       />
+      {portalModalClient && (
+        <PortalAccessModal
+          client={portalModalClient}
+          onClose={() => setPortalModalClient(null)}
+        />
+      )}
     </div>
   );
 }

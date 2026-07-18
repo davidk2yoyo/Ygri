@@ -24,11 +24,20 @@ import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
 import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
 import CalendarPage from "./pages/CalendarPage";
 import ShipmentsPage from "./pages/ShipmentsPage";
+import { ClientPortalProvider } from "./portal/ClientPortalContext";
+import ClientProtectedRoute from "./portal/ClientProtectedRoute";
+import ClientLoginPage from "./portal/ClientLoginPage";
+import ClientLayout from "./portal/ClientLayout";
+import MisOrdenesPage from "./portal/sections/MisOrdenesPage";
+import MisEnviosPage from "./portal/sections/MisEnviosPage";
+import CalculadoraPage from "./portal/sections/CalculadoraPage";
+import DocumentosPage from "./portal/sections/DocumentosPage";
 import "./index.css";
 import "./i18n";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <BrowserRouter>
+    <ClientPortalProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/q/:quoteNumber" element={<PublicQuotationPage />} />
@@ -61,6 +70,21 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <InspectionReportEditorPage />
           </ProtectedRoute>
         } />
+
+        {/* ── Client Portal ── */}
+        <Route path="/clientes/login" element={<ClientLoginPage />} />
+        <Route path="/clientes" element={
+          <ClientProtectedRoute>
+            <ClientLayout />
+          </ClientProtectedRoute>
+        }>
+          <Route index element={<Navigate to="/clientes/ordenes" replace />} />
+          <Route path="ordenes"     element={<MisOrdenesPage />} />
+          <Route path="envios"      element={<MisEnviosPage />} />
+          <Route path="calculadora" element={<CalculadoraPage />} />
+          <Route path="documentos"  element={<DocumentosPage />} />
+        </Route>
       </Routes>
-    </BrowserRouter>
+    </ClientPortalProvider>
+  </BrowserRouter>
 );
