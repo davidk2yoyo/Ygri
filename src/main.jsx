@@ -28,10 +28,13 @@ import { ClientPortalProvider } from "./portal/ClientPortalContext";
 import ClientProtectedRoute from "./portal/ClientProtectedRoute";
 import ClientLoginPage from "./portal/ClientLoginPage";
 import ClientLayout from "./portal/ClientLayout";
+import PortalDashboardPage from "./portal/sections/DashboardPage";
 import MisOrdenesPage from "./portal/sections/MisOrdenesPage";
 import MisEnviosPage from "./portal/sections/MisEnviosPage";
-import CalculadoraPage from "./portal/sections/CalculadoraPage";
+import EstadoCargaPage from "./portal/sections/EstadoCargaPage";
+import AsistenteImportacionPage from "./portal/sections/AsistenteImportacionPage";
 import DocumentosPage from "./portal/sections/DocumentosPage";
+import MisReportesPage from "./portal/sections/MisReportesPage";
 import "./index.css";
 import "./i18n";
 
@@ -78,11 +81,13 @@ ReactDOM.createRoot(document.getElementById("root")).render(
             <ClientLayout />
           </ClientProtectedRoute>
         }>
-          <Route index element={<Navigate to="/clientes/ordenes" replace />} />
-          <Route path="ordenes"     element={<MisOrdenesPage />} />
-          <Route path="envios"      element={<MisEnviosPage />} />
-          <Route path="calculadora" element={<CalculadoraPage />} />
-          <Route path="documentos"  element={<DocumentosPage />} />
+          <Route index element={<PortalDashboardPage />} />
+          <Route path="carga"     element={<EstadoCargaPage />} />
+          <Route path="envios"    element={<MisEnviosPage />} />
+          <Route path="ordenes"   element={<MisOrdenesPage />} />
+          <Route path="documentos" element={<DocumentosPage />} />
+          <Route path="reportes"  element={<MisReportesPage />} />
+          <Route path="asistente" element={<AsistenteImportacionPage />} />
         </Route>
       </Routes>
     </ClientPortalProvider>
