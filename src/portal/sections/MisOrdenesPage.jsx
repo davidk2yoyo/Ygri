@@ -29,7 +29,7 @@ export default function MisOrdenesPage() {
       const { data, error } = await supabase.rpc("client_portal_get_quotations", {
         p_session_id: session.session_id,
       });
-      if (error) setError(error.message);
+if (error) setError(error.message);
       else setRows(data || []);
       setLoading(false);
     }
@@ -86,15 +86,31 @@ export default function MisOrdenesPage() {
                     <p className="text-xs text-gray-500 mt-2 line-clamp-2">{row.notes}</p>
                   )}
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <p className="text-lg font-bold text-gray-900">
-                    {CURRENCY_SYMBOL[row.currency] || ""}
-                    {Number(row.total_amount || 0).toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  </p>
-                  <p className="text-xs text-gray-400">{row.currency}</p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(row.created_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
-                  </p>
+                <div className="text-right flex-shrink-0 space-y-2">
+                  <div>
+                    <p className="text-lg font-bold text-gray-900">
+                      {CURRENCY_SYMBOL[row.currency] || ""}
+                      {Number(row.total_amount || 0).toLocaleString("es-CO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                    <p className="text-xs text-gray-400">{row.currency}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                      {new Date(row.created_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
+                  {row.quote_number && (
+                    <a
+                      href={`/q/${row.quote_number}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-medium rounded-lg hover:bg-blue-100 transition"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Ver cotización
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

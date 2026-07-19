@@ -66,16 +66,16 @@ CREATE OR REPLACE FUNCTION admin_upsert_client_portal_user(
 )
 RETURNS UUID
 SECURITY DEFINER
-SET search_path = public, extensions
+SET search_path = public
 LANGUAGE plpgsql AS $$
 DECLARE
   v_id UUID;
 BEGIN
   INSERT INTO client_portal_users (client_id, email, password_hash)
-  VALUES (p_client_id, lower(trim(p_email)), crypt(p_password, gen_salt('bf')))
+  VALUES (p_client_id, lower(trim(p_email)), extensions.crypt(p_password, extensions.gen_salt('bf')))
   ON CONFLICT (email) DO UPDATE SET
     client_id     = EXCLUDED.client_id,
-    password_hash = crypt(p_password, gen_salt('bf')),
+    password_hash = extensions.crypt(p_password, extensions.gen_salt('bf')),
     updated_at    = NOW()
   RETURNING id INTO v_id;
   RETURN v_id;
@@ -102,7 +102,7 @@ RETURNS TABLE (
   expires_at   TIMESTAMPTZ
 )
 SECURITY DEFINER
-SET search_path = public, extensions
+SET search_path = public
 LANGUAGE plpgsql AS $$
 DECLARE
   v_user   client_portal_users%ROWTYPE;
@@ -114,7 +114,7 @@ BEGIN
   WHERE email = lower(trim(p_email));
 
   IF v_user.id IS NULL THEN RETURN; END IF;
-  IF v_user.password_hash != crypt(p_password, v_user.password_hash) THEN RETURN; END IF;
+  IF v_user.password_hash != extensions.crypt(p_password, v_user.password_hash) THEN RETURN; END IF;
 
   SELECT * INTO v_client FROM clients WHERE id = v_user.client_id;
 

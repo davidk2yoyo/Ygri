@@ -31,7 +31,6 @@ import ClientLayout from "./portal/ClientLayout";
 import PortalDashboardPage from "./portal/sections/DashboardPage";
 import MisOrdenesPage from "./portal/sections/MisOrdenesPage";
 import MisEnviosPage from "./portal/sections/MisEnviosPage";
-import EstadoCargaPage from "./portal/sections/EstadoCargaPage";
 import AsistenteImportacionPage from "./portal/sections/AsistenteImportacionPage";
 import DocumentosPage from "./portal/sections/DocumentosPage";
 import MisReportesPage from "./portal/sections/MisReportesPage";
@@ -82,8 +81,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           </ClientProtectedRoute>
         }>
           <Route index element={<PortalDashboardPage />} />
-          <Route path="carga"     element={<EstadoCargaPage />} />
-          <Route path="envios"    element={<MisEnviosPage />} />
+<Route path="envios"    element={<MisEnviosPage />} />
           <Route path="ordenes"   element={<MisOrdenesPage />} />
           <Route path="documentos" element={<DocumentosPage />} />
           <Route path="reportes"  element={<MisReportesPage />} />
