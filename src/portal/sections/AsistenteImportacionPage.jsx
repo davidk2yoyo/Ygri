@@ -2,6 +2,7 @@ import React, { useState, useMemo, useRef } from "react";
 import { useClientPortal } from "../ClientPortalContext";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
+import interasiaLogo from "../../assets/images/logo/interasialogo.png";
 
 const fmt = (v, dec = 0) =>
   Number(v || 0).toLocaleString("es-CO", { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -65,6 +66,7 @@ function PrintSheet({ data, client_name }) {
     { label: "FLETE Y GASTOS EN DESTINO", usd: inputs.flete + inputs.fleteDestino, cop: (inputs.flete + inputs.fleteDestino) * inputs.trm },
     { label: "IMPUESTOS ARANCELARIOS", pct: inputs.arancel, cop: r.arancelCOP },
     { label: "IVA (Imp + Base × 19%)", pct: inputs.iva, cop: r.ivaCOP },
+    ...(r.impuestoAdicionalCOP > 0 ? [{ label: `${inputs.impuestoAdicionalNombre || "IMPUESTO ADICIONAL"} (${inputs.impuestoAdicional}%)`, cop: r.impuestoAdicionalCOP }] : []),
     { label: "GASTOS PUERTO (uso, cargue, almacenaje)", cop: inputs.gastosPuerto },
     { label: "LIBERACIÓN DE BL", cop: inputs.liberacionBL },
     { label: "GASTOS VARIOS", cop: inputs.gastosVarios },
@@ -83,8 +85,9 @@ function PrintSheet({ data, client_name }) {
           <h1 className="text-xl font-bold text-blue-700">PRE-LIQUIDACIÓN DE IMPORTACIÓN</h1>
           <p className="text-gray-500 text-xs mt-0.5">Estimado — sujeto a cambios según condiciones del mercado</p>
         </div>
-        <div className="text-right text-xs text-gray-500">
-          <p className="font-semibold text-gray-800">{today}</p>
+        <div className="text-right">
+          <img src={interasiaLogo} alt="Interasia" style={{ height: 36, objectFit: "contain", marginBottom: 4, marginLeft: "auto" }} />
+          <p className="text-xs text-gray-500 font-semibold text-gray-800">{today}</p>
         </div>
       </div>
 
@@ -197,6 +200,7 @@ export default function AsistenteImportacionPage() {
     fob: "",              gastosOrigen: "",  flete: "",    seguro: "",
     fleteDestino: "",
     arancel: "10",        iva: "19",
+    impuestoAdicional: "", impuestoAdicionalNombre: "",
     gastosPuerto: "6000000",
     liberacionBL: "220000", gastosVarios: "400000",
     declaracion: "60000", ingresoSistema: "60000", conservacion: "60000",
@@ -217,11 +221,14 @@ export default function AsistenteImportacionPage() {
           conserv = N(inputs.conservacion), transporte = N(inputs.transporte),
           unidades = Math.max(N(inputs.unidades), 1);
 
+    const impuAdicional = N(inputs.impuestoAdicional);
+
     const cifUSD = fob + gastosOrigen + flete + seguro;
     const cifCOP = cifUSD * trm;
     const arancelCOP = cifCOP * (arancel / 100);
     const ivaCOP = (cifCOP + arancelCOP) * (iva / 100);
-    const subtributos = cifCOP + arancelCOP + ivaCOP;
+    const impuestoAdicionalCOP = cifCOP * (impuAdicional / 100);
+    const subtributos = cifCOP + arancelCOP + ivaCOP + impuestoAdicionalCOP;
 
     // Servicio comex: 0.4% sobre CIF COP, mínimo 800.000
     const servicioComex = Math.max(cifCOP * 0.004, 800000);
@@ -232,7 +239,7 @@ export default function AsistenteImportacionPage() {
 
     const total = subtributos + gastosPuerto + totalAduana + fleteDestCOP + transporte + ivaTransporte;
 
-    return { cifUSD, cifCOP, arancelCOP, ivaCOP, subtributos, servicioComex, totalAduana, ivaTransporte, total };
+    return { cifUSD, cifCOP, arancelCOP, ivaCOP, impuestoAdicionalCOP, subtributos, servicioComex, totalAduana, ivaTransporte, total };
   }, [inputs]);
 
   async function exportPDF() {
@@ -351,6 +358,19 @@ export default function AsistenteImportacionPage() {
                 <NumInput value={inputs.iva} onChange={v => set("iva", v)} suffix="%" />
               </Field>
             </div>
+            <div className="border-t border-amber-100 pt-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Impuesto adicional (opcional)</p>
+              <div className="grid grid-cols-[1fr,80px] gap-2">
+                <Field label="Nombre del impuesto">
+                  <input value={inputs.impuestoAdicionalNombre} onChange={e => set("impuestoAdicionalNombre", e.target.value)}
+                    placeholder="ej. IVA especial, sobretasa…"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </Field>
+                <Field label="Tasa %">
+                  <NumInput value={inputs.impuestoAdicional} onChange={v => set("impuestoAdicional", v)} suffix="%" />
+                </Field>
+              </div>
+            </div>
           </Section>
 
           <Section title="Gastos en Colombia (COP)" color="bg-green-50">
@@ -413,6 +433,9 @@ export default function AsistenteImportacionPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Impuestos aduaneros</p>
                 <ResultRow label={`Arancel (${inputs.arancel}%)`} cop={r.arancelCOP} sub />
                 <ResultRow label={`IVA (${inputs.iva}%)`} cop={r.ivaCOP} sub />
+                {r.impuestoAdicionalCOP > 0 && (
+                  <ResultRow label={`${inputs.impuestoAdicionalNombre || "Imp. adicional"} (${inputs.impuestoAdicional}%)`} cop={r.impuestoAdicionalCOP} sub />
+                )}
                 <ResultRow label="= Subtotal tributos" cop={r.subtributos} bold />
               </div>
 
@@ -458,7 +481,7 @@ export default function AsistenteImportacionPage() {
       {/* ── Hidden print sheet for PDF ── */}
       <div className="fixed -left-[9999px] top-0 pointer-events-none">
         <div ref={printRef}>
-          <PrintSheet data={{ inputs: { ...inputs, fob: N(inputs.fob), gastosOrigen: N(inputs.gastosOrigen), flete: N(inputs.flete), seguro: N(inputs.seguro), fleteDestino: N(inputs.fleteDestino), trm: N(inputs.trm) || 4200, arancel: N(inputs.arancel), iva: N(inputs.iva), gastosPuerto: N(inputs.gastosPuerto), liberacionBL: N(inputs.liberacionBL), gastosVarios: N(inputs.gastosVarios), declaracion: N(inputs.declaracion), ingresoSistema: N(inputs.ingresoSistema), conservacion: N(inputs.conservacion), transporte: N(inputs.transporte), unidades: Math.max(N(inputs.unidades), 1) }, r }} client_name={session.client_name} />
+          <PrintSheet data={{ inputs: { ...inputs, fob: N(inputs.fob), gastosOrigen: N(inputs.gastosOrigen), flete: N(inputs.flete), seguro: N(inputs.seguro), fleteDestino: N(inputs.fleteDestino), trm: N(inputs.trm) || 4200, arancel: N(inputs.arancel), iva: N(inputs.iva), impuestoAdicional: N(inputs.impuestoAdicional), impuestoAdicionalNombre: inputs.impuestoAdicionalNombre, gastosPuerto: N(inputs.gastosPuerto), liberacionBL: N(inputs.liberacionBL), gastosVarios: N(inputs.gastosVarios), declaracion: N(inputs.declaracion), ingresoSistema: N(inputs.ingresoSistema), conservacion: N(inputs.conservacion), transporte: N(inputs.transporte), unidades: Math.max(N(inputs.unidades), 1) }, r }} client_name={session.client_name} />
         </div>
       </div>
     </div>

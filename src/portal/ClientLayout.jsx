@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useClientPortal } from "./ClientPortalContext";
+import interasiaLogo from "../assets/images/logo/interasialogo.png";
 
 const NAV = [
   {
@@ -115,19 +116,9 @@ export default function ClientLayout() {
       {/* ── Sidebar desktop ── */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 bottom-0 z-10">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center shadow-sm">
-              <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-              </svg>
-            </div>
-            <div>
-              <p className="font-bold text-gray-900 text-sm leading-tight">Portal Cliente</p>
-              <p className="text-xs text-gray-400 leading-tight">Ygri Trade</p>
-            </div>
-          </div>
+        <div className="px-5 py-4 border-b border-gray-100">
+          <img src={interasiaLogo} alt="Interasia" className="h-10 object-contain" />
+          <p className="text-xs text-gray-400 mt-1 leading-tight">Portal de Clientes</p>
         </div>
 
         {/* Nav */}
@@ -164,13 +155,7 @@ export default function ClientLayout() {
       {/* ── Mobile header ── */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3 shadow-sm">
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-blue-600 flex items-center justify-center">
-            <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-            </svg>
-          </div>
-          <span className="font-bold text-sm text-gray-900">Portal Cliente</span>
+          <img src={interasiaLogo} alt="Interasia" className="h-8 object-contain" />
         </div>
         <button onClick={() => setMobileOpen(v => !v)} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -184,17 +169,9 @@ export default function ClientLayout() {
         <div className="md:hidden fixed inset-0 z-30 flex">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <div className="relative w-72 bg-white flex flex-col h-full shadow-2xl">
-            <div className="px-5 py-5 border-b border-gray-100 flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                </svg>
-              </div>
-              <div>
-                <p className="font-bold text-gray-900 text-sm">{session?.client_name}</p>
-                <p className="text-xs text-gray-400">Portal Cliente</p>
-              </div>
+            <div className="px-5 py-4 border-b border-gray-100">
+              <img src={interasiaLogo} alt="Interasia" className="h-9 object-contain mb-1" />
+              <p className="text-xs font-semibold text-gray-700">{session?.client_name}</p>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {NAV.map(item => (
