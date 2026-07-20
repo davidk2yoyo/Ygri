@@ -180,7 +180,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     updateItem(idx, "picturePreview", preview);
   };
 
-  const selectCatalogItem = (idx, catItem) => {
+  const selectCatalogItem = async (idx, catItem) => {
     setItems(prev => prev.map((it, i) => i === idx ? {
       ...it,
       catalog_item_id: catItem.id,
@@ -191,6 +191,39 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       picture_url: catItem.picture_url || it.picture_url,
     } : it));
     setShowCatalogDropdown(null);
+
+    // The catalog only stores number/description/price/photo. Pull supplier,
+    // costs, MOQ and photo from the most recent quotation of this same item.
+    const itemSelect = "picture_url, supplier_id, supplier_price, supplier_currency, moq, price";
+    let { data } = await supabase
+      .from("quotation_items")
+      .select(itemSelect)
+      .eq("catalog_item_id", catItem.id)
+      .order("id", { ascending: false })
+      .limit(1);
+    if (!data?.length) {
+      // Older items may not be linked to the catalog — match by description
+      ({ data } = await supabase
+        .from("quotation_items")
+        .select(itemSelect)
+        .eq("description", catItem.description)
+        .order("id", { ascending: false })
+        .limit(1));
+    }
+    const last = data?.[0];
+    if (!last) return;
+
+    setItems(prev => prev.map((it, i) => i === idx ? {
+      ...it,
+      picture_url: it.picture_url || last.picture_url || "",
+      picturePreview: it.picturePreview || last.picture_url || "",
+      supplier_id: it.supplier_id || last.supplier_id || null,
+      supplier_price: it.supplier_price || (last.supplier_price?.toString() ?? ""),
+      supplier_currency: it.supplier_currency || (last.supplier_currency || ""),
+      moq: it.moq || (last.moq?.toString() ?? ""),
+      price: it.price || (last.price?.toString() ?? ""),
+    } : it));
+    if (last.supplier_id) fetchSupplierProducts(last.supplier_id);
   };
 
   // ---------- Supplier helpers ----------
@@ -360,12 +393,15 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             catalogId = catData.id;
             setCatalogItems(prev => [...prev, catData]);
           }
-        } else if (catalogId && it.pictureFile && pictureUrl) {
-          // Photo added after the catalog item was created — backfill it
-          await supabase.from("catalog_items")
-            .update({ picture_url: pictureUrl })
-            .eq("id", catalogId);
-          setCatalogItems(prev => prev.map(c => c.id === catalogId ? { ...c, picture_url: pictureUrl } : c));
+        } else if (catalogId && pictureUrl) {
+          // Backfill the catalog photo when it was replaced here or missing there
+          const cat = catalogItems.find(c => c.id === catalogId);
+          if (it.pictureFile || (cat && !cat.picture_url)) {
+            await supabase.from("catalog_items")
+              .update({ picture_url: pictureUrl })
+              .eq("id", catalogId);
+            setCatalogItems(prev => prev.map(c => c.id === catalogId ? { ...c, picture_url: pictureUrl } : c));
+          }
         }
 
         return {
