@@ -85,9 +85,11 @@ function PrintSheet({ data, client_name }) {
           <h1 className="text-xl font-bold text-blue-700">PRE-LIQUIDACIÓN DE IMPORTACIÓN</h1>
           <p className="text-gray-500 text-xs mt-0.5">Estimado — sujeto a cambios según condiciones del mercado</p>
         </div>
-        <div className="text-right">
-          <img src={interasiaLogo} alt="Interasia" style={{ height: 36, objectFit: "contain", marginBottom: 4, marginLeft: "auto" }} />
-          <p className="text-xs text-gray-500 font-semibold text-gray-800">{today}</p>
+        <div className="text-right flex flex-col items-end gap-1">
+          <div style={{ backgroundColor: "#0c1a3a", borderRadius: 8, padding: "6px 12px", display: "inline-block" }}>
+            <img src={interasiaLogo} alt="Interasia" style={{ height: 32, objectFit: "contain", display: "block" }} />
+          </div>
+          <p className="text-xs font-semibold text-gray-700">{today}</p>
         </div>
       </div>
 

@@ -106,9 +106,9 @@ export default function ClientLayout() {
       {/* ── Sidebar desktop ── */}
       <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 bottom-0 z-10">
         {/* Logo */}
-        <div className="px-5 py-4 border-b border-gray-100">
+        <div className="px-5 py-5 bg-blue-950 flex flex-col items-start">
           <img src={interasiaLogo} alt="Interasia" className="h-10 object-contain" />
-          <p className="text-xs text-gray-400 mt-1 leading-tight">Portal de Clientes</p>
+          <p className="text-xs text-blue-300 mt-1.5 leading-tight font-medium tracking-wide">Portal de Clientes</p>
         </div>
 
         {/* Nav */}
@@ -159,9 +159,9 @@ export default function ClientLayout() {
         <div className="md:hidden fixed inset-0 z-30 flex">
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <div className="relative w-72 bg-white flex flex-col h-full shadow-2xl">
-            <div className="px-5 py-4 border-b border-gray-100">
-              <img src={interasiaLogo} alt="Interasia" className="h-9 object-contain mb-1" />
-              <p className="text-xs font-semibold text-gray-700">{session?.client_name}</p>
+            <div className="px-5 py-4 bg-blue-950">
+              <img src={interasiaLogo} alt="Interasia" className="h-9 object-contain mb-1.5" />
+              <p className="text-xs font-semibold text-blue-200">{session?.client_name}</p>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {NAV.map(item => (
