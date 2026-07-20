@@ -324,7 +324,7 @@ export default function QuotationPDF({
     const el = printRef.current;
     if (!el) return;
     const win = window.open("", "_blank");
-    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${docMeta.title} ${quotation.quote_number || ""} · ${clientName || ""}</title><style>
       * { box-sizing: border-box; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
       body { margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; }
       img { max-width: 100%; }
