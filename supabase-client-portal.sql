@@ -191,15 +191,17 @@ $$;
 -- ── 10. RPC: Get client shipments ─────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION client_portal_get_shipments(p_session_id UUID)
 RETURNS TABLE (
-  id              UUID,
-  tracking_number TEXT,
-  carrier         TEXT,
-  status          TEXT,
-  status_detail   TEXT,
-  origin          TEXT,
-  destination     TEXT,
-  track_name      TEXT,
-  created_at      TIMESTAMPTZ
+  id                 UUID,
+  tracking_number    TEXT,
+  carrier            TEXT,
+  description        TEXT,
+  status             TEXT,
+  status_detail      TEXT,
+  origin             TEXT,
+  destination        TEXT,
+  estimated_delivery DATE,
+  track_name         TEXT,
+  created_at         TIMESTAMPTZ
 )
 SECURITY DEFINER
 SET search_path = public
@@ -213,9 +215,9 @@ BEGIN
   IF v_client_id IS NULL THEN RETURN; END IF;
 
   RETURN QUERY
-  SELECT s.id, s.tracking_number, s.carrier, s.status, s.status_detail,
-         s.origin, s.destination,
-         t.name::TEXT AS track_name, s.created_at
+  SELECT s.id, s.tracking_number, s.carrier, s.description,
+         s.status, s.status_detail, s.origin, s.destination,
+         s.estimated_delivery, t.name::TEXT AS track_name, s.created_at
   FROM shipments s
   JOIN tracks t ON t.id = s.track_id
   WHERE t.client_id = v_client_id

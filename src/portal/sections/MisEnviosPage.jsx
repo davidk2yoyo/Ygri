@@ -79,6 +79,9 @@ export default function MisEnviosPage() {
                     <StatusBadge status={row.status} />
                   </div>
                   <p className="text-xs text-gray-500 mb-1">Proyecto: {row.track_name}</p>
+                  {row.description && (
+                    <p className="text-xs text-gray-600 mb-1">{row.description}</p>
+                  )}
                   {row.status_detail && (
                     <p className="text-xs text-gray-500 italic">{row.status_detail}</p>
                   )}
@@ -92,6 +95,14 @@ export default function MisEnviosPage() {
                     )}
                     {row.destination && (
                       <div><span className="text-gray-400">Destino:</span> {row.destination}</div>
+                    )}
+                    {row.estimated_delivery && (
+                      <div>
+                        <span className="text-gray-400">ETA:</span>{" "}
+                        <span className="font-medium">
+                          {new Date(row.estimated_delivery).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}
+                        </span>
+                      </div>
                     )}
                   </div>
                 </div>
