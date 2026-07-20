@@ -31,6 +31,20 @@ export default function ItemsPage() {
 
   const [previewImage, setPreviewImage] = useState(null);
 
+  // Edit modal state
+  const [editingItem, setEditingItem] = useState(null);
+  const [editForm, setEditForm] = useState({ item_number: "", description: "", quantity: "1", price: "", supplier_price: "", supplier_id: "" });
+  const [editPictureFile, setEditPictureFile] = useState(null);
+  const [editPicturePreview, setEditPicturePreview] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [allSuppliers, setAllSuppliers] = useState([]);
+
+  useEffect(() => {
+    supabase.from("suppliers").select("id, name").order("name")
+      .then(({ data }) => setAllSuppliers(data || []));
+  }, []);
+
   const loadLedger = useCallback(async () => {
     setLedgerLoading(true);
     setLedgerError("");
@@ -38,7 +52,7 @@ export default function ItemsPage() {
       const { data, error } = await supabase
         .from("quotation_items")
         .select(`
-          id, item_number, description, picture_url, quantity, price, supplier_price,
+          id, item_number, description, picture_url, quantity, price, supplier_price, catalog_item_id,
           quotations(id, quote_number, currency, track_id),
           suppliers(id, name)
         `)
@@ -137,6 +151,72 @@ export default function ItemsPage() {
     if (pct >= 20) return "text-green-600 dark:text-green-400";
     if (pct >= 10) return "text-amber-600 dark:text-amber-400";
     return "text-red-600 dark:text-red-400";
+  };
+
+  const openEdit = (it) => {
+    setEditingItem(it);
+    setEditForm({
+      item_number: it.item_number || "",
+      description: it.description || "",
+      quantity: String(it.quantity ?? 1),
+      price: it.price != null ? String(it.price) : "",
+      supplier_price: it.supplier_price != null ? String(it.supplier_price) : "",
+      supplier_id: it.supplier_id || "",
+    });
+    setEditPictureFile(null);
+    setEditPicturePreview(it.picture_url || "");
+    setEditError("");
+  };
+
+  const handleEditSave = async () => {
+    if (!editingItem) return;
+    setEditSaving(true);
+    setEditError("");
+    try {
+      let pictureUrl = editingItem.picture_url || "";
+      if (editPictureFile) {
+        const ext = editPictureFile.name.split(".").pop();
+        const path = `quotation-items/ledger-${editingItem.id}-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from("quotation-images").upload(path, editPictureFile, { upsert: true });
+        if (upErr) throw upErr;
+        pictureUrl = supabase.storage.from("quotation-images").getPublicUrl(path).data.publicUrl;
+      }
+
+      const { error: updErr } = await supabase.from("quotation_items").update({
+        item_number: editForm.item_number.trim(),
+        description: editForm.description.trim(),
+        quantity: parseInt(editForm.quantity) || 1,
+        price: parseFloat(editForm.price) || 0,
+        supplier_price: parseFloat(editForm.supplier_price) || null,
+        supplier_id: editForm.supplier_id || null,
+        picture_url: pictureUrl,
+      }).eq("id", editingItem.id);
+      if (updErr) throw updErr;
+
+      // Keep the catalog photo in sync so history pickers show it
+      if (editPictureFile && pictureUrl && editingItem.catalog_item_id) {
+        await supabase.from("catalog_items").update({ picture_url: pictureUrl }).eq("id", editingItem.catalog_item_id);
+      }
+
+      // Recalculate the parent quotation total (subtotal + commission)
+      const quotationId = editingItem.quotations?.id;
+      if (quotationId) {
+        const [{ data: qItems }, { data: quot }] = await Promise.all([
+          supabase.from("quotation_items").select("price, quantity").eq("quotation_id", quotationId),
+          supabase.from("quotations").select("commission_pct").eq("id", quotationId).single(),
+        ]);
+        const subtotal = (qItems || []).reduce((s, r) => s + (Number(r.price) || 0) * (Number(r.quantity) || 1), 0);
+        const total = subtotal * (1 + (parseFloat(quot?.commission_pct) || 0) / 100);
+        await supabase.from("quotations").update({ total_amount: total }).eq("id", quotationId);
+      }
+
+      setEditingItem(null);
+      await loadLedger();
+    } catch (e) {
+      setEditError(e.message);
+    } finally {
+      setEditSaving(false);
+    }
   };
 
   return (
@@ -309,18 +389,16 @@ export default function ItemsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex items-center justify-end">
-                            {it.track_id && (
-                              <button
-                                onClick={() => navigate("/projects", { state: { activeTrackId: it.track_id, openQuotation: true } })}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition"
-                                title="Edit in project"
-                              >
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                                Edit
-                              </button>
-                            )}
+                            <button
+                              onClick={() => openEdit(it)}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-primary text-white rounded-lg hover:bg-primary/90 transition"
+                              title="Edit item"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                              Edit
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -446,6 +524,171 @@ export default function ItemsPage() {
             )}
           </div>
         </>
+      )}
+
+      {/* Edit item modal */}
+      {editingItem && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => !editSaving && setEditingItem(null)}>
+          <div
+            className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-100 dark:border-darkblack-400">
+              <div>
+                <h3 className="text-lg font-bold text-darkblack-700 dark:text-white">Edit Item</h3>
+                <p className="text-xs text-bgray-500 mt-0.5">
+                  {editingItem.quote_number} · {editingItem.client_name} · {editingItem.track_name}
+                </p>
+              </div>
+              <button
+                onClick={() => setEditingItem(null)}
+                disabled={editSaving}
+                className="p-1.5 rounded-lg text-bgray-400 hover:text-darkblack-700 hover:bg-bgray-100 dark:hover:bg-darkblack-500 transition"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* Picture */}
+              <div className="flex items-start gap-4">
+                <label className="relative w-24 h-24 rounded-xl overflow-hidden bg-bgray-100 dark:bg-darkblack-500 flex-shrink-0 cursor-pointer group border border-bgray-200 dark:border-darkblack-400">
+                  {editPicturePreview ? (
+                    <img src={editPicturePreview} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <svg className="w-8 h-8 text-bgray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                    <span className="text-white text-[10px] font-semibold uppercase tracking-wide">Change</span>
+                  </div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={e => {
+                      const f = e.target.files?.[0];
+                      if (f) { setEditPictureFile(f); setEditPicturePreview(URL.createObjectURL(f)); }
+                    }}
+                  />
+                </label>
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Item #</label>
+                    <input
+                      type="text"
+                      value={editForm.item_number}
+                      onChange={e => setEditForm(f => ({ ...f, item_number: e.target.value }))}
+                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Quantity</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={editForm.quantity}
+                      onChange={e => setEditForm(f => ({ ...f, quantity: e.target.value }))}
+                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary resize-y"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Client Price ({editingItem.currency})</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.price}
+                    onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))}
+                    className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Supplier Price</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={editForm.supplier_price}
+                    onChange={e => setEditForm(f => ({ ...f, supplier_price: e.target.value }))}
+                    className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Supplier</label>
+                <select
+                  value={editForm.supplier_id}
+                  onChange={e => setEditForm(f => ({ ...f, supplier_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                >
+                  <option value="">No supplier</option>
+                  {allSuppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+
+              {/* Live margin preview */}
+              {(() => {
+                const mp = getMargin(parseFloat(editForm.price), parseFloat(editForm.supplier_price));
+                return mp !== null ? (
+                  <div className="text-xs text-bgray-500">
+                    Margin: <span className={`font-semibold ${marginColorClass(Number(mp))}`}>{mp}%</span>
+                  </div>
+                ) : null;
+              })()}
+
+              {editError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{editError}</div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 border-t border-bgray-100 dark:border-darkblack-400">
+              {editingItem.track_id ? (
+                <button
+                  onClick={() => navigate("/projects", { state: { activeTrackId: editingItem.track_id, openQuotation: true } })}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Open full quotation →
+                </button>
+              ) : <span />}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditingItem(null)}
+                  disabled={editSaving}
+                  className="px-4 py-2 text-sm border border-bgray-300 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 rounded-lg hover:bg-bgray-50 dark:hover:bg-darkblack-500 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleEditSave}
+                  disabled={editSaving || !editForm.description.trim()}
+                  className="px-4 py-2 text-sm bg-primary text-white rounded-lg hover:bg-primary/90 font-semibold disabled:opacity-60 transition flex items-center gap-2"
+                >
+                  {editSaving && <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white inline-block" />}
+                  {editSaving ? "Saving..." : "Save Changes"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Image lightbox */}
