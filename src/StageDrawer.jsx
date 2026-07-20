@@ -940,7 +940,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-end z-50 font-urbanist">
-      <div className="w-[900px] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
+      <div className="w-[1200px] max-w-[95vw] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
         {/* Header */}
         <div className="border-b border-bgray-200 dark:border-darkblack-400">
           <div className="flex items-center justify-between px-6 pt-5 pb-3">

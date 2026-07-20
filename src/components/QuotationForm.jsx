@@ -165,6 +165,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx));
 
+  const moveItem = (idx, dir) => {
+    setItems(prev => {
+      const to = idx + dir;
+      if (to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[to]] = [next[to], next[idx]];
+      return next;
+    });
+  };
+
   const handleAIImport = (importedItems) => {
     setItems(prev => {
       const existing = prev.filter(it => it.description || it.item_number);
@@ -744,17 +754,40 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         <div className="space-y-4">
           {items.map((item, idx) => (
             <div key={item.tempId} className="border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4 bg-bgray-50 dark:bg-darkblack-500 relative">
-              {/* Remove button */}
-              {items.length > 1 && (
+              {/* Item controls: move up/down + remove */}
+              <div className="absolute top-3 right-3 flex items-center gap-1">
                 <button
-                  onClick={() => removeItem(idx)}
-                  className="absolute top-3 right-3 text-bgray-400 hover:text-red-500 transition"
+                  onClick={() => moveItem(idx, -1)}
+                  disabled={idx === 0}
+                  title="Move up"
+                  className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                   </svg>
                 </button>
-              )}
+                <button
+                  onClick={() => moveItem(idx, 1)}
+                  disabled={idx === items.length - 1}
+                  title="Move down"
+                  className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {items.length > 1 && (
+                  <button
+                    onClick={() => removeItem(idx)}
+                    title="Remove item"
+                    className="p-1 rounded text-bgray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
 
               <div className="grid grid-cols-12 gap-3">
                 {/* Picture */}
@@ -1150,6 +1183,17 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             </div>
           ))}
         </div>
+
+        {/* Add item at the bottom — saves scrolling back up */}
+        <button
+          onClick={addItem}
+          className="w-full mt-3 flex items-center justify-center gap-1.5 py-2.5 border-2 border-dashed border-bgray-300 dark:border-darkblack-400 rounded-xl text-sm font-semibold text-bgray-500 dark:text-bgray-400 hover:border-primary hover:text-primary transition"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          Add Item
+        </button>
       </div>
 
       {/* Notes */}
