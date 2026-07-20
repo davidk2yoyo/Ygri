@@ -634,14 +634,22 @@ export default function AnnexEditorPage() {
       const { error: titleErr } = await supabase.from("technical_annexes").update({ title: annex.title }).eq("id", annex.id);
       if (titleErr) throw new Error(titleErr.message);
 
-      const { error: delErr } = await supabase.from("annex_blocks").delete().eq("annex_id", annex.id);
-      if (delErr) throw new Error(delErr.message);
+      // Insert-then-delete: old blocks are only removed after the new ones
+      // are safely in the DB, so a failed save can never lose the annex
+      const { data: oldRows, error: oldErr } = await supabase
+        .from("annex_blocks").select("id").eq("annex_id", annex.id);
+      if (oldErr) throw new Error(oldErr.message);
 
       if (blocks.length > 0) {
         const { error: insErr } = await supabase.from("annex_blocks").insert(
           blocks.map((b, i) => ({ annex_id: annex.id, type: b.type, content: b.content, sort_order: i }))
         );
         if (insErr) throw new Error(insErr.message);
+      }
+
+      if (oldRows?.length) {
+        const { error: delErr } = await supabase.from("annex_blocks").delete().in("id", oldRows.map(r => r.id));
+        if (delErr) throw new Error(delErr.message);
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);

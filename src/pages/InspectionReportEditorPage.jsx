@@ -2198,11 +2198,11 @@ export default function InspectionReportEditorPage() {
         .eq("id", report.id);
       if (updErr) throw new Error(updErr.message);
 
-      const { error: delErr } = await supabase
-        .from("report_blocks")
-        .delete()
-        .eq("report_id", report.id);
-      if (delErr) throw new Error(delErr.message);
+      // Insert-then-delete: old blocks are only removed after the new ones
+      // are safely in the DB, so a failed save can never lose the report
+      const { data: oldRows, error: oldErr } = await supabase
+        .from("report_blocks").select("id").eq("report_id", report.id);
+      if (oldErr) throw new Error(oldErr.message);
 
       if (blocks.length > 0) {
         const { error: insErr } = await supabase.from("report_blocks").insert(
@@ -2214,6 +2214,14 @@ export default function InspectionReportEditorPage() {
           }))
         );
         if (insErr) throw new Error(insErr.message);
+      }
+
+      if (oldRows?.length) {
+        const { error: delErr } = await supabase
+          .from("report_blocks")
+          .delete()
+          .in("id", oldRows.map(r => r.id));
+        if (delErr) throw new Error(delErr.message);
       }
 
       setSaved(true);
