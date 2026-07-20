@@ -77,7 +77,6 @@ export default function MisReportesPage() {
                     {r.supplier_name && (
                       <p className="text-sm text-gray-500 mt-0.5">Proveedor: {r.supplier_name}</p>
                     )}
-                    <p className="text-xs text-gray-400 mt-1">Proyecto: {r.track_name}</p>
                   </div>
 
                   <div className="text-right flex-shrink-0 space-y-2">

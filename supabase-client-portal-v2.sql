@@ -84,7 +84,6 @@ RETURNS TABLE (
   status        TEXT,
   visit_date    DATE,
   supplier_name TEXT,
-  track_name    TEXT,
   created_at    TIMESTAMPTZ
 )
 SECURITY DEFINER
@@ -99,13 +98,10 @@ BEGIN
   IF v_client_id IS NULL THEN RETURN; END IF;
 
   RETURN QUERY
-  SELECT
-    ir.id, ir.report_number, ir.title::TEXT, ir.status::TEXT,
-    ir.visit_date, ir.supplier_name::TEXT,
-    t.name::TEXT AS track_name, ir.created_at
+  SELECT ir.id, ir.report_number, ir.title::TEXT, ir.status::TEXT,
+         ir.visit_date, ir.supplier_name::TEXT, ir.created_at
   FROM inspection_reports ir
-  JOIN tracks t ON t.id = ir.track_id
-  WHERE t.client_id = v_client_id
+  WHERE ir.client_id = v_client_id
   ORDER BY ir.created_at DESC;
 END;
 $$;
