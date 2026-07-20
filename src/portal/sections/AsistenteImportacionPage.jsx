@@ -7,6 +7,8 @@ import interasiaLogo from "../../assets/images/logo/interasialogo.png";
 const fmt = (v, dec = 0) =>
   Number(v || 0).toLocaleString("es-CO", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 
+const N = v => parseFloat(v) || 0;
+
 function Field({ label, hint, children }) {
   return (
     <div>
@@ -34,7 +36,7 @@ function NumInput({ value, onChange, placeholder = "0", prefix, suffix, classNam
 
 function Section({ title, color = "bg-gray-50", children }) {
   return (
-    <div className={`rounded-xl border border-gray-100 overflow-hidden`}>
+    <div className="rounded-xl border border-gray-100 overflow-hidden">
       <div className={`px-4 py-2 ${color}`}>
         <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">{title}</h3>
       </div>
@@ -56,14 +58,12 @@ function ResultRow({ label, usd, cop, bold, sub }) {
 }
 
 // PDF print-friendly sheet
-function PrintSheet({ data, client_name }) {
+function PrintSheet({ data, client_name, products }) {
   const { inputs, r } = data;
   const today = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+  const totalFOB = products.reduce((s, p) => s + N(p.qty) * N(p.unitPrice), 0);
 
   const rows = [
-    { label: "VALOR MERCANCÍA (FOB)", usd: inputs.fob, cop: inputs.fob * inputs.trm },
-    { label: "GASTOS ORIGEN", usd: inputs.gastosOrigen, cop: inputs.gastosOrigen * inputs.trm },
-    { label: "FLETE Y GASTOS EN DESTINO", usd: inputs.flete + inputs.fleteDestino, cop: (inputs.flete + inputs.fleteDestino) * inputs.trm },
     { label: "IMPUESTOS ARANCELARIOS", pct: inputs.arancel, cop: r.arancelCOP },
     { label: "IVA (Imp + Base × 19%)", pct: inputs.iva, cop: r.ivaCOP },
     ...(r.impuestoAdicionalCOP > 0 ? [{ label: `${inputs.impuestoAdicionalNombre || "IMPUESTO ADICIONAL"} (${inputs.impuestoAdicional}%)`, cop: r.impuestoAdicionalCOP }] : []),
@@ -102,10 +102,36 @@ function PrintSheet({ data, client_name }) {
         <div><span className="text-gray-500">SUBPARTIDA:</span> <strong>{inputs.subpartida || "—"}</strong></div>
       </div>
 
-      {/* CIF table */}
+      {/* Products table */}
       <table className="w-full text-xs border-collapse mb-4">
         <thead>
           <tr className="bg-blue-50">
+            <th className="text-left px-3 py-2 font-semibold">Producto / Descripción</th>
+            <th className="text-right px-3 py-2 font-semibold w-20">Cant.</th>
+            <th className="text-right px-3 py-2 font-semibold w-28">Precio Unit. USD</th>
+            <th className="text-right px-3 py-2 font-semibold w-28">Total USD</th>
+          </tr>
+        </thead>
+        <tbody>
+          {products.filter(p => p.description || N(p.unitPrice) > 0).map((p, i) => (
+            <tr key={p.id} className="border-b border-gray-100">
+              <td className="px-3 py-1.5">{p.description || `Producto ${i + 1}`}</td>
+              <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.qty), 0)}</td>
+              <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.unitPrice), 2)}</td>
+              <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.qty) * N(p.unitPrice), 2)}</td>
+            </tr>
+          ))}
+          <tr className="bg-slate-50 font-semibold">
+            <td className="px-3 py-2" colSpan={3}>TOTAL FOB / EXW</td>
+            <td className="px-3 py-2 text-right font-mono">{fmt(totalFOB, 2)}</td>
+          </tr>
+        </tbody>
+      </table>
+
+      {/* CIF table */}
+      <table className="w-full text-xs border-collapse mb-4">
+        <thead>
+          <tr className="bg-gray-100">
             <th className="text-left px-3 py-2 font-semibold">Concepto</th>
             <th className="text-right px-3 py-2 font-semibold">USD</th>
             <th className="text-right px-3 py-2 font-semibold">COP</th>
@@ -114,8 +140,8 @@ function PrintSheet({ data, client_name }) {
         <tbody>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-1.5">Valor mercancía (FOB/EXW)</td>
-            <td className="px-3 py-1.5 text-right font-mono">{fmt(inputs.fob, 2)}</td>
-            <td className="px-3 py-1.5 text-right font-mono">{fmt(inputs.fob * inputs.trm)}</td>
+            <td className="px-3 py-1.5 text-right font-mono">{fmt(totalFOB, 2)}</td>
+            <td className="px-3 py-1.5 text-right font-mono">{fmt(totalFOB * inputs.trm)}</td>
           </tr>
           <tr className="border-b border-gray-100">
             <td className="px-3 py-1.5">+ Gastos origen</td>
@@ -152,8 +178,7 @@ function PrintSheet({ data, client_name }) {
           {rows.map((row, i) => (
             <tr key={i} className="border-b border-gray-100">
               <td className="px-3 py-1.5">
-                {row.label}
-                {row.pct !== undefined && ` (${row.pct}%)`}
+                {row.label}{row.pct !== undefined && ` (${row.pct}%)`}
               </td>
               <td className="px-3 py-1.5 text-right font-mono">{fmt(row.cop)}</td>
             </tr>
@@ -165,16 +190,16 @@ function PrintSheet({ data, client_name }) {
         </tbody>
       </table>
 
-      {inputs.unidades > 1 && (
+      {inputs.totalUnidades > 1 && (
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div className="bg-blue-50 rounded-lg p-3 text-center">
             <p className="text-xs text-blue-600 font-semibold">COSTO POR UNIDAD</p>
-            <p className="text-xl font-bold text-blue-700 font-mono">$ {fmt(r.total / inputs.unidades)}</p>
-            <p className="text-xs text-blue-500">COP ({inputs.unidades} unidades)</p>
+            <p className="text-xl font-bold text-blue-700 font-mono">$ {fmt(r.total / inputs.totalUnidades)}</p>
+            <p className="text-xs text-blue-500">COP ({inputs.totalUnidades} unidades)</p>
           </div>
           <div className="bg-gray-50 rounded-lg p-3 text-center">
             <p className="text-xs text-gray-500 font-semibold">COSTO POR UNIDAD</p>
-            <p className="text-xl font-bold text-gray-700 font-mono">USD {fmt(r.total / inputs.unidades / inputs.trm, 2)}</p>
+            <p className="text-xl font-bold text-gray-700 font-mono">USD {fmt(r.total / inputs.totalUnidades / inputs.trm, 2)}</p>
           </div>
         </div>
       )}
@@ -189,31 +214,48 @@ function PrintSheet({ data, client_name }) {
   );
 }
 
-const N = v => parseFloat(v) || 0;
+let nextId = 2;
 
 export default function AsistenteImportacionPage() {
   const { session } = useClientPortal();
   const printRef = useRef(null);
   const [exporting, setExporting] = useState(false);
 
+  const [products, setProducts] = useState([
+    { id: 1, description: "", qty: "1", unitPrice: "" },
+  ]);
+
   const [inputs, setInputs] = useState({
-    origen: "GUANGZHOU",  destino: "",   incoterm: "FOB",
+    origen: "GUANGZHOU", destino: "", incoterm: "FOB",
     subpartida: "",
-    fob: "",              gastosOrigen: "",  flete: "",    seguro: "",
+    gastosOrigen: "", flete: "", seguro: "",
     fleteDestino: "",
-    arancel: "10",        iva: "19",
+    arancel: "10", iva: "19",
     impuestoAdicional: "", impuestoAdicionalNombre: "",
     gastosPuerto: "6000000",
     liberacionBL: "220000", gastosVarios: "400000",
     declaracion: "60000", ingresoSistema: "60000", conservacion: "60000",
     transporte: "",
-    trm: "4200",          unidades: "1",
+    trm: "4200",
   });
 
   const set = (k, v) => setInputs(p => ({ ...p, [k]: v }));
 
+  const setProduct = (id, field, value) =>
+    setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: value } : p));
+
+  const addProduct = () => {
+    setProducts(ps => [...ps, { id: nextId++, description: "", qty: "1", unitPrice: "" }]);
+  };
+
+  const removeProduct = id => {
+    setProducts(ps => ps.length > 1 ? ps.filter(p => p.id !== id) : ps);
+  };
+
   const r = useMemo(() => {
-    const fob = N(inputs.fob), gastosOrigen = N(inputs.gastosOrigen),
+    const fob = products.reduce((s, p) => s + N(p.qty) * N(p.unitPrice), 0);
+    const totalUnidades = products.reduce((s, p) => s + N(p.qty), 0);
+    const gastosOrigen = N(inputs.gastosOrigen),
           flete = N(inputs.flete), seguro = N(inputs.seguro),
           fleteDestino = N(inputs.fleteDestino), trm = N(inputs.trm) || 4200,
           arancel = N(inputs.arancel), iva = N(inputs.iva),
@@ -221,9 +263,7 @@ export default function AsistenteImportacionPage() {
           libBL = N(inputs.liberacionBL), gastosV = N(inputs.gastosVarios),
           decl = N(inputs.declaracion), ingreso = N(inputs.ingresoSistema),
           conserv = N(inputs.conservacion), transporte = N(inputs.transporte),
-          unidades = Math.max(N(inputs.unidades), 1);
-
-    const impuAdicional = N(inputs.impuestoAdicional);
+          impuAdicional = N(inputs.impuestoAdicional);
 
     const cifUSD = fob + gastosOrigen + flete + seguro;
     const cifCOP = cifUSD * trm;
@@ -232,17 +272,14 @@ export default function AsistenteImportacionPage() {
     const impuestoAdicionalCOP = cifCOP * (impuAdicional / 100);
     const subtributos = cifCOP + arancelCOP + ivaCOP + impuestoAdicionalCOP;
 
-    // Servicio comex: 0.4% sobre CIF COP, mínimo 800.000
     const servicioComex = Math.max(cifCOP * 0.004, 800000);
     const totalAduana = libBL + gastosV + decl + ingreso + conserv + servicioComex;
-
     const ivaTransporte = transporte * 0.19;
     const fleteDestCOP = fleteDestino * trm;
-
     const total = subtributos + gastosPuerto + totalAduana + fleteDestCOP + transporte + ivaTransporte;
 
-    return { cifUSD, cifCOP, arancelCOP, ivaCOP, impuestoAdicionalCOP, subtributos, servicioComex, totalAduana, ivaTransporte, total };
-  }, [inputs]);
+    return { fob, totalUnidades, cifUSD, cifCOP, arancelCOP, ivaCOP, impuestoAdicionalCOP, subtributos, servicioComex, totalAduana, ivaTransporte, total };
+  }, [inputs, products]);
 
   async function exportPDF() {
     if (!printRef.current) return;
@@ -266,46 +303,38 @@ export default function AsistenteImportacionPage() {
     }
   }
 
+  const trm = N(inputs.trm) || 4200;
+
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Asistente de Importación</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Pre-liquidación estimada de tu importación desde China a Colombia
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">Pre-liquidación estimada de tu importación desde China a Colombia</p>
         </div>
-        <button
-          onClick={exportPDF}
-          disabled={exporting}
-          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition shadow-sm"
-        >
-          {exporting ? (
-            <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-          ) : (
+        <button onClick={exportPDF} disabled={exporting}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-xl hover:bg-blue-700 disabled:opacity-50 transition shadow-sm">
+          {exporting ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : (
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
             </svg>
           )}
           {exporting ? "Generando PDF..." : "Exportar PDF"}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[420px,1fr] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[480px,1fr] gap-6">
         {/* ── INPUTS ── */}
         <div className="space-y-4">
 
           <Section title="Información general" color="bg-blue-50">
             <div className="grid grid-cols-2 gap-3">
               <Field label="Origen">
-                <input value={inputs.origen} onChange={e => set("origen", e.target.value)}
-                  placeholder="GUANGZHOU"
+                <input value={inputs.origen} onChange={e => set("origen", e.target.value)} placeholder="GUANGZHOU"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </Field>
               <Field label="Destino">
-                <input value={inputs.destino} onChange={e => set("destino", e.target.value)}
-                  placeholder="BUENAVENTURA"
+                <input value={inputs.destino} onChange={e => set("destino", e.target.value)} placeholder="BUENAVENTURA"
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </Field>
             </div>
@@ -318,16 +347,13 @@ export default function AsistenteImportacionPage() {
               </Field>
               <Field label="Subpartida arancelaria">
                 <div className="flex gap-1">
-                  <input value={inputs.subpartida} onChange={e => set("subpartida", e.target.value)}
-                    placeholder="ej. 8517.13.00"
+                  <input value={inputs.subpartida} onChange={e => set("subpartida", e.target.value)} placeholder="ej. 8517.13.00"
                     className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <a href="https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces"
-                    target="_blank" rel="noopener noreferrer"
+                  <a href="https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces" target="_blank" rel="noopener noreferrer"
                     title="Consultar DIAN"
                     className="flex-shrink-0 w-9 h-9 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-300 transition">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                     </svg>
                   </a>
                 </div>
@@ -336,20 +362,69 @@ export default function AsistenteImportacionPage() {
             </div>
           </Section>
 
-          <Section title="Valor de la mercancía (USD)" color="bg-slate-50">
-            <Field label="Valor FOB / EXW" hint="Precio en fábrica o en puerto de origen">
-              <NumInput value={inputs.fob} onChange={v => set("fob", v)} prefix="$" />
-            </Field>
-            <Field label="Gastos en origen" hint="Transporte interno, documentación">
-              <NumInput value={inputs.gastosOrigen} onChange={v => set("gastosOrigen", v)} prefix="$" />
-            </Field>
-            <Field label="Flete internacional" hint="China → Colombia">
-              <NumInput value={inputs.flete} onChange={v => set("flete", v)} prefix="$" />
-            </Field>
-            <Field label="Seguro de carga">
-              <NumInput value={inputs.seguro} onChange={v => set("seguro", v)} prefix="$" />
-            </Field>
-          </Section>
+          {/* ── PRODUCTOS ── */}
+          <div className="rounded-xl border border-gray-100 overflow-hidden">
+            <div className="px-4 py-2 bg-slate-50 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-gray-600">Productos (USD)</h3>
+              <button onClick={addProduct}
+                className="flex items-center gap-1 text-xs text-blue-600 font-semibold hover:text-blue-800 transition">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Agregar producto
+              </button>
+            </div>
+            <div className="bg-white">
+              {/* Header */}
+              <div className="grid grid-cols-[1fr,64px,96px,32px] gap-1 px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
+                <span>Descripción</span><span className="text-right">Cant.</span><span className="text-right">Precio unit.</span><span />
+              </div>
+              {products.map((p, i) => (
+                <div key={p.id} className="grid grid-cols-[1fr,64px,96px,32px] gap-1 px-3 py-1.5 border-t border-gray-50">
+                  <input
+                    value={p.description} onChange={e => setProduct(p.id, "description", e.target.value)}
+                    placeholder={`Producto ${i + 1}`}
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="number" min="1" step="1"
+                    value={p.qty} onChange={e => setProduct(p.id, "qty", e.target.value)}
+                    placeholder="1"
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <input
+                    type="number" min="0" step="any"
+                    value={p.unitPrice} onChange={e => setProduct(p.id, "unitPrice", e.target.value)}
+                    placeholder="0.00"
+                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                  <button onClick={() => removeProduct(p.id)}
+                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              {/* FOB Total */}
+              <div className="flex items-center justify-between px-3 py-2 bg-slate-50 border-t border-gray-100">
+                <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">Total FOB</span>
+                <span className="text-sm font-bold text-gray-900 font-mono">USD {fmt(r.fob, 2)}</span>
+              </div>
+              {/* Gastos adicionales */}
+              <div className="px-3 py-3 border-t border-gray-100 space-y-2">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Gastos adicionales (USD)</p>
+                <div className="grid grid-cols-3 gap-2">
+                  <Field label="Gastos origen">
+                    <NumInput value={inputs.gastosOrigen} onChange={v => set("gastosOrigen", v)} prefix="$" />
+                  </Field>
+                  <Field label="Flete int.">
+                    <NumInput value={inputs.flete} onChange={v => set("flete", v)} prefix="$" />
+                  </Field>
+                  <Field label="Seguro">
+                    <NumInput value={inputs.seguro} onChange={v => set("seguro", v)} prefix="$" />
+                  </Field>
+                </div>
+              </div>
+            </div>
+          </div>
 
           <Section title="Impuestos (sobre base CIF)" color="bg-amber-50">
             <div className="grid grid-cols-2 gap-3">
@@ -405,18 +480,13 @@ export default function AsistenteImportacionPage() {
           </Section>
 
           <Section title="Configuración" color="bg-purple-50">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="TRM (COP por USD)">
-                <NumInput value={inputs.trm} onChange={v => set("trm", v)} placeholder="4200" />
-              </Field>
-              <Field label="Número de unidades">
-                <NumInput value={inputs.unidades} onChange={v => set("unidades", v)} placeholder="1" />
-              </Field>
-            </div>
+            <Field label="TRM (COP por USD)">
+              <NumInput value={inputs.trm} onChange={v => set("trm", v)} placeholder="4200" />
+            </Field>
           </Section>
         </div>
 
-        {/* ── RESULTADO INTERACTIVO ── */}
+        {/* ── RESULTADO ── */}
         <div className="space-y-4">
           <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sticky top-4">
             <h2 className="font-bold text-gray-900 mb-4 text-base">Pre-liquidación</h2>
@@ -425,8 +495,8 @@ export default function AsistenteImportacionPage() {
               {/* CIF */}
               <div className="pb-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Valor CIF / Base gravable</p>
-                <ResultRow label="Valor mercancía + gastos origen" usd={N(inputs.fob) + N(inputs.gastosOrigen)} />
-                <ResultRow label="+ Flete + seguro" usd={N(inputs.flete) + N(inputs.seguro)} sub />
+                <ResultRow label={`Mercancía (${products.length} producto${products.length > 1 ? "s" : ""})`} usd={r.fob} />
+                <ResultRow label="+ Gastos origen + flete + seguro" usd={N(inputs.gastosOrigen) + N(inputs.flete) + N(inputs.seguro)} sub />
                 <ResultRow label="= CIF Total" usd={r.cifUSD} cop={r.cifCOP} bold />
               </div>
 
@@ -456,18 +526,16 @@ export default function AsistenteImportacionPage() {
               </div>
             </div>
 
-            {N(inputs.unidades) > 1 && (
+            {r.totalUnidades > 1 && (
               <div className="grid grid-cols-2 gap-3 mt-5">
                 <div className="bg-blue-600 rounded-xl p-3 text-center text-white">
                   <p className="text-xs font-semibold opacity-80 mb-0.5">Costo / unidad</p>
-                  <p className="text-xl font-bold font-mono">$ {fmt(r.total / N(inputs.unidades))}</p>
-                  <p className="text-xs opacity-70">COP</p>
+                  <p className="text-xl font-bold font-mono">$ {fmt(r.total / r.totalUnidades)}</p>
+                  <p className="text-xs opacity-70">COP ({fmt(r.totalUnidades, 0)} uds)</p>
                 </div>
                 <div className="bg-slate-100 rounded-xl p-3 text-center">
                   <p className="text-xs font-semibold text-gray-500 mb-0.5">Costo / unidad</p>
-                  <p className="text-xl font-bold text-gray-800 font-mono">
-                    {fmt(r.total / N(inputs.unidades) / (N(inputs.trm) || 4200), 2)}
-                  </p>
+                  <p className="text-xl font-bold text-gray-800 font-mono">{fmt(r.total / r.totalUnidades / trm, 2)}</p>
                   <p className="text-xs text-gray-400">USD</p>
                 </div>
               </div>
@@ -480,10 +548,28 @@ export default function AsistenteImportacionPage() {
         </div>
       </div>
 
-      {/* ── Hidden print sheet for PDF ── */}
+      {/* ── Hidden print sheet ── */}
       <div className="fixed -left-[9999px] top-0 pointer-events-none">
         <div ref={printRef}>
-          <PrintSheet data={{ inputs: { ...inputs, fob: N(inputs.fob), gastosOrigen: N(inputs.gastosOrigen), flete: N(inputs.flete), seguro: N(inputs.seguro), fleteDestino: N(inputs.fleteDestino), trm: N(inputs.trm) || 4200, arancel: N(inputs.arancel), iva: N(inputs.iva), impuestoAdicional: N(inputs.impuestoAdicional), impuestoAdicionalNombre: inputs.impuestoAdicionalNombre, gastosPuerto: N(inputs.gastosPuerto), liberacionBL: N(inputs.liberacionBL), gastosVarios: N(inputs.gastosVarios), declaracion: N(inputs.declaracion), ingresoSistema: N(inputs.ingresoSistema), conservacion: N(inputs.conservacion), transporte: N(inputs.transporte), unidades: Math.max(N(inputs.unidades), 1) }, r }} client_name={session.client_name} />
+          <PrintSheet
+            products={products}
+            data={{
+              inputs: {
+                ...inputs,
+                gastosOrigen: N(inputs.gastosOrigen), flete: N(inputs.flete),
+                seguro: N(inputs.seguro), fleteDestino: N(inputs.fleteDestino),
+                trm: N(inputs.trm) || 4200, arancel: N(inputs.arancel),
+                iva: N(inputs.iva), impuestoAdicional: N(inputs.impuestoAdicional),
+                impuestoAdicionalNombre: inputs.impuestoAdicionalNombre,
+                gastosPuerto: N(inputs.gastosPuerto), liberacionBL: N(inputs.liberacionBL),
+                gastosVarios: N(inputs.gastosVarios), declaracion: N(inputs.declaracion),
+                ingresoSistema: N(inputs.ingresoSistema), conservacion: N(inputs.conservacion),
+                transporte: N(inputs.transporte), totalUnidades: r.totalUnidades,
+              },
+              r,
+            }}
+            client_name={session.client_name}
+          />
         </div>
       </div>
     </div>
