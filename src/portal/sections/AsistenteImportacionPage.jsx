@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useRef } from "react";
+import React, { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { useClientPortal } from "../ClientPortalContext";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import interasiaLogo from "../../assets/images/logo/interasialogo.png";
+import subpartidas from "../../data/subpartidas.json";
 
 const fmt = (v, dec = 0) =>
   Number(v || 0).toLocaleString("es-CO", { minimumFractionDigits: dec, maximumFractionDigits: dec });
@@ -57,13 +58,109 @@ function ResultRow({ label, usd, cop, bold, sub }) {
   );
 }
 
+// Searchable subpartida combobox
+function SubpartidaSearch({ value, gravamen, onSelect }) {
+  const [query, setQuery] = useState(value || "");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Sync display when value changes externally
+  useEffect(() => { setQuery(value || ""); }, [value]);
+
+  const results = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q || q.length < 2) return [];
+    return subpartidas
+      .filter(s => s.c.toLowerCase().includes(q) || s.d.toLowerCase().includes(q))
+      .slice(0, 10);
+  }, [query]);
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
+  function handleSelect(item) {
+    setQuery(item.c);
+    setOpen(false);
+    onSelect(item.c, item.g, item.d);
+  }
+
+  function handleClear() {
+    setQuery("");
+    onSelect("", "", "");
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="flex gap-1">
+        <div className="relative flex-1">
+          <input
+            value={query}
+            onChange={e => { setQuery(e.target.value); setOpen(true); }}
+            onFocus={() => query.length >= 2 && setOpen(true)}
+            onKeyDown={e => e.key === "Escape" && setOpen(false)}
+            placeholder="Buscar código o descripción…"
+            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-6"
+          />
+          {query && (
+            <button onClick={handleClear}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-500">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+        {gravamen !== "" && gravamen !== undefined && (
+          <div className="flex-shrink-0 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded-lg text-xs font-bold text-amber-700 whitespace-nowrap">
+            {gravamen}%
+          </div>
+        )}
+      </div>
+      {open && results.length > 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {results.map(item => (
+            <button key={item.c} onClick={() => handleSelect(item)}
+              className="w-full text-left px-3 py-2 hover:bg-blue-50 border-b border-gray-50 last:border-0">
+              <span className="font-mono text-xs text-blue-700 font-semibold">{item.c}</span>
+              <span className="ml-2 text-xs text-amber-600 font-semibold">{item.g}%</span>
+              <p className="text-xs text-gray-500 truncate mt-0.5">{item.d}</p>
+            </button>
+          ))}
+        </div>
+      )}
+      {open && query.length >= 2 && results.length === 0 && (
+        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-xs text-gray-400">
+          Sin resultados
+        </div>
+      )}
+    </div>
+  );
+}
+
 // PDF print-friendly sheet
 function PrintSheet({ data, client_name, products }) {
   const { inputs, r } = data;
   const today = new Date().toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const totalFOB = products.reduce((s, p) => s + N(p.qty) * N(p.unitPrice), 0);
+  const iva = N(inputs.iva);
 
-  const rows = [
+  // Per-product tax breakdown
+  const productBreakdown = products
+    .filter(p => p.description || N(p.unitPrice) > 0)
+    .map(p => {
+      const prodFOB = N(p.qty) * N(p.unitPrice);
+      const prodCIF = totalFOB > 0 ? r.cifCOP * (prodFOB / totalFOB) : 0;
+      const prodArancel = prodCIF * (N(p.arancel) / 100);
+      const prodIVA = (prodCIF + prodArancel) * (iva / 100);
+      return { ...p, prodFOB, prodCIF, prodArancel, prodIVA };
+    });
+
+  const costRows = [
     { label: "IMPUESTOS ARANCELARIOS", cop: r.arancelCOP },
     { label: "IVA (Imp + Base × 19%)", pct: inputs.iva, cop: r.ivaCOP },
     ...(r.impuestoAdicionalCOP > 0 ? [{ label: `${inputs.impuestoAdicionalNombre || "IMPUESTO ADICIONAL"} (${inputs.impuestoAdicional}%)`, cop: r.impuestoAdicionalCOP }] : []),
@@ -80,6 +177,7 @@ function PrintSheet({ data, client_name, products }) {
 
   return (
     <div className="font-sans text-sm text-gray-900 bg-white p-8 w-full" style={{ minWidth: 700 }}>
+      {/* Header */}
       <div className="flex items-center justify-between mb-6 pb-4 border-b-2 border-blue-600">
         <div>
           <h1 className="text-xl font-bold text-blue-700">PRE-LIQUIDACIÓN DE IMPORTACIÓN</h1>
@@ -93,6 +191,7 @@ function PrintSheet({ data, client_name, products }) {
         </div>
       </div>
 
+      {/* Info grid */}
       <div className="grid grid-cols-3 gap-4 mb-6 bg-gray-50 rounded-lg p-3 text-xs">
         <div><span className="text-gray-500">CLIENTE:</span> <strong>{client_name}</strong></div>
         <div><span className="text-gray-500">ORIGEN:</span> <strong>{inputs.origen || "—"}</strong></div>
@@ -107,7 +206,7 @@ function PrintSheet({ data, client_name, products }) {
           <tr className="bg-blue-50">
             <th className="text-left px-3 py-2 font-semibold">Producto / Descripción</th>
             <th className="text-left px-3 py-2 font-semibold w-28">Subpartida</th>
-            <th className="text-right px-3 py-2 font-semibold w-16">Arancel</th>
+            <th className="text-right px-3 py-2 font-semibold w-16">Grav.</th>
             <th className="text-right px-3 py-2 font-semibold w-16">Cant.</th>
             <th className="text-right px-3 py-2 font-semibold w-24">P. Unit. USD</th>
             <th className="text-right px-3 py-2 font-semibold w-24">Total USD</th>
@@ -169,6 +268,41 @@ function PrintSheet({ data, client_name, products }) {
         </tbody>
       </table>
 
+      {/* Per-product tax breakdown */}
+      {productBreakdown.length > 1 && (
+        <table className="w-full text-xs border-collapse mb-4">
+          <thead>
+            <tr className="bg-amber-50">
+              <th className="text-left px-3 py-2 font-semibold">Producto</th>
+              <th className="text-right px-3 py-2 font-semibold w-20">Grav.</th>
+              <th className="text-right px-3 py-2 font-semibold w-28">Arancel COP</th>
+              <th className="text-right px-3 py-2 font-semibold w-20">IVA %</th>
+              <th className="text-right px-3 py-2 font-semibold w-28">IVA COP</th>
+              <th className="text-right px-3 py-2 font-semibold w-28">Total imp.</th>
+            </tr>
+          </thead>
+          <tbody>
+            {productBreakdown.map((p, i) => (
+              <tr key={p.id} className="border-b border-gray-100">
+                <td className="px-3 py-1.5">{p.description || `Producto ${i + 1}`}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{p.arancel ? `${p.arancel}%` : "—"}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmt(p.prodArancel)}</td>
+                <td className="px-3 py-1.5 text-right font-mono">{iva}%</td>
+                <td className="px-3 py-1.5 text-right font-mono">{fmt(p.prodIVA)}</td>
+                <td className="px-3 py-1.5 text-right font-mono font-semibold">{fmt(p.prodArancel + p.prodIVA)}</td>
+              </tr>
+            ))}
+            <tr className="bg-amber-50 font-semibold">
+              <td className="px-3 py-2" colSpan={2}>TOTAL TRIBUTOS (Arancel + IVA)</td>
+              <td className="px-3 py-2 text-right font-mono">{fmt(r.arancelCOP)}</td>
+              <td className="px-3 py-2 text-right font-mono"></td>
+              <td className="px-3 py-2 text-right font-mono">{fmt(r.ivaCOP)}</td>
+              <td className="px-3 py-2 text-right font-mono">{fmt(r.arancelCOP + r.ivaCOP)}</td>
+            </tr>
+          </tbody>
+        </table>
+      )}
+
       {/* Costs table */}
       <table className="w-full text-xs border-collapse mb-4">
         <thead>
@@ -178,11 +312,9 @@ function PrintSheet({ data, client_name, products }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {costRows.map((row, i) => (
             <tr key={i} className="border-b border-gray-100">
-              <td className="px-3 py-1.5">
-                {row.label}{row.pct !== undefined && ` (${row.pct}%)`}
-              </td>
+              <td className="px-3 py-1.5">{row.label}{row.pct !== undefined && ` (${row.pct}%)`}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmt(row.cop)}</td>
             </tr>
           ))}
@@ -243,8 +375,13 @@ export default function AsistenteImportacionPage() {
 
   const set = (k, v) => setInputs(p => ({ ...p, [k]: v }));
 
-  const setProduct = (id, field, value) =>
-    setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: value } : p));
+  const setProduct = useCallback((id, field, value) =>
+    setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: value } : p)), []);
+
+  const selectSubpartida = useCallback((id, codigo, gravamen) =>
+    setProducts(ps => ps.map(p => p.id === id
+      ? { ...p, subpartida: codigo, arancel: gravamen !== "" ? String(gravamen) : p.arancel }
+      : p)), []);
 
   const addProduct = () => {
     setProducts(ps => [...ps, { id: nextId++, description: "", qty: "1", unitPrice: "", subpartida: "", arancel: "10" }]);
@@ -270,7 +407,6 @@ export default function AsistenteImportacionPage() {
     const cifUSD = fob + gastosOrigen + flete + seguro;
     const cifCOP = cifUSD * trm;
 
-    // Arancel per product (proportional CIF allocation)
     const arancelCOP = fob > 0
       ? products.reduce((s, p) => {
           const prodFOB = N(p.qty) * N(p.unitPrice);
@@ -334,7 +470,7 @@ export default function AsistenteImportacionPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[480px,1fr] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[500px,1fr] gap-6">
         {/* ── INPUTS ── */}
         <div className="space-y-4">
 
@@ -408,34 +544,32 @@ export default function AsistenteImportacionPage() {
                       </div>
                     </div>
                   </div>
-                  {/* Row 3: subpartida + arancel */}
-                  <div className="grid grid-cols-[1fr,80px] gap-1.5">
-                    <div>
-                      <p className="text-xs text-gray-400 mb-0.5">Subpartida arancelaria</p>
-                      <div className="flex gap-1">
-                        <input
-                          value={p.subpartida} onChange={e => setProduct(p.id, "subpartida", e.target.value)}
-                          placeholder="ej. 8517.13.00"
-                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <a href="https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces"
-                          target="_blank" rel="noopener noreferrer" title="Consultar DIAN"
-                          className="flex-shrink-0 w-8 h-8 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-300 transition">
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                          </svg>
-                        </a>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-400 mb-0.5">Arancel %</p>
-                      <div className="relative">
+                  {/* Row 3: subpartida search (auto-fills arancel) */}
+                  <div>
+                    <p className="text-xs text-gray-400 mb-0.5">Subpartida arancelaria</p>
+                    <SubpartidaSearch
+                      value={p.subpartida}
+                      gravamen={p.subpartida ? p.arancel : ""}
+                      onSelect={(codigo, gravamen) => selectSubpartida(p.id, codigo, gravamen)}
+                    />
+                    {p.subpartida && (
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        Arancel: <span className="font-semibold text-amber-600">{p.arancel}%</span>
+                        {" — "}
+                        <button onClick={() => setProduct(p.id, "arancel", "")}
+                          className="text-blue-500 hover:underline">editar</button>
+                      </p>
+                    )}
+                    {!p.subpartida && (
+                      <div className="mt-1 relative">
                         <input type="number" min="0" step="any"
                           value={p.arancel} onChange={e => setProduct(p.id, "arancel", e.target.value)}
                           placeholder="10"
-                          className="w-full border border-gray-200 rounded-lg px-2 pr-6 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                          className="w-24 border border-gray-200 rounded-lg px-2 pr-6 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <span className="absolute left-[88px] top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                        <span className="ml-2 text-xs text-gray-400">arancel manual</span>
                       </div>
-                    </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -541,6 +675,28 @@ export default function AsistenteImportacionPage() {
                 )}
                 <ResultRow label="= Subtotal tributos" cop={r.subtributos} bold />
               </div>
+
+              {/* Per-product breakdown (only when multiple products) */}
+              {products.length > 1 && r.fob > 0 && (
+                <div className="py-3">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Desglose por producto</p>
+                  {products.filter(p => N(p.qty) * N(p.unitPrice) > 0).map((p, i) => {
+                    const prodFOB = N(p.qty) * N(p.unitPrice);
+                    const prodCIF = r.cifCOP * (prodFOB / r.fob);
+                    const prodArancel = prodCIF * (N(p.arancel) / 100);
+                    const prodIVA = (prodCIF + prodArancel) * (N(inputs.iva) / 100);
+                    return (
+                      <div key={p.id} className="pl-3 border-l-2 border-gray-100 mb-2">
+                        <p className="text-xs font-medium text-gray-700 truncate">{p.description || `Producto ${i + 1}`}</p>
+                        <div className="flex gap-4 text-xs text-gray-500 mt-0.5">
+                          <span>Arancel: <span className="text-gray-700 font-mono">$ {fmt(prodArancel)}</span></span>
+                          <span>IVA: <span className="text-gray-700 font-mono">$ {fmt(prodIVA)}</span></span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* Gastos */}
               <div className="py-3">
