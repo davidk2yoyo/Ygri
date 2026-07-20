@@ -278,23 +278,30 @@ export default function QuotationPDF({
     const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
     const pdfW = pdf.internal.pageSize.getWidth();
     const pdfPageH = pdf.internal.pageSize.getHeight();
-    const pageHpx = (pdfPageH / pdfW) * canvas.width; // one PDF page in canvas pixels
+    const pxPerMm = canvas.width / pdfW;
+    const topM = 8, botM = 8; // vertical page margins (mm) so content never touches the edge
+    const fullHpx = pdfPageH * pxPerMm;
+    const topMpx = topM * pxPerMm;
+    const botMpx = botM * pxPerMm;
 
     // Compute cut positions that never slice through a block: if the natural cut
-    // lands inside a row/section, move the cut up to that block's top edge
+    // lands inside a row/section, move the cut up to that block's top edge.
+    // Page 1 keeps the design's own padding; pages 2+ reserve a top margin.
     const cuts = [];
     let cursor = 0;
-    while (cursor + pageHpx < canvas.height) {
-      let cut = cursor + pageHpx;
+    let cap = fullHpx - botMpx; // first page capacity
+    while (cursor + cap < canvas.height) {
+      let cut = cursor + cap;
       const straddling = blocks.filter(b => b.top < cut && b.bottom > cut && b.top > cursor);
       if (straddling.length) {
         const minTop = Math.min(...straddling.map(b => b.top));
         // Only pull the cut up if it doesn't create a mostly-empty page
         // (a block taller than a page can't be protected)
-        if (minTop > cursor + pageHpx * 0.25) cut = minTop;
+        if (minTop > cursor + cap * 0.25) cut = minTop;
       }
       cuts.push(cut);
       cursor = cut;
+      cap = fullHpx - topMpx - botMpx; // subsequent pages
     }
 
     // Slice the canvas at the computed cuts, one JPEG per page
@@ -313,7 +320,7 @@ export default function QuotationPDF({
       ctx.drawImage(canvas, 0, prev, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
       const img = tmp.toDataURL("image/jpeg", 0.85);
       if (i > 0) pdf.addPage();
-      pdf.addImage(img, "JPEG", 0, 0, pdfW, (sliceH * pdfW) / canvas.width);
+      pdf.addImage(img, "JPEG", 0, i === 0 ? 0 : topM, pdfW, (sliceH * pdfW) / canvas.width);
       prev = end;
     });
 
