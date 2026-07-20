@@ -440,16 +440,28 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       if (validItems.length > 0) {
         // 3. Insert-then-delete (not delete-then-insert): snapshot the old row ids,
         // insert the new rows, and only remove the old ones once the insert succeeded
-        const { data: oldRows } = await supabase
+        const { data: oldRows, error: oldErr } = await supabase
           .from("quotation_items")
           .select("id")
           .eq("quotation_id", quotId);
+        if (oldErr) throw oldErr;
 
-        const { error: itemsError } = await supabase.from("quotation_items").insert(validItems);
+        const { data: insertedRows, error: itemsError } = await supabase
+          .from("quotation_items")
+          .insert(validItems)
+          .select("id");
         if (itemsError) throw itemsError;
 
         if (oldRows?.length) {
-          await supabase.from("quotation_items").delete().in("id", oldRows.map(r => r.id));
+          const { error: delErr } = await supabase
+            .from("quotation_items")
+            .delete()
+            .in("id", oldRows.map(r => r.id));
+          if (delErr) {
+            // Roll back the rows we just inserted so the quotation isn't duplicated
+            await supabase.from("quotation_items").delete().in("id", (insertedRows || []).map(r => r.id));
+            throw new Error("Could not replace existing items — save aborted: " + delErr.message);
+          }
         }
       }
 
