@@ -42,7 +42,7 @@ export default function MisEnviosPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-gray-900">Estado de Carga</h1>
+        <h1 className="text-xl font-bold text-gray-900">Mis Envíos</h1>
         <p className="text-sm text-gray-500 mt-0.5">Seguimiento de tus envíos activos</p>
       </div>
 
@@ -73,38 +73,25 @@ export default function MisEnviosPage() {
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap mb-1">
-                    <span className="font-semibold text-gray-900 text-sm">
-                      {row.reference || "Sin referencia"}
+                    <span className="font-semibold text-gray-900 text-sm font-mono">
+                      {row.tracking_number || "Sin tracking"}
                     </span>
                     <StatusBadge status={row.status} />
                   </div>
-                  <p className="text-xs text-gray-500">Proyecto: {row.track_name}</p>
+                  <p className="text-xs text-gray-500 mb-1">Proyecto: {row.track_name}</p>
+                  {row.status_detail && (
+                    <p className="text-xs text-gray-500 italic">{row.status_detail}</p>
+                  )}
 
-                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs text-gray-600">
+                  <div className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
                     {row.carrier && (
                       <div><span className="text-gray-400">Carrier:</span> {row.carrier}</div>
-                    )}
-                    {row.tracking_number && (
-                      <div className="col-span-2">
-                        <span className="text-gray-400">Tracking:</span>{" "}
-                        <span className="font-mono font-medium text-blue-600">{row.tracking_number}</span>
-                      </div>
                     )}
                     {row.origin && (
                       <div><span className="text-gray-400">Origen:</span> {row.origin}</div>
                     )}
                     {row.destination && (
                       <div><span className="text-gray-400">Destino:</span> {row.destination}</div>
-                    )}
-                    {row.estimated_delivery && (
-                      <div className="col-span-2">
-                        <span className="text-gray-400">ETA:</span>{" "}
-                        <span className="font-medium">
-                          {new Date(row.estimated_delivery).toLocaleDateString("es-CO", {
-                            day: "2-digit", month: "long", year: "numeric",
-                          })}
-                        </span>
-                      </div>
                     )}
                   </div>
                 </div>
