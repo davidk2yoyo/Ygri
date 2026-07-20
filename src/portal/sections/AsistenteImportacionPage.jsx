@@ -64,7 +64,7 @@ function PrintSheet({ data, client_name, products }) {
   const totalFOB = products.reduce((s, p) => s + N(p.qty) * N(p.unitPrice), 0);
 
   const rows = [
-    { label: "IMPUESTOS ARANCELARIOS", pct: inputs.arancel, cop: r.arancelCOP },
+    { label: "IMPUESTOS ARANCELARIOS", cop: r.arancelCOP },
     { label: "IVA (Imp + Base × 19%)", pct: inputs.iva, cop: r.ivaCOP },
     ...(r.impuestoAdicionalCOP > 0 ? [{ label: `${inputs.impuestoAdicionalNombre || "IMPUESTO ADICIONAL"} (${inputs.impuestoAdicional}%)`, cop: r.impuestoAdicionalCOP }] : []),
     { label: "GASTOS PUERTO (uso, cargue, almacenaje)", cop: inputs.gastosPuerto },
@@ -99,7 +99,6 @@ function PrintSheet({ data, client_name, products }) {
         <div><span className="text-gray-500">DESTINO:</span> <strong>{inputs.destino || "—"}</strong></div>
         <div><span className="text-gray-500">INCOTERM:</span> <strong>{inputs.incoterm}</strong></div>
         <div><span className="text-gray-500">TRM:</span> <strong>$ {fmt(inputs.trm)} COP/USD</strong></div>
-        <div><span className="text-gray-500">SUBPARTIDA:</span> <strong>{inputs.subpartida || "—"}</strong></div>
       </div>
 
       {/* Products table */}
@@ -107,22 +106,26 @@ function PrintSheet({ data, client_name, products }) {
         <thead>
           <tr className="bg-blue-50">
             <th className="text-left px-3 py-2 font-semibold">Producto / Descripción</th>
-            <th className="text-right px-3 py-2 font-semibold w-20">Cant.</th>
-            <th className="text-right px-3 py-2 font-semibold w-28">Precio Unit. USD</th>
-            <th className="text-right px-3 py-2 font-semibold w-28">Total USD</th>
+            <th className="text-left px-3 py-2 font-semibold w-28">Subpartida</th>
+            <th className="text-right px-3 py-2 font-semibold w-16">Arancel</th>
+            <th className="text-right px-3 py-2 font-semibold w-16">Cant.</th>
+            <th className="text-right px-3 py-2 font-semibold w-24">P. Unit. USD</th>
+            <th className="text-right px-3 py-2 font-semibold w-24">Total USD</th>
           </tr>
         </thead>
         <tbody>
           {products.filter(p => p.description || N(p.unitPrice) > 0).map((p, i) => (
             <tr key={p.id} className="border-b border-gray-100">
               <td className="px-3 py-1.5">{p.description || `Producto ${i + 1}`}</td>
+              <td className="px-3 py-1.5 font-mono text-gray-500">{p.subpartida || "—"}</td>
+              <td className="px-3 py-1.5 text-right font-mono">{p.arancel ? `${p.arancel}%` : "—"}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.qty), 0)}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.unitPrice), 2)}</td>
               <td className="px-3 py-1.5 text-right font-mono">{fmt(N(p.qty) * N(p.unitPrice), 2)}</td>
             </tr>
           ))}
           <tr className="bg-slate-50 font-semibold">
-            <td className="px-3 py-2" colSpan={3}>TOTAL FOB / EXW</td>
+            <td className="px-3 py-2" colSpan={5}>TOTAL FOB / EXW</td>
             <td className="px-3 py-2 text-right font-mono">{fmt(totalFOB, 2)}</td>
           </tr>
         </tbody>
@@ -222,15 +225,14 @@ export default function AsistenteImportacionPage() {
   const [exporting, setExporting] = useState(false);
 
   const [products, setProducts] = useState([
-    { id: 1, description: "", qty: "1", unitPrice: "" },
+    { id: 1, description: "", qty: "1", unitPrice: "", subpartida: "", arancel: "10" },
   ]);
 
   const [inputs, setInputs] = useState({
     origen: "GUANGZHOU", destino: "", incoterm: "FOB",
-    subpartida: "",
     gastosOrigen: "", flete: "", seguro: "",
     fleteDestino: "",
-    arancel: "10", iva: "19",
+    iva: "19",
     impuestoAdicional: "", impuestoAdicionalNombre: "",
     gastosPuerto: "6000000",
     liberacionBL: "220000", gastosVarios: "400000",
@@ -245,7 +247,7 @@ export default function AsistenteImportacionPage() {
     setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: value } : p));
 
   const addProduct = () => {
-    setProducts(ps => [...ps, { id: nextId++, description: "", qty: "1", unitPrice: "" }]);
+    setProducts(ps => [...ps, { id: nextId++, description: "", qty: "1", unitPrice: "", subpartida: "", arancel: "10" }]);
   };
 
   const removeProduct = id => {
@@ -258,7 +260,7 @@ export default function AsistenteImportacionPage() {
     const gastosOrigen = N(inputs.gastosOrigen),
           flete = N(inputs.flete), seguro = N(inputs.seguro),
           fleteDestino = N(inputs.fleteDestino), trm = N(inputs.trm) || 4200,
-          arancel = N(inputs.arancel), iva = N(inputs.iva),
+          iva = N(inputs.iva),
           gastosPuerto = N(inputs.gastosPuerto),
           libBL = N(inputs.liberacionBL), gastosV = N(inputs.gastosVarios),
           decl = N(inputs.declaracion), ingreso = N(inputs.ingresoSistema),
@@ -267,7 +269,16 @@ export default function AsistenteImportacionPage() {
 
     const cifUSD = fob + gastosOrigen + flete + seguro;
     const cifCOP = cifUSD * trm;
-    const arancelCOP = cifCOP * (arancel / 100);
+
+    // Arancel per product (proportional CIF allocation)
+    const arancelCOP = fob > 0
+      ? products.reduce((s, p) => {
+          const prodFOB = N(p.qty) * N(p.unitPrice);
+          const prodCIF = cifCOP * (prodFOB / fob);
+          return s + prodCIF * (N(p.arancel) / 100);
+        }, 0)
+      : 0;
+
     const ivaCOP = (cifCOP + arancelCOP) * (iva / 100);
     const impuestoAdicionalCOP = cifCOP * (impuAdicional / 100);
     const subtributos = cifCOP + arancelCOP + ivaCOP + impuestoAdicionalCOP;
@@ -338,28 +349,12 @@ export default function AsistenteImportacionPage() {
                   className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
               </Field>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Incoterm">
-                <select value={inputs.incoterm} onChange={e => set("incoterm", e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                  {["FOB","EXW","CIF","CFR","DAP"].map(t => <option key={t}>{t}</option>)}
-                </select>
-              </Field>
-              <Field label="Subpartida arancelaria">
-                <div className="flex gap-1">
-                  <input value={inputs.subpartida} onChange={e => set("subpartida", e.target.value)} placeholder="ej. 8517.13.00"
-                    className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <a href="https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces" target="_blank" rel="noopener noreferrer"
-                    title="Consultar DIAN"
-                    className="flex-shrink-0 w-9 h-9 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-300 transition">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                  </a>
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Consulta el arancel en DIAN →</p>
-              </Field>
-            </div>
+            <Field label="Incoterm">
+              <select value={inputs.incoterm} onChange={e => set("incoterm", e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                {["FOB","EXW","CIF","CFR","DAP"].map(t => <option key={t}>{t}</option>)}
+              </select>
+            </Field>
           </Section>
 
           {/* ── PRODUCTOS ── */}
@@ -375,32 +370,73 @@ export default function AsistenteImportacionPage() {
               </button>
             </div>
             <div className="bg-white">
-              {/* Header */}
-              <div className="grid grid-cols-[1fr,64px,96px,32px] gap-1 px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide">
-                <span>Descripción</span><span className="text-right">Cant.</span><span className="text-right">Precio unit.</span><span />
-              </div>
               {products.map((p, i) => (
-                <div key={p.id} className="grid grid-cols-[1fr,64px,96px,32px] gap-1 px-3 py-1.5 border-t border-gray-50">
-                  <input
-                    value={p.description} onChange={e => setProduct(p.id, "description", e.target.value)}
-                    placeholder={`Producto ${i + 1}`}
-                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <input
-                    type="number" min="1" step="1"
-                    value={p.qty} onChange={e => setProduct(p.id, "qty", e.target.value)}
-                    placeholder="1"
-                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <input
-                    type="number" min="0" step="any"
-                    value={p.unitPrice} onChange={e => setProduct(p.id, "unitPrice", e.target.value)}
-                    placeholder="0.00"
-                    className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                  <button onClick={() => removeProduct(p.id)}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                <div key={p.id} className="px-3 py-2.5 border-t border-gray-50 space-y-1.5">
+                  {/* Row 1: description + remove */}
+                  <div className="flex gap-1">
+                    <input
+                      value={p.description} onChange={e => setProduct(p.id, "description", e.target.value)}
+                      placeholder={`Descripción del producto ${i + 1}`}
+                      className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button onClick={() => removeProduct(p.id)}
+                      className="w-8 h-8 flex-shrink-0 flex items-center justify-center rounded-lg text-gray-300 hover:text-red-400 hover:bg-red-50 transition">
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                  {/* Row 2: qty + price + total */}
+                  <div className="grid grid-cols-3 gap-1.5">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Cantidad</p>
+                      <input type="number" min="1" step="1"
+                        value={p.qty} onChange={e => setProduct(p.id, "qty", e.target.value)}
+                        placeholder="1"
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Precio unit. USD</p>
+                      <input type="number" min="0" step="any"
+                        value={p.unitPrice} onChange={e => setProduct(p.id, "unitPrice", e.target.value)}
+                        placeholder="0.00"
+                        className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Total USD</p>
+                      <div className="border border-gray-100 bg-gray-50 rounded-lg px-2 py-1.5 text-sm text-right font-mono text-gray-700">
+                        {fmt(N(p.qty) * N(p.unitPrice), 2)}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Row 3: subpartida + arancel */}
+                  <div className="grid grid-cols-[1fr,80px] gap-1.5">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Subpartida arancelaria</p>
+                      <div className="flex gap-1">
+                        <input
+                          value={p.subpartida} onChange={e => setProduct(p.id, "subpartida", e.target.value)}
+                          placeholder="ej. 8517.13.00"
+                          className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <a href="https://muisca.dian.gov.co/WebArancel/DefMenuConsultas.faces"
+                          target="_blank" rel="noopener noreferrer" title="Consultar DIAN"
+                          className="flex-shrink-0 w-8 h-8 flex items-center justify-center border border-gray-200 rounded-lg text-gray-400 hover:text-blue-600 hover:border-blue-300 transition">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                          </svg>
+                        </a>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Arancel %</p>
+                      <div className="relative">
+                        <input type="number" min="0" step="any"
+                          value={p.arancel} onChange={e => setProduct(p.id, "arancel", e.target.value)}
+                          placeholder="10"
+                          className="w-full border border-gray-200 rounded-lg px-2 pr-6 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               ))}
               {/* FOB Total */}
@@ -427,14 +463,9 @@ export default function AsistenteImportacionPage() {
           </div>
 
           <Section title="Impuestos (sobre base CIF)" color="bg-amber-50">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Arancel" hint="Verificar en DIAN">
-                <NumInput value={inputs.arancel} onChange={v => set("arancel", v)} suffix="%" />
-              </Field>
-              <Field label="IVA">
-                <NumInput value={inputs.iva} onChange={v => set("iva", v)} suffix="%" />
-              </Field>
-            </div>
+            <Field label="IVA">
+              <NumInput value={inputs.iva} onChange={v => set("iva", v)} suffix="%" />
+            </Field>
             <div className="border-t border-amber-100 pt-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Impuesto adicional (opcional)</p>
               <div className="grid grid-cols-[1fr,80px] gap-2">
@@ -503,7 +534,7 @@ export default function AsistenteImportacionPage() {
               {/* Impuestos */}
               <div className="py-3">
                 <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Impuestos aduaneros</p>
-                <ResultRow label={`Arancel (${inputs.arancel}%)`} cop={r.arancelCOP} sub />
+                <ResultRow label="Arancel" cop={r.arancelCOP} sub />
                 <ResultRow label={`IVA (${inputs.iva}%)`} cop={r.ivaCOP} sub />
                 {r.impuestoAdicionalCOP > 0 && (
                   <ResultRow label={`${inputs.impuestoAdicionalNombre || "Imp. adicional"} (${inputs.impuestoAdicional}%)`} cop={r.impuestoAdicionalCOP} sub />
@@ -558,7 +589,7 @@ export default function AsistenteImportacionPage() {
                 ...inputs,
                 gastosOrigen: N(inputs.gastosOrigen), flete: N(inputs.flete),
                 seguro: N(inputs.seguro), fleteDestino: N(inputs.fleteDestino),
-                trm: N(inputs.trm) || 4200, arancel: N(inputs.arancel),
+                trm: N(inputs.trm) || 4200,
                 iva: N(inputs.iva), impuestoAdicional: N(inputs.impuestoAdicional),
                 impuestoAdicionalNombre: inputs.impuestoAdicionalNombre,
                 gastosPuerto: N(inputs.gastosPuerto), liberacionBL: N(inputs.liberacionBL),
