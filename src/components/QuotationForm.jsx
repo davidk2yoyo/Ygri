@@ -374,10 +374,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setQuoteNumber(data.quote_number);
       }
 
-      // 2. Delete old items and re-insert
-      await supabase.from("quotation_items").delete().eq("quotation_id", quotId);
-
-      // 3. Upload pictures & save catalog items if new
+      // 2. Prepare new rows first (uploads + catalog) — existing items in the DB
+      // are NOT touched until the new rows are ready and inserted, so a failure
+      // here can never lose data
       const itemsToInsert = await Promise.all(items.map(async (it, idx) => {
         let pictureUrl = it.picture_url || "";
 
@@ -433,8 +432,26 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         };
       }));
 
-      const { error: itemsError } = await supabase.from("quotation_items").insert(itemsToInsert);
-      if (itemsError) throw itemsError;
+      // Skip fully blank rows; if nothing valid remains, keep the existing items
+      const validItems = itemsToInsert.filter(r =>
+        r.description?.trim() || r.item_number?.trim() || (r.price || 0) > 0
+      );
+
+      if (validItems.length > 0) {
+        // 3. Insert-then-delete (not delete-then-insert): snapshot the old row ids,
+        // insert the new rows, and only remove the old ones once the insert succeeded
+        const { data: oldRows } = await supabase
+          .from("quotation_items")
+          .select("id")
+          .eq("quotation_id", quotId);
+
+        const { error: itemsError } = await supabase.from("quotation_items").insert(validItems);
+        if (itemsError) throw itemsError;
+
+        if (oldRows?.length) {
+          await supabase.from("quotation_items").delete().in("id", oldRows.map(r => r.id));
+        }
+      }
 
       // Invalidate supplier product cache so picker reflects the new items
       const affectedSuppliers = [...new Set(itemsToInsert.filter(it => it.supplier_id).map(it => it.supplier_id))];
