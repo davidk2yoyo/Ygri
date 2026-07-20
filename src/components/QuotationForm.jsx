@@ -232,6 +232,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       price: qi.supplier_price,
       currency: qi.supplier_currency,
       min_order_qty: qi.moq,
+      picture_url: qi.picture_url || "",
+      catalog_item_id: qi.catalog_item_id || null,
     }));
 
     setSupplierProductsCache(p => ({ ...p, [supplierId]: products }));
@@ -358,6 +360,12 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             catalogId = catData.id;
             setCatalogItems(prev => [...prev, catData]);
           }
+        } else if (catalogId && it.pictureFile && pictureUrl) {
+          // Photo added after the catalog item was created — backfill it
+          await supabase.from("catalog_items")
+            .update({ picture_url: pictureUrl })
+            .eq("id", catalogId);
+          setCatalogItems(prev => prev.map(c => c.id === catalogId ? { ...c, picture_url: pictureUrl } : c));
         }
 
         return {
@@ -1067,15 +1075,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                         supplier_price: p.price?.toString() || it.supplier_price,
                                         supplier_currency: p.currency && p.currency !== currency ? p.currency : it.supplier_currency,
                                         moq: p.min_order_qty?.toString() || it.moq,
+                                        picture_url: p.picture_url || it.picture_url,
+                                        picturePreview: p.picture_url || it.picturePreview,
+                                        catalog_item_id: p.catalog_item_id || it.catalog_item_id,
                                       } : it));
                                       setShowProductPicker(null);
                                     }}
                                     className="w-full text-left px-3 py-2.5 hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition border-b border-bgray-100 dark:border-darkblack-400 last:border-0"
                                   >
-                                    {p.item_number && (
-                                      <p className="text-xs font-mono text-bgray-400 mb-0.5">{p.item_number}</p>
-                                    )}
-                                    <div className="text-sm font-medium text-darkblack-700 dark:text-white line-clamp-2">{p.name}</div>
+                                    <div className="flex items-start gap-2">
+                                      {p.picture_url && <img src={p.picture_url} alt="" className="w-8 h-8 rounded object-cover shrink-0 mt-0.5" />}
+                                      <div className="min-w-0">
+                                        {p.item_number && (
+                                          <p className="text-xs font-mono text-bgray-400 mb-0.5">{p.item_number}</p>
+                                        )}
+                                        <div className="text-sm font-medium text-darkblack-700 dark:text-white line-clamp-2">{p.name}</div>
+                                      </div>
+                                    </div>
                                     <div className="flex items-center gap-3 mt-0.5">
                                       {p.price != null && (
                                         <span className="text-xs text-amber-600 font-medium">{p.currency} {Number(p.price).toLocaleString()}</span>
