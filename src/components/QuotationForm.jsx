@@ -156,6 +156,22 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const commissionAmount = totalAmount * (parseFloat(commissionPct) || 0) / 100;
   const grandTotal = totalAmount + commissionAmount;
 
+  const totalMarginAmount = (() => {
+    if (type !== "product") return 0;
+    const rate = parseFloat(supplierExchangeRate) || 0;
+    return items.reduce((sum, it) => {
+      const supplierPriceRaw = parseFloat(it.supplier_price) || 0;
+      if (!supplierPriceRaw) return sum;
+      const isFx = it.supplier_currency && it.supplier_currency !== currency;
+      const supplierPriceInDocCurrency = isFx && rate > 0 ? supplierPriceRaw / rate : supplierPriceRaw;
+      const clientTotal = (parseFloat(it.price) || 0) * (parseInt(it.quantity) || 1);
+      const supplierTotal = supplierPriceInDocCurrency * (parseInt(it.quantity) || 1);
+      return sum + (clientTotal - supplierTotal);
+    }, 0);
+  })();
+  const totalMarginPct = totalAmount > 0 ? (totalMarginAmount / totalAmount * 100) : 0;
+  const marginColor = totalMarginPct >= 20 ? "text-green-600" : totalMarginPct >= 10 ? "text-amber-600" : "text-red-500";
+
   // ---------- Item helpers ----------
   const updateItem = (idx, field, value) => {
     setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
@@ -1283,6 +1299,11 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             <p className="text-xs text-bgray-400 mb-1">
               Subtotal: {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               {" · "}Commission ({commissionPct}%): {currency} {commissionAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          )}
+          {type === "product" && totalMarginAmount > 0 && (
+            <p className={`text-xs font-medium mb-2 ${marginColor}`}>
+              Total Margin: {currency} {totalMarginAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({totalMarginPct.toFixed(1)}%)
             </p>
           )}
           <p className="text-xs text-bgray-300 uppercase tracking-wider mb-1">Total Amount</p>
