@@ -48,11 +48,11 @@ function Section({ title, color = "bg-gray-50", children }) {
 
 function ResultRow({ label, usd, cop, bold, sub }) {
   return (
-    <div className={`flex items-center justify-between py-1.5 ${sub ? "pl-3 border-l-2 border-gray-100" : ""} ${bold ? "border-t border-gray-100 mt-1 pt-2" : ""}`}>
-      <span className={`text-sm ${bold ? "font-bold text-gray-900" : sub ? "text-xs text-gray-500" : "text-gray-700"}`}>{label}</span>
-      <div className="text-right">
-        {usd !== undefined && <p className={`text-xs font-mono ${bold ? "font-bold text-gray-900" : "text-gray-500"}`}>USD {fmt(usd, 2)}</p>}
-        {cop !== undefined && <p className={`text-sm font-mono ${bold ? "font-bold text-blue-700" : "text-gray-700"}`}>$ {fmt(cop)} COP</p>}
+    <div className={`flex items-center justify-between py-1 ${sub ? "pl-2 border-l-2 border-gray-100" : ""} ${bold ? "border-t border-gray-100 mt-0.5 pt-1.5" : ""}`}>
+      <span className={`${bold ? "text-xs font-bold text-gray-900" : sub ? "text-xs text-gray-500" : "text-xs text-gray-700"} leading-tight`}>{label}</span>
+      <div className="text-right ml-2 flex-shrink-0">
+        {usd !== undefined && <p className={`text-xs font-mono ${bold ? "font-bold text-gray-900" : "text-gray-400"}`}>USD {fmt(usd, 2)}</p>}
+        {cop !== undefined && <p className={`text-xs font-mono ${bold ? "font-bold text-blue-700" : "text-gray-700"}`}>$ {fmt(cop)}</p>}
       </div>
     </div>
   );
@@ -375,6 +375,17 @@ export default function AsistenteImportacionPage() {
 
   const set = (k, v) => setInputs(p => ({ ...p, [k]: v }));
 
+  // Fetch live TRM on mount
+  const [trmLoading, setTrmLoading] = useState(true);
+  const [editingTrm, setEditingTrm] = useState(false);
+  useEffect(() => {
+    fetch("https://open.er-api.com/v6/latest/USD")
+      .then(r => r.json())
+      .then(d => { if (d.rates?.COP) set("trm", String(Math.round(d.rates.COP))); })
+      .catch(() => {})
+      .finally(() => setTrmLoading(false));
+  }, []);
+
   const setProduct = useCallback((id, field, value) =>
     setProducts(ps => ps.map(p => p.id === id ? { ...p, [field]: value } : p)), []);
 
@@ -470,7 +481,7 @@ export default function AsistenteImportacionPage() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[500px,1fr] gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[1fr,280px] gap-6">
         {/* ── INPUTS ── */}
         <div className="space-y-4">
 
@@ -544,32 +555,32 @@ export default function AsistenteImportacionPage() {
                       </div>
                     </div>
                   </div>
-                  {/* Row 3: subpartida search (auto-fills arancel) */}
-                  <div>
-                    <p className="text-xs text-gray-400 mb-0.5">Subpartida arancelaria</p>
-                    <SubpartidaSearch
-                      value={p.subpartida}
-                      gravamen={p.subpartida ? p.arancel : ""}
-                      onSelect={(codigo, gravamen) => selectSubpartida(p.id, codigo, gravamen)}
-                    />
-                    {p.subpartida && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        Arancel: <span className="font-semibold text-amber-600">{p.arancel}%</span>
-                        {" — "}
-                        <button onClick={() => setProduct(p.id, "arancel", "")}
-                          className="text-blue-500 hover:underline">editar</button>
-                      </p>
-                    )}
-                    {!p.subpartida && (
-                      <div className="mt-1 relative">
-                        <input type="number" min="0" step="any"
-                          value={p.arancel} onChange={e => setProduct(p.id, "arancel", e.target.value)}
-                          placeholder="10"
-                          className="w-24 border border-gray-200 rounded-lg px-2 pr-6 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
-                        <span className="absolute left-[88px] top-1/2 -translate-y-1/2 text-xs text-gray-400">%</span>
-                        <span className="ml-2 text-xs text-gray-400">arancel manual</span>
+                  {/* Row 3: subpartida + arancel */}
+                  <div className="grid grid-cols-[1fr,96px] gap-1.5">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-0.5">Subpartida arancelaria</p>
+                      <SubpartidaSearch
+                        value={p.subpartida}
+                        gravamen=""
+                        onSelect={(codigo, gravamen) => selectSubpartida(p.id, codigo, gravamen)}
+                      />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <p className="text-xs text-gray-400">Arancel</p>
+                        {p.subpartida && (
+                          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-100 text-amber-600 leading-none">DIAN</span>
+                        )}
                       </div>
-                    )}
+                      <div className="relative">
+                        <input type="number" min="0" step="any"
+                          value={p.arancel}
+                          onChange={e => setProduct(p.id, "arancel", e.target.value)}
+                          placeholder="0"
+                          className="w-full border border-gray-200 rounded-lg px-2 pr-6 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">%</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -644,53 +655,76 @@ export default function AsistenteImportacionPage() {
             </Field>
           </Section>
 
-          <Section title="Configuración" color="bg-purple-50">
-            <Field label="TRM (COP por USD)">
-              <NumInput value={inputs.trm} onChange={v => set("trm", v)} placeholder="4200" />
-            </Field>
-          </Section>
         </div>
 
         {/* ── RESULTADO ── */}
         <div className="space-y-4">
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 sticky top-4">
-            <h2 className="font-bold text-gray-900 mb-4 text-base">Pre-liquidación</h2>
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 sticky top-4">
 
-            <div className="divide-y divide-gray-50 space-y-1">
+            {/* TRM row */}
+            <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-100">
+              <span className="text-xs font-bold uppercase tracking-wide text-gray-400">TRM</span>
+              {editingTrm ? (
+                <div className="flex items-center gap-1.5">
+                  <input type="number" value={inputs.trm} onChange={e => set("trm", e.target.value)} autoFocus
+                    className="w-28 border border-blue-300 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono" />
+                  <span className="text-xs text-gray-400">COP</span>
+                  <button onClick={() => setEditingTrm(false)}
+                    className="text-xs text-blue-600 font-semibold hover:text-blue-800 px-1">✓</button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  {trmLoading
+                    ? <span className="text-xs text-gray-400 animate-pulse">Consultando…</span>
+                    : <span className="text-sm font-bold font-mono text-gray-800">$ {fmt(N(inputs.trm))} <span className="text-xs font-normal text-gray-400">COP/USD</span></span>
+                  }
+                  <button onClick={() => setEditingTrm(true)}
+                    className="text-gray-300 hover:text-blue-500 transition" title="Editar TRM">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <h2 className="font-bold text-gray-900 mb-3 text-sm">Pre-liquidación</h2>
+
+            <div className="divide-y divide-gray-50">
               {/* CIF */}
-              <div className="pb-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Valor CIF / Base gravable</p>
-                <ResultRow label={`Mercancía (${products.length} producto${products.length > 1 ? "s" : ""})`} usd={r.fob} />
-                <ResultRow label="+ Gastos origen + flete + seguro" usd={N(inputs.gastosOrigen) + N(inputs.flete) + N(inputs.seguro)} sub />
+              <div className="pb-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">CIF / Base gravable</p>
+                <ResultRow label={`Mercancía (${products.length} prod.)`} usd={r.fob} />
+                <ResultRow label="+ Origen + flete + seguro" usd={N(inputs.gastosOrigen) + N(inputs.flete) + N(inputs.seguro)} sub />
                 <ResultRow label="= CIF Total" usd={r.cifUSD} cop={r.cifCOP} bold />
               </div>
 
               {/* Impuestos */}
-              <div className="py-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Impuestos aduaneros</p>
+              <div className="py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Impuestos aduaneros</p>
                 <ResultRow label="Arancel" cop={r.arancelCOP} sub />
                 <ResultRow label={`IVA (${inputs.iva}%)`} cop={r.ivaCOP} sub />
                 {r.impuestoAdicionalCOP > 0 && (
                   <ResultRow label={`${inputs.impuestoAdicionalNombre || "Imp. adicional"} (${inputs.impuestoAdicional}%)`} cop={r.impuestoAdicionalCOP} sub />
                 )}
-                <ResultRow label="= Subtotal tributos" cop={r.subtributos} bold />
+                <ResultRow label="Subtotal tributos" cop={r.subtributos} bold />
               </div>
 
-              {/* Per-product breakdown (only when multiple products) */}
+              {/* Per-product breakdown */}
               {products.length > 1 && r.fob > 0 && (
-                <div className="py-3">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Desglose por producto</p>
+                <div className="py-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Desglose por producto</p>
                   {products.filter(p => N(p.qty) * N(p.unitPrice) > 0).map((p, i) => {
                     const prodFOB = N(p.qty) * N(p.unitPrice);
                     const prodCIF = r.cifCOP * (prodFOB / r.fob);
                     const prodArancel = prodCIF * (N(p.arancel) / 100);
                     const prodIVA = (prodCIF + prodArancel) * (N(inputs.iva) / 100);
                     return (
-                      <div key={p.id} className="pl-3 border-l-2 border-gray-100 mb-2">
-                        <p className="text-xs font-medium text-gray-700 truncate">{p.description || `Producto ${i + 1}`}</p>
-                        <div className="flex gap-4 text-xs text-gray-500 mt-0.5">
-                          <span>Arancel: <span className="text-gray-700 font-mono">$ {fmt(prodArancel)}</span></span>
-                          <span>IVA: <span className="text-gray-700 font-mono">$ {fmt(prodIVA)}</span></span>
+                      <div key={p.id} className="pl-2 border-l-2 border-gray-100 mb-1.5">
+                        <p className="text-xs font-medium text-gray-700 truncate leading-tight">{p.description || `Prod. ${i + 1}`}</p>
+                        <div className="flex gap-3 text-[10px] text-gray-500 mt-0.5 font-mono">
+                          <span>Arancel: <span className="text-gray-700">$ {fmt(prodArancel)}</span></span>
+                          <span>IVA: <span className="text-gray-700">$ {fmt(prodIVA)}</span></span>
                         </div>
                       </div>
                     );
@@ -699,37 +733,39 @@ export default function AsistenteImportacionPage() {
               )}
 
               {/* Gastos */}
-              <div className="py-3">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">Gastos en Colombia</p>
+              <div className="py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-400 mb-1">Gastos en Colombia</p>
                 <ResultRow label="Gastos puerto" cop={N(inputs.gastosPuerto)} sub />
-                <ResultRow label="Aduana (total)" cop={N(inputs.liberacionBL) + N(inputs.gastosVarios) + N(inputs.declaracion) + N(inputs.ingresoSistema) + N(inputs.conservacion) + r.servicioComex} sub />
-                <ResultRow label="Serv. comercio exterior (0.4%)" cop={r.servicioComex} sub />
-                <ResultRow label="Transporte terrestre + IVA" cop={N(inputs.transporte) + r.ivaTransporte} sub />
+                <ResultRow label="Aduana + serv. comex" cop={N(inputs.liberacionBL) + N(inputs.gastosVarios) + N(inputs.declaracion) + N(inputs.ingresoSistema) + N(inputs.conservacion) + r.servicioComex} sub />
+                <ResultRow label="Transporte + IVA" cop={N(inputs.transporte) + r.ivaTransporte} sub />
               </div>
 
               {/* Total */}
-              <div className="pt-3">
-                <ResultRow label="TOTAL OPERACIÓN" cop={r.total} bold />
+              <div className="pt-2">
+                <div className="bg-gray-900 rounded-lg px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-bold text-white uppercase tracking-wide">Total operación</span>
+                  <span className="text-sm font-bold text-white font-mono">$ {fmt(r.total)}</span>
+                </div>
               </div>
             </div>
 
             {r.totalUnidades > 1 && (
-              <div className="grid grid-cols-2 gap-3 mt-5">
-                <div className="bg-blue-600 rounded-xl p-3 text-center text-white">
-                  <p className="text-xs font-semibold opacity-80 mb-0.5">Costo / unidad</p>
-                  <p className="text-xl font-bold font-mono">$ {fmt(r.total / r.totalUnidades)}</p>
-                  <p className="text-xs opacity-70">COP ({fmt(r.totalUnidades, 0)} uds)</p>
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                <div className="bg-blue-600 rounded-lg p-2.5 text-center text-white">
+                  <p className="text-[10px] font-semibold opacity-80">Costo / unidad</p>
+                  <p className="text-base font-bold font-mono mt-0.5">$ {fmt(r.total / r.totalUnidades)}</p>
+                  <p className="text-[10px] opacity-70">COP · {fmt(r.totalUnidades, 0)} uds</p>
                 </div>
-                <div className="bg-slate-100 rounded-xl p-3 text-center">
-                  <p className="text-xs font-semibold text-gray-500 mb-0.5">Costo / unidad</p>
-                  <p className="text-xl font-bold text-gray-800 font-mono">{fmt(r.total / r.totalUnidades / trm, 2)}</p>
-                  <p className="text-xs text-gray-400">USD</p>
+                <div className="bg-slate-100 rounded-lg p-2.5 text-center">
+                  <p className="text-[10px] font-semibold text-gray-500">Costo / unidad</p>
+                  <p className="text-base font-bold text-gray-800 font-mono mt-0.5">{fmt(r.total / r.totalUnidades / trm, 2)}</p>
+                  <p className="text-[10px] text-gray-400">USD</p>
                 </div>
               </div>
             )}
 
-            <p className="text-xs text-gray-400 text-center mt-4">
-              * Estimado. Consulta con tu asesor para valores exactos.
+            <p className="text-[10px] text-gray-300 text-center mt-3">
+              Estimado · sujeto a cambios de mercado
             </p>
           </div>
         </div>
