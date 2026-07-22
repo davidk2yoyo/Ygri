@@ -79,13 +79,13 @@ function getTaskStatus(todo) {
   return "pending";
 }
 
-function TaskRow({ todo, onToggle, busy }) {
+function TaskRow({ todo, onToggle, onEdit, busy }) {
   const status = getTaskStatus(todo);
   const isOverdue = status === "overdue";
 
   return (
     <div
-      className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-200 hover:shadow-sm
+      className={`flex items-start gap-4 p-4 rounded-xl border transition-all duration-200 hover:shadow-sm group
         ${todo.is_done
           ? "bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-60"
           : isOverdue
@@ -177,6 +177,18 @@ function TaskRow({ todo, onToggle, busy }) {
       <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${PRIORITY_COLORS[status]}`}>
         {status}
       </span>
+
+      {/* Edit button */}
+      <button
+        onClick={() => onEdit(todo)}
+        disabled={busy}
+        className="flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+        title="Edit task"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+        </svg>
+      </button>
     </div>
   );
 }
@@ -203,6 +215,8 @@ export default function TasksPage() {
   const [formClients, setFormClients] = useState([]);
   const [formProfiles, setFormProfiles] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [editForm, setEditForm] = useState({ title: "", due_date: "", assignee_id: "" });
 
   const loadTasks = useCallback(async () => {
     try {
@@ -406,6 +420,40 @@ export default function TasksPage() {
     }
   };
 
+  const openEditTask = (task) => {
+    setEditingTask(task);
+    setEditForm({
+      title: task.title || "",
+      due_date: task.due_date || "",
+      assignee_id: task.assignee_id || "",
+    });
+  };
+
+  const handleEditTask = async (e) => {
+    e.preventDefault();
+    if (!editForm.title.trim() || !editingTask) return;
+    try {
+      setBusy(true);
+      await supabase
+        .from("stage_todos")
+        .update({
+          title: editForm.title.trim(),
+          due_date: editForm.due_date || null,
+          assignee_id: editForm.assignee_id || null,
+        })
+        .eq("id", editingTask.id);
+      setEditingTask(null);
+      setEditForm({ title: "", due_date: "", assignee_id: "" });
+      await loadTasks();
+      sileo.success({ title: "Task updated" });
+    } catch (e) {
+      sileo.error({ title: "Error", description: e.message });
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   // Filter & search
   const filtered = tasks.filter((t) => {
     const status = getTaskStatus(t);
@@ -525,6 +573,74 @@ export default function TasksPage() {
         </form>
       )}
 
+      {/* Edit Task Modal */}
+      {editingTask && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl w-full sm:max-w-md shadow-xl">
+            <form onSubmit={handleEditTask} className="p-6 space-y-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 dark:text-white">Edit Task</h3>
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Task title..."
+                value={editForm.title}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                required
+              />
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Due Date</label>
+                <input
+                  type="date"
+                  value={editForm.due_date}
+                  onChange={(e) => setEditForm({ ...editForm, due_date: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Assignee</label>
+                <SearchableSelect
+                  placeholder="Unassigned"
+                  value={editForm.assignee_id}
+                  options={formProfiles.map(p => ({ value: p.id, label: p.full_name }))}
+                  onChange={(v) => setEditForm({ ...editForm, assignee_id: v })}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingTask(null)}
+                  className="px-4 py-2 text-sm rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy || !editForm.title.trim()}
+                  className="px-4 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium disabled:opacity-50 transition-colors"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Stats row */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         {STATUS_FILTERS.map((f) => (
@@ -623,7 +739,7 @@ export default function TasksPage() {
       ) : (
         <div className="space-y-2">
           {filtered.map((todo) => (
-            <TaskRow key={todo.id} todo={todo} onToggle={handleToggle} busy={busy} />
+            <TaskRow key={todo.id} todo={todo} onToggle={handleToggle} onEdit={openEditTask} busy={busy} />
           ))}
         </div>
       )}
