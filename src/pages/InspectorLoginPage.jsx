@@ -30,7 +30,7 @@ export default function InspectorLoginPage() {
         return;
       }
       sileo.success({ title: "Logged in" });
-      navigate("/inspection-reports");
+      navigate("/inspector");
     } catch (e) {
       sileo.error({ title: "Error", description: e.message });
     } finally {
