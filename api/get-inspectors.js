@@ -1,20 +1,16 @@
-module.exports = async function handler(req, res) {
+import { createClient } from "@supabase/supabase-js";
+
+export default async function handler(req, res) {
   res.setHeader("Content-Type", "application/json");
 
   try {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl) {
-      console.error("Missing VITE_SUPABASE_URL");
-      return res.status(500).json({ error: "Missing VITE_SUPABASE_URL" });
-    }
-    if (!supabaseServiceKey) {
-      console.error("Missing SUPABASE_SERVICE_ROLE_KEY");
-      return res.status(500).json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY" });
+    if (!supabaseUrl || !supabaseServiceKey) {
+      return res.status(500).json({ error: "Missing Supabase environment variables" });
     }
 
-    const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
     if (req.method !== "GET") {
@@ -27,10 +23,10 @@ module.exports = async function handler(req, res) {
       .eq("role", "inspector")
       .order("full_name");
 
-    if (error) throw new Error(error.message || JSON.stringify(error));
+    if (error) throw new Error(error.message);
 
     const { data: users, error: usersError } = await supabase.auth.admin.listUsers();
-    if (usersError) throw new Error(usersError.message || JSON.stringify(usersError));
+    if (usersError) throw new Error(usersError.message);
 
     const userMap = new Map(users.users.map(u => [u.id, u.email]));
     const inspectors = data.map(p => ({
@@ -41,7 +37,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({ inspectors });
   } catch (error) {
-    console.error("Error:", error.message, error.stack);
-    return res.status(500).json({ error: error.message || "Unknown error" });
+    console.error("Error:", error.message);
+    return res.status(500).json({ error: error.message });
   }
-};
+}
