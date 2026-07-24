@@ -2068,7 +2068,7 @@ function BlockCard({ block, index, total, onMoveUp, onMoveDown, onDelete, onDupl
 }
 
 // ─── Main page ────────────────────────────────────────────────────────────────
-export default function InspectionReportEditorPage() {
+export default function InspectionReportEditorPage({ hidePortada = false }) {
   const { reportId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -2416,25 +2416,27 @@ export default function InspectionReportEditorPage() {
           </button>
           {showAddMenu && (
             <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white border border-gray-200 rounded-2xl shadow-xl p-2 flex flex-wrap gap-2 z-20 max-w-lg">
-              {Object.keys(BLOCK_DEFAULTS).map((type) => (
-                <button
-                  key={type}
-                  onClick={() => addBlock(type)}
-                  className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl hover:bg-gray-50 transition min-w-[80px]"
-                >
-                  <svg
-                    className="w-5 h-5 text-gray-500"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+              {Object.keys(BLOCK_DEFAULTS)
+                .filter(type => !(hidePortada && type === "cover"))
+                .map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => addBlock(type)}
+                    className="flex flex-col items-center gap-1.5 px-4 py-3 rounded-xl hover:bg-gray-50 transition min-w-[80px]"
                   >
-                    {BLOCK_ICONS[type]}
-                  </svg>
-                  <span className="text-xs font-medium text-gray-600 text-center leading-tight">
-                    {BLOCK_LABELS[type]}
-                  </span>
-                </button>
-              ))}
+                    <svg
+                      className="w-5 h-5 text-gray-500"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      {BLOCK_ICONS[type]}
+                    </svg>
+                    <span className="text-xs font-medium text-gray-600 text-center leading-tight">
+                      {BLOCK_LABELS[type]}
+                    </span>
+                  </button>
+                ))}
             </div>
           )}
         </div>

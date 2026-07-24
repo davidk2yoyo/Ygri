@@ -303,7 +303,7 @@ function ReportCard({ report, onClick }) {
 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
-export default function InspectionReportsPage() {
+export default function InspectionReportsPage({ editPath = "/reports" }) {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -334,11 +334,11 @@ export default function InspectionReportsPage() {
 
   const handleCreated = (newReport) => {
     setShowModal(false);
-    navigate(`/reports/${newReport.id}/edit`, { state: { from: "/reports" } });
+    navigate(`${editPath}/${newReport.id}/edit`, { state: { from: editPath } });
   };
 
   const handleCardClick = (report) => {
-    navigate(`/reports/${report.id}/edit`, { state: { from: "/reports" } });
+    navigate(`${editPath}/${report.id}/edit`, { state: { from: editPath } });
   };
 
   return (

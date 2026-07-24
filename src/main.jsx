@@ -3,8 +3,11 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
+import InspectorProtectedRoute from "./InspectorProtectedRoute";
 import Layout from "./Layout";
+import InspectorLayout from "./InspectorLayout";
 import LoginPage from "./pages/LoginPage";
+import InspectorLoginPage from "./pages/InspectorLoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import MapPage from "./pages/MapPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -42,6 +45,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <ClientPortalProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/inspector/login" element={<InspectorLoginPage />} />
         <Route path="/q/:quoteNumber" element={<PublicQuotationPage />} />
         <Route path="/a/:annexNumber" element={<AnnexPublicPage />} />
         <Route path="/r/:reportNumber" element={<InspectionReportPublicPage />} />
@@ -71,6 +75,22 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <ProtectedRoute>
             <InspectionReportEditorPage />
           </ProtectedRoute>
+        } />
+
+        {/* ── Inspector Portal ── */}
+        <Route path="/inspector" element={
+          <InspectorProtectedRoute>
+            <InspectorLayout>
+              <InspectionReportsPage editPath="/inspector/reports" />
+            </InspectorLayout>
+          </InspectorProtectedRoute>
+        } />
+        <Route path="/inspector/reports/:reportId/edit" element={
+          <InspectorProtectedRoute>
+            <InspectorLayout>
+              <InspectionReportEditorPage hidePortada={true} />
+            </InspectorLayout>
+          </InspectorProtectedRoute>
         } />
 
         {/* ── Client Portal ── */}
