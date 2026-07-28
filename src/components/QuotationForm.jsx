@@ -1062,9 +1062,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                           Subtotal: <span className="text-primary">{currency} {clientTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                         </p>
                         {showMargin && (
-                          <p className={`text-xs font-medium ${marginColor}`}>
-                            Margin: {currency} {marginAmt.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({marginPct.toFixed(1)}%)
-                          </p>
+                          <>
+                            <p className="text-xs text-bgray-500 dark:text-bgray-400">
+                              Cost: {currency} {supplierTotal.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                            </p>
+                            <p className={`text-xs font-medium ${marginColor}`}>
+                              Margin: {currency} {marginAmt.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({marginPct.toFixed(1)}%)
+                            </p>
+                          </>
                         )}
                       </div>
                     );
