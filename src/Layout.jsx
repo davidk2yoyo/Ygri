@@ -431,7 +431,7 @@ export default function Layout() {
       </main>
 
       <YgriAiChat />
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-left" />
     </div>
   );
 }
