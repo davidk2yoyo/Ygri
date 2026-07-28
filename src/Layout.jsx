@@ -89,6 +89,7 @@ export default function Layout() {
                 <div className="flex gap-2">
                   <div
                     onClick={handleMarkDone}
+                    onPointerDown={e => e.stopPropagation()}
                     role="button"
                     className="flex-1 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition cursor-pointer text-center"
                   >
@@ -96,6 +97,7 @@ export default function Layout() {
                   </div>
                   <div
                     onClick={handleDismiss}
+                    onPointerDown={e => e.stopPropagation()}
                     role="button"
                     className="flex-1 py-1 text-xs border border-amber-400 text-amber-700 rounded-lg font-medium hover:bg-amber-50 transition cursor-pointer text-center"
                   >
