@@ -57,32 +57,41 @@ export default function Layout() {
         .filter(t => !dismissed.has(`todo_${t.id}`))
         .slice(0, 5)
         .forEach(todo => {
-          const dismissTodo = (tid) => {
+          // Use a ref object so the closure always reads the latest tid value
+          const ref = { tid: null };
+
+          const handleDismiss = () => {
             const list = JSON.parse(localStorage.getItem(key) || "[]");
             list.push(`todo_${todo.id}`);
             localStorage.setItem(key, JSON.stringify(list));
-            sileo.dismiss(tid);
+            sileo.dismiss(ref.tid);
           };
 
-          let tid;
-          tid = sileo.warning({
+          const handleMarkDone = async () => {
+            try {
+              const { error } = await supabase.rpc("update_stage_todo", { p_todo_id: todo.id, p_done: true });
+              if (error) throw error;
+              sileo.dismiss(ref.tid);
+              sileo.success({ title: "Task done!", description: todo.title });
+            } catch (e) {
+              sileo.error({ title: "Error", description: e.message });
+            }
+          };
+
+          ref.tid = sileo.warning({
             title: "Overdue Task",
             description: (
               <div>
                 <div className="text-sm font-medium mb-2">{todo.title}</div>
                 <div className="flex gap-2">
                   <button
-                    onClick={async () => {
-                      await supabase.rpc("update_stage_todo", { p_todo_id: todo.id, p_done: true });
-                      sileo.dismiss(tid);
-                      sileo.success({ title: "Task done!", description: todo.title });
-                    }}
+                    onClick={handleMarkDone}
                     className="flex-1 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition"
                   >
                     Mark Done
                   </button>
                   <button
-                    onClick={() => dismissTodo(tid)}
+                    onClick={handleDismiss}
                     className="flex-1 py-1 text-xs border border-amber-400 text-amber-700 rounded-lg font-medium hover:bg-amber-50 transition"
                   >
                     Dismiss
