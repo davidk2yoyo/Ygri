@@ -87,18 +87,20 @@ export default function Layout() {
               <div>
                 <div className="text-sm font-medium mb-2">{todo.title}</div>
                 <div className="flex gap-2">
-                  <button
+                  <div
                     onClick={handleMarkDone}
-                    className="flex-1 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition"
+                    role="button"
+                    className="flex-1 py-1 text-xs bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-semibold transition cursor-pointer text-center"
                   >
                     Mark Done
-                  </button>
-                  <button
+                  </div>
+                  <div
                     onClick={handleDismiss}
-                    className="flex-1 py-1 text-xs border border-amber-400 text-amber-700 rounded-lg font-medium hover:bg-amber-50 transition"
+                    role="button"
+                    className="flex-1 py-1 text-xs border border-amber-400 text-amber-700 rounded-lg font-medium hover:bg-amber-50 transition cursor-pointer text-center"
                   >
                     Dismiss
-                  </button>
+                  </div>
                 </div>
               </div>
             ),
