@@ -60,21 +60,23 @@ export default function Layout() {
           // Use a ref object so the closure always reads the latest tid value
           const ref = { tid: null };
 
-          const handleDismiss = () => {
+          const handleDismiss = (e) => {
+            e.stopPropagation();
             const list = JSON.parse(localStorage.getItem(key) || "[]");
             list.push(`todo_${todo.id}`);
             localStorage.setItem(key, JSON.stringify(list));
             sileo.dismiss(ref.tid);
           };
 
-          const handleMarkDone = async () => {
+          const handleMarkDone = async (e) => {
+            e.stopPropagation();
             try {
               const { error } = await supabase.rpc("update_stage_todo", { p_todo_id: todo.id, p_done: true });
               if (error) throw error;
               sileo.dismiss(ref.tid);
               sileo.success({ title: "Task done!", description: todo.title });
-            } catch (e) {
-              sileo.error({ title: "Error", description: e.message });
+            } catch (err) {
+              sileo.error({ title: "Error", description: err.message });
             }
           };
 
