@@ -103,6 +103,7 @@ export default function Layout() {
               </div>
             ),
             duration: null,
+            autopilot: { expand: 100, collapse: 0 },
           }).id;
         });
 
