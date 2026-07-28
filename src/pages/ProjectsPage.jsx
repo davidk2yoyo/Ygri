@@ -856,8 +856,11 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     if (activeTrackId) {
-      loadTrackDetail();
-      loadAttachedEmails();
+      const timer = setTimeout(() => {
+        loadTrackDetail();
+        loadAttachedEmails();
+      }, 50);
+      return () => clearTimeout(timer);
     }
   }, [activeTrackId]);
 
