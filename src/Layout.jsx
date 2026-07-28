@@ -81,6 +81,7 @@ export default function Layout() {
           };
 
           ref.tid = sileo.warning({
+            id: `todo-notif-${todo.id}`,
             title: "Overdue Task",
             description: (
               <div>
@@ -102,7 +103,7 @@ export default function Layout() {
               </div>
             ),
             duration: null,
-          });
+          }).id;
         });
 
       // Milestone reminders (only if reminder_days column exists)
@@ -127,8 +128,9 @@ export default function Layout() {
               (new Date(m.date + "T00:00:00") - new Date(today + "T00:00:00")) / 86400000
             );
             const cfg = MILESTONE_LABELS[m.type] || MILESTONE_LABELS.custom;
-            let mid;
-            mid = sileo.info({
+            const mref = { mid: null };
+            mref.mid = sileo.info({
+              id: `milestone-notif-${m.id}`,
               title: `${cfg.emoji} ${m.label || cfg.label}`,
               description: `${m.track?.name || "Project"} · ${daysUntil === 0 ? "Today" : `in ${daysUntil} day${daysUntil !== 1 ? "s" : ""}`}`,
               duration: null,
@@ -138,10 +140,10 @@ export default function Layout() {
                   const list = JSON.parse(localStorage.getItem(key) || "[]");
                   list.push(`milestone_${m.id}`);
                   localStorage.setItem(key, JSON.stringify(list));
-                  sileo.dismiss(mid);
+                  sileo.dismiss(mref.mid);
                 },
               },
-            });
+            }).id;
           });
       }
     } catch (e) {
