@@ -156,7 +156,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const commissionAmount = totalAmount * (parseFloat(commissionPct) || 0) / 100;
   const grandTotal = totalAmount + commissionAmount;
 
-  const totalMarginAmount = (() => {
+  const totalCostAmount = (() => {
     if (type !== "product") return 0;
     const rate = parseFloat(supplierExchangeRate) || 0;
     return items.reduce((sum, it) => {
@@ -164,11 +164,11 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       if (!supplierPriceRaw) return sum;
       const isFx = it.supplier_currency && it.supplier_currency !== currency;
       const supplierPriceInDocCurrency = isFx && rate > 0 ? supplierPriceRaw / rate : supplierPriceRaw;
-      const clientTotal = (parseFloat(it.price) || 0) * (parseInt(it.quantity) || 1);
-      const supplierTotal = supplierPriceInDocCurrency * (parseInt(it.quantity) || 1);
-      return sum + (clientTotal - supplierTotal);
+      return sum + (supplierPriceInDocCurrency * (parseInt(it.quantity) || 1));
     }, 0);
   })();
+
+  const totalMarginAmount = totalAmount - totalCostAmount;
   const totalMarginPct = totalAmount > 0 ? (totalMarginAmount / totalAmount * 100) : 0;
   const marginColor = totalMarginPct >= 20 ? "text-green-600" : totalMarginPct >= 10 ? "text-amber-600" : "text-red-500";
 
@@ -1299,6 +1299,11 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             <p className="text-xs text-bgray-400 mb-1">
               Subtotal: {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               {" · "}Commission ({commissionPct}%): {currency} {commissionAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          )}
+          {type === "product" && totalCostAmount > 0 && (
+            <p className="text-xs text-bgray-400 mb-1">
+              Total Cost: {currency} {totalCostAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
             </p>
           )}
           {type === "product" && totalMarginAmount > 0 && (
