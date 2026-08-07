@@ -981,18 +981,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-bgray-500 mb-1">Qty</label>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.quantity}
-                      onChange={e => updateItem(idx, "quantity", e.target.value)}
-                      onWheel={e => e.target.blur()}
-                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-                    />
+                  {/* Price + MOQ row */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-bgray-500 mb-1">Price ({currency})</label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.price}
+                        onChange={e => updateItem(idx, "price", e.target.value)}
+                        onWheel={e => e.target.blur()}
+                        placeholder="0.00"
+                        className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                      />
+                    </div>
                     {documentType === "quotation" && (
-                      <div className="mt-2">
+                      <div>
                         <label className="block text-xs text-bgray-500 mb-1">MOQ</label>
                         <input
                           type="number"
@@ -1007,26 +1012,12 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     )}
                   </div>
 
-                  <div>
-                    <label className="block text-xs text-bgray-500 mb-1">Price ({currency})</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={item.price}
-                      onChange={e => updateItem(idx, "price", e.target.value)}
-                      onWheel={e => e.target.blur()}
-                      placeholder="0.00"
-                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                    />
-                  </div>
-
                   {/* Volume Pricing — quotations only */}
                   {documentType === "quotation" && item.supplier_id && (() => {
                     const tiers = supplierPriceTiersCache[item.supplier_id] || [];
                     if (tiers.length === 0) return null;
                     return (
-                      <div className="col-span-10">
+                      <div>
                         <label className="block text-xs text-bgray-500 mb-2">Volume Pricing (Optional)</label>
                         <div className="grid grid-cols-1 gap-2">
                           {tiers.map(tier => {
