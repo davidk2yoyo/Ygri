@@ -138,12 +138,15 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           const tiersByItem = {};
           (tiersData || []).forEach(t => {
             if (!tiersByItem[t.quotation_item_id]) tiersByItem[t.quotation_item_id] = [];
+            const isRange = t.max_qty != null && t.max_qty !== t.min_qty;
             tiersByItem[t.quotation_item_id].push({
               tempId: t.id,
               min_qty: t.min_qty,
-              max_qty: t.max_qty ?? "",
+              max_qty: isRange ? t.max_qty : "",
               price: t.price,
+              supplier_price: t.supplier_price ?? "",
               notes: t.notes || "",
+              isRange,
             });
           });
 
@@ -210,7 +213,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         min_qty: "",
         max_qty: "",
         price: "",
+        supplier_price: "",
         notes: "",
+        isRange: false,
       }],
     } : it));
   };
@@ -219,6 +224,13 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setItems(prev => prev.map((it, i) => i === idx ? {
       ...it,
       priceTiers: (it.priceTiers || []).map((t, ti) => ti === tierIdx ? { ...t, [field]: value } : t),
+    } : it));
+  };
+
+  const toggleItemTierRange = (idx, tierIdx) => {
+    setItems(prev => prev.map((it, i) => i === idx ? {
+      ...it,
+      priceTiers: (it.priceTiers || []).map((t, ti) => ti === tierIdx ? { ...t, isRange: !t.isRange } : t),
     } : it));
   };
 
@@ -536,11 +548,13 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             const originalItem = items[row.sort_order];
             (originalItem?.priceTiers || []).forEach(t => {
               if (t.price === "" || t.price == null) return;
+              const minQty = parseInt(t.min_qty) || 1;
               tierRows.push({
                 quotation_item_id: row.id,
-                min_qty: parseInt(t.min_qty) || 1,
-                max_qty: t.max_qty ? parseInt(t.max_qty) : null,
+                min_qty: minQty,
+                max_qty: t.isRange ? (t.max_qty ? parseInt(t.max_qty) : null) : minQty,
                 price: parseFloat(t.price) || 0,
+                supplier_price: t.supplier_price !== "" && t.supplier_price != null ? parseFloat(t.supplier_price) : null,
                 currency: currency,
                 notes: t.notes || null,
               });
@@ -1084,44 +1098,82 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       {(item.priceTiers || []).length > 0 && (
                         <div className="space-y-2">
                           {item.priceTiers.map((tier, tIdx) => (
-                            <div key={tier.tempId} className="flex items-center gap-2 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg p-2">
-                              <input
-                                type="number"
-                                min="1"
-                                placeholder="Min qty"
-                                value={tier.min_qty}
-                                onChange={e => updateItemTier(idx, tIdx, "min_qty", e.target.value)}
-                                onWheel={e => e.target.blur()}
-                                className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
-                              />
-                              <span className="text-bgray-400 text-xs shrink-0">–</span>
-                              <input
-                                type="number"
-                                min="1"
-                                placeholder="Max (∞)"
-                                value={tier.max_qty}
-                                onChange={e => updateItemTier(idx, tIdx, "max_qty", e.target.value)}
-                                onWheel={e => e.target.blur()}
-                                className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
-                              />
+                            <div key={tier.tempId} className="flex flex-wrap items-center gap-2 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg p-2">
+                              {!tier.isRange ? (
+                                <input
+                                  type="number"
+                                  min="1"
+                                  placeholder="Qty"
+                                  value={tier.min_qty}
+                                  onChange={e => updateItemTier(idx, tIdx, "min_qty", e.target.value)}
+                                  onWheel={e => e.target.blur()}
+                                  className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                                />
+                              ) : (
+                                <>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="Min qty"
+                                    value={tier.min_qty}
+                                    onChange={e => updateItemTier(idx, tIdx, "min_qty", e.target.value)}
+                                    onWheel={e => e.target.blur()}
+                                    className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                                  />
+                                  <span className="text-bgray-400 text-xs shrink-0">–</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    placeholder="Max (∞)"
+                                    value={tier.max_qty}
+                                    onChange={e => updateItemTier(idx, tIdx, "max_qty", e.target.value)}
+                                    onWheel={e => e.target.blur()}
+                                    className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                                  />
+                                </>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => toggleItemTierRange(idx, tIdx)}
+                                className="text-[10px] text-bgray-400 hover:text-primary underline shrink-0"
+                              >
+                                {tier.isRange ? "use exact qty" : "use range"}
+                              </button>
                               <span className="text-bgray-400 text-xs shrink-0">@</span>
                               <input
                                 type="number"
                                 min="0"
                                 step="0.01"
-                                placeholder="Price"
+                                placeholder="Client price"
                                 value={tier.price}
                                 onChange={e => updateItemTier(idx, tIdx, "price", e.target.value)}
                                 onWheel={e => e.target.blur()}
+                                title={`Client price (${currency})`}
                                 className="w-24 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
                               />
                               <span className="text-bgray-400 text-xs shrink-0">{currency}</span>
+                              {type === "product" && (
+                                <>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    placeholder="Supplier cost"
+                                    value={tier.supplier_price}
+                                    onChange={e => updateItemTier(idx, tIdx, "supplier_price", e.target.value)}
+                                    onWheel={e => e.target.blur()}
+                                    title="Supplier cost — internal only, never shown in PDF"
+                                    className="w-24 px-2 py-1.5 border border-amber-200 dark:border-amber-700/50 rounded text-xs bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white"
+                                  />
+                                  <span className="text-amber-600 text-[10px] shrink-0">Internal</span>
+                                </>
+                              )}
                               <input
                                 type="text"
                                 placeholder="Notes (optional)"
                                 value={tier.notes}
                                 onChange={e => updateItemTier(idx, tIdx, "notes", e.target.value)}
-                                className="flex-1 min-w-0 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                                className="flex-1 min-w-[100px] px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
                               />
                               <button
                                 type="button"
