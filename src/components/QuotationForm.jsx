@@ -21,6 +21,7 @@ const emptyItem = () => ({
   supplier_price: "",
   supplier_currency: "",
   supplier_exchange_rate: "",
+  supplier_price_tier_id: null,
   pictureFile: null,
   picturePreview: "",
 });
@@ -61,6 +62,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
   const [supplierProductsCache, setSupplierProductsCache] = useState({});
   const [showProductPicker, setShowProductPicker] = useState(null);
+  const [supplierPriceTiersCache, setSupplierPriceTiersCache] = useState({});
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -133,10 +135,13 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             tempId: qi.id,
             picturePreview: qi.picture_url || "",
           })));
-          // Pre-cache supplier products for existing items
+          // Pre-cache supplier products and price tiers for existing items
           const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
           if (uniqueIds.length > 0) {
-            uniqueIds.forEach(id => fetchSupplierProducts(id));
+            uniqueIds.forEach(id => {
+              fetchSupplierProducts(id);
+              fetchSupplierPriceTiers(id);
+            });
           }
         }
       }
@@ -298,6 +303,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setSupplierProductsCache(p => ({ ...p, [supplierId]: products }));
   };
 
+  const fetchSupplierPriceTiers = async (supplierId) => {
+    if (!supplierId || supplierPriceTiersCache[supplierId] !== undefined) return;
+    const { data } = await supabase
+      .from("supplier_price_tiers")
+      .select("*")
+      .eq("supplier_id", supplierId)
+      .order("min_qty");
+    setSupplierPriceTiersCache(p => ({ ...p, [supplierId]: data || [] }));
+  };
+
   const withTimeout = (promise, ms = 15000) =>
     Promise.race([
       promise,
@@ -444,6 +459,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             ? (parseFloat(supplierExchangeRate) || null)
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
+          supplier_price_tier_id: documentType === "quotation" ? (it.supplier_price_tier_id || null) : null,
           sort_order: idx,
         };
       }));
@@ -890,64 +906,78 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                 </div>
 
                 {/* Fields */}
-                <div className="col-span-10 grid grid-cols-2 gap-2">
+                <div className="col-span-10 space-y-2">
                   {/* Item # with catalog search dropdown */}
-                  <div className="relative">
-                    <label className="block text-xs text-bgray-500 mb-1">Item #</label>
+                  <div className="grid grid-cols-2 gap-2">
                     <div className="relative">
-                      <input
-                        type="text"
-                        value={item.item_number}
-                        onChange={e => {
-                          updateItem(idx, "item_number", e.target.value);
-                          setShowCatalogDropdown(idx);
-                        }}
-                        onFocus={() => setShowCatalogDropdown(idx)}
-                        onBlur={() => setTimeout(() => setShowCatalogDropdown(null), 150)}
-                        placeholder="SKU / Ref or search..."
-                        className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                      />
-                      {showCatalogDropdown === idx && (
-                        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                          {catalogItems
-                            .filter(c =>
+                      <label className="block text-xs text-bgray-500 mb-1">Item #</label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          value={item.item_number}
+                          onChange={e => {
+                            updateItem(idx, "item_number", e.target.value);
+                            setShowCatalogDropdown(idx);
+                          }}
+                          onFocus={() => setShowCatalogDropdown(idx)}
+                          onBlur={() => setTimeout(() => setShowCatalogDropdown(null), 150)}
+                          placeholder="SKU / Ref or search..."
+                          className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                        />
+                        {showCatalogDropdown === idx && (
+                          <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                            {catalogItems
+                              .filter(c =>
+                                (c.item_number || "").toLowerCase().includes(item.item_number.toLowerCase()) ||
+                                c.description.toLowerCase().includes(item.item_number.toLowerCase())
+                              )
+                              .map(c => (
+                                <button
+                                  key={c.id}
+                                  onMouseDown={() => selectCatalogItem(idx, c)}
+                                  className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
+                                >
+                                  {c.picture_url && <img src={c.picture_url} alt="" className="w-6 h-6 rounded object-cover shrink-0" />}
+                                  <div className="flex-1 min-w-0">
+                                    {c.item_number && <span className="font-mono text-xs text-bgray-500 mr-2">{c.item_number}</span>}
+                                    <span className="truncate">{c.description}</span>
+                                  </div>
+                                  {c.default_price && <span className="ml-auto text-xs text-bgray-400 shrink-0">${c.default_price}</span>}
+                                </button>
+                              ))}
+                            {catalogItems.filter(c =>
                               (c.item_number || "").toLowerCase().includes(item.item_number.toLowerCase()) ||
                               c.description.toLowerCase().includes(item.item_number.toLowerCase())
-                            )
-                            .map(c => (
-                              <button
-                                key={c.id}
-                                onMouseDown={() => selectCatalogItem(idx, c)}
-                                className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
-                              >
-                                {c.picture_url && <img src={c.picture_url} alt="" className="w-6 h-6 rounded object-cover shrink-0" />}
-                                <div className="flex-1 min-w-0">
-                                  {c.item_number && <span className="font-mono text-xs text-bgray-500 mr-2">{c.item_number}</span>}
-                                  <span className="truncate">{c.description}</span>
-                                </div>
-                                {c.default_price && <span className="ml-auto text-xs text-bgray-400 shrink-0">${c.default_price}</span>}
-                              </button>
-                            ))}
-                          {catalogItems.filter(c =>
-                            (c.item_number || "").toLowerCase().includes(item.item_number.toLowerCase()) ||
-                            c.description.toLowerCase().includes(item.item_number.toLowerCase())
-                          ).length === 0 && (
-                            <p className="px-3 py-2 text-xs text-bgray-400">No matches — new item will be saved to catalog</p>
-                          )}
-                        </div>
-                      )}
+                            ).length === 0 && (
+                              <p className="px-3 py-2 text-xs text-bgray-400">No matches — new item will be saved to catalog</p>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs text-bgray-500 mb-1">Qty</label>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={e => updateItem(idx, "quantity", e.target.value)}
+                        onWheel={e => e.target.blur()}
+                        className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+                      />
                     </div>
                   </div>
 
-                  {/* Description — free text, filled automatically on catalog select */}
+                  {/* Description — full width textarea */}
                   <div>
                     <label className="block text-xs text-bgray-500 mb-1">Description</label>
-                    <input
-                      type="text"
+                    <textarea
+                      rows={4}
                       value={item.description}
                       onChange={e => updateItem(idx, "description", e.target.value)}
                       placeholder="Product / service description"
-                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                      className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400 resize-y"
                     />
                   </div>
 
@@ -990,6 +1020,49 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
                     />
                   </div>
+
+                  {/* Volume Pricing — quotations only */}
+                  {documentType === "quotation" && item.supplier_id && (() => {
+                    const tiers = supplierPriceTiersCache[item.supplier_id] || [];
+                    if (tiers.length === 0) return null;
+                    return (
+                      <div className="col-span-10">
+                        <label className="block text-xs text-bgray-500 mb-2">Volume Pricing (Optional)</label>
+                        <div className="grid grid-cols-1 gap-2">
+                          {tiers.map(tier => {
+                            const isSelected = item.supplier_price_tier_id === tier.id;
+                            return (
+                              <button
+                                key={tier.id}
+                                type="button"
+                                onClick={() => {
+                                  updateItem(idx, "supplier_price_tier_id", isSelected ? null : tier.id);
+                                  if (!isSelected) {
+                                    updateItem(idx, "price", tier.price);
+                                  }
+                                }}
+                                className={`p-2 rounded-lg border text-left text-sm transition ${
+                                  isSelected
+                                    ? "bg-primary/10 border-primary text-primary font-medium"
+                                    : "bg-bgray-50 dark:bg-darkblack-500 border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white hover:bg-bgray-100 dark:hover:bg-darkblack-400"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span>
+                                    {tier.description}
+                                    {tier.notes && <span className="text-xs text-bgray-400 ml-1">• {tier.notes}</span>}
+                                  </span>
+                                  <span className="font-semibold">
+                                    {tier.min_qty} {tier.max_qty ? `- ${tier.max_qty}` : "+"} units @ {tier.currency} {parseFloat(tier.price).toFixed(2)}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Supplier Cost — internal only, never shown in PDF */}
                   {type === "product" && (() => {
@@ -1139,6 +1212,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                           setSupplierSearches(p => ({ ...p, [item.tempId]: s.name }));
                                           setShowSupplierDropdown(null);
                                           fetchSupplierProducts(s.id);
+                                          fetchSupplierPriceTiers(s.id);
                                         }}
                                         className={`w-full text-left px-3 py-2 text-sm hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition ${
                                           item.supplier_id === s.id ? "font-semibold text-primary" : "text-darkblack-700 dark:text-white"
