@@ -69,15 +69,30 @@ function ClientDrawer({ client, onClose, onSaved }) {
     setBusy(true);
     setError("");
     try {
-      if (isNew) {
-        const { data, error } = await supabase.from("clients").insert(form).select().single();
-        if (error) throw error;
-        onSaved(data, "created");
-      } else {
-        const { data, error } = await supabase.from("clients").update(form).eq("id", client.id).select().single();
-        if (error) throw error;
-        onSaved(data, "updated");
+      const tryUpsert = async (payload) => {
+        if (isNew) {
+          const { data, error } = await supabase.from("clients").insert(payload).select().single();
+          if (error) throw error;
+          return data;
+        } else {
+          const { data, error } = await supabase.from("clients").update(payload).eq("id", client.id).select().single();
+          if (error) throw error;
+          return data;
+        }
+      };
+      let data;
+      try {
+        data = await tryUpsert(form);
+      } catch (e) {
+        // If schema cache error on optional columns, retry without them
+        if (e.message?.includes("schema cache") || e.message?.includes("Could not find")) {
+          const { tags, rut_nit, website, address, ...safe } = form;
+          data = await tryUpsert(safe);
+        } else {
+          throw e;
+        }
       }
+      onSaved(data, isNew ? "created" : "updated");
     } catch (e) {
       setError(e.message);
     } finally {
