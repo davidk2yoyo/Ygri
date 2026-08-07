@@ -41,10 +41,25 @@ export default function PublicQuotationPage() {
         }
       }
 
+      const itemIds = (quotation.quotation_items || []).map(it => it.id);
+      let tiersByItem = {};
+      if (itemIds.length > 0) {
+        const { data: tiersData } = await supabase
+          .from("quotation_item_price_tiers")
+          .select("quotation_item_id, min_qty, max_qty, price, notes")
+          .in("quotation_item_id", itemIds)
+          .order("min_qty");
+        (tiersData || []).forEach(t => {
+          if (!tiersByItem[t.quotation_item_id]) tiersByItem[t.quotation_item_id] = [];
+          tiersByItem[t.quotation_item_id].push(t);
+        });
+      }
+
       const items = (quotation.quotation_items || []).map(it => ({
         ...it,
         tempId: it.id,
         picturePreview: it.picture_url || "",
+        priceTiers: tiersByItem[it.id] || [],
       }));
 
       const commissionPct = parseFloat(quotation.commission_pct) || 0;

@@ -524,6 +524,8 @@ export default function QuotationPDF({
             const price = parseFloat(item.price) || 0;
             const qty = parseInt(item.quantity) || 1;
             const amount = price * qty;
+            const tiers = item.priceTiers || [];
+            const hasTiers = tiers.length > 0;
             return (
               <tr
                 key={item.tempId || idx}
@@ -553,6 +555,23 @@ export default function QuotationPDF({
                 </td>
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", verticalAlign: "top" }}>
                   <div style={{ fontWeight: "700" }}>{item.description || "—"}</div>
+                  {hasTiers && (
+                    <div style={{ marginTop: "6px", borderTop: "1px dashed #e0e4ea", paddingTop: "6px" }}>
+                      <div style={{ fontSize: "10px", color: "#999", fontWeight: "600", marginBottom: "2px", textTransform: "uppercase" }}>
+                        Price by Quantity
+                      </div>
+                      {tiers.map((t, ti) => {
+                        const isRangeTier = t.max_qty != null && t.max_qty !== t.min_qty;
+                        const qtyLabel = isRangeTier ? `${t.min_qty}${t.max_qty ? `–${t.max_qty}` : "+"} pcs` : `${t.min_qty} pcs`;
+                        return (
+                          <div key={t.tempId || t.id || ti} style={{ fontSize: "11px", color: "#555" }}>
+                            {qtyLabel}: <span style={{ fontWeight: "700", color: "#1a1a1a" }}>${formatMoney(t.price)}</span>
+                            {t.notes && <span style={{ color: "#999" }}> · {t.notes}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </td>
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", textAlign: "center", verticalAlign: "top" }}>
                   {qty}
@@ -563,10 +582,10 @@ export default function QuotationPDF({
                   </td>
                 )}
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top" }}>
-                  ${formatMoney(price)}
+                  {hasTiers ? <span style={{ fontSize: "11px", color: "#999" }}>See tiers</span> : `$${formatMoney(price)}`}
                 </td>
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top", fontWeight: "700" }}>
-                  ${formatMoney(amount)}
+                  {hasTiers ? <span style={{ fontSize: "11px", color: "#999", fontWeight: "400" }}>—</span> : `$${formatMoney(amount)}`}
                 </td>
               </tr>
             );
