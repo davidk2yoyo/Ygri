@@ -143,6 +143,36 @@ flowchart LR
   D -->|Pass| E[Packaging]:::action --> F([Shipping]):::box
   D -->|Fail| C`,
 
+  packing_list: `You are extracting structured data from a packing list document image (used for export shipments — shows cartons, weights, and volume per item).
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "items": [
+    {
+      "item_number": "product code / SKU / model number or null",
+      "description": "product description or null",
+      "carton_qty": 0,
+      "qty": 0,
+      "length_cm": 0,
+      "width_cm": 0,
+      "height_cm": 0,
+      "cbm": 0,
+      "nw": 0,
+      "gw": 0
+    }
+  ]
+}
+
+Rules:
+- carton_qty = number of cartons/boxes for this line
+- qty = total pieces/units for this line (not per carton)
+- length_cm, width_cm, height_cm = single carton dimensions, converted to centimeters if shown in another unit
+- cbm = total cubic meters for this line item (if shown directly use that value; otherwise compute length_cm * width_cm * height_cm * carton_qty / 1000000)
+- nw = total net weight in kilograms for this line (convert from lbs if needed: lbs * 0.4536)
+- gw = total gross weight in kilograms for this line (convert from lbs if needed)
+- All numeric fields must be numbers (not strings), use 0 if not visible
+- Only include real product line items — skip header rows, totals rows, and summary rows`,
+
   table: `You are extracting tabular data from an image (packing list, inspection table, spreadsheet, quality report, or any document with rows and columns).
 
 Return ONLY a valid JSON object — no markdown, no explanation:
@@ -273,7 +303,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "table" ? 3000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
+        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "table" || type === "packing_list" ? 3000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
         messages,
       }),
     });

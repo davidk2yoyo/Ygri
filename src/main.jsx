@@ -22,6 +22,7 @@ import ItemsPage from "./pages/ItemsPage";
 import PublicQuotationPage from "./pages/PublicQuotationPage";
 import AnnexEditorPage from "./pages/AnnexEditorPage";
 import AnnexPublicPage from "./pages/AnnexPublicPage";
+import PackingListEditorPage from "./pages/PackingListEditorPage";
 import InspectionReportsPage from "./pages/InspectionReportsPage";
 import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
 import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
@@ -70,6 +71,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
+          <Route path="/quotations/:quotationId/packing-list" element={<PackingListEditorPage />} />
         </Route>
         <Route path="/reports/:reportId/edit" element={
           <ProtectedRoute>

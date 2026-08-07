@@ -41,6 +41,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.8.0",
     "reactflow": "^11.10.0",
-    "sileo": "^0.1.5"
+    "sileo": "^0.1.5",
+    "xlsx": "^0.18.5"
   }
 }
