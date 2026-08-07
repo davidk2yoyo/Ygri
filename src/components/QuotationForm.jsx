@@ -21,7 +21,7 @@ const emptyItem = () => ({
   supplier_price: "",
   supplier_currency: "",
   supplier_exchange_rate: "",
-  supplier_price_tier_id: null,
+  priceTiers: [],
   pictureFile: null,
   picturePreview: "",
 });
@@ -62,7 +62,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
   const [supplierProductsCache, setSupplierProductsCache] = useState({});
   const [showProductPicker, setShowProductPicker] = useState(null);
-  const [supplierPriceTiersCache, setSupplierPriceTiersCache] = useState({});
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -129,19 +128,36 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setCommissionPct(parseFloat(quotData.commission_pct) || 0);
         setShowCommission(quotData.show_commission || false);
         if (quotData.quotation_items?.length > 0) {
+          // Load per-item price tiers for this quotation
+          const itemIds = quotData.quotation_items.map(qi => qi.id);
+          const { data: tiersData } = await supabase
+            .from("quotation_item_price_tiers")
+            .select("*")
+            .in("quotation_item_id", itemIds)
+            .order("min_qty");
+          const tiersByItem = {};
+          (tiersData || []).forEach(t => {
+            if (!tiersByItem[t.quotation_item_id]) tiersByItem[t.quotation_item_id] = [];
+            tiersByItem[t.quotation_item_id].push({
+              tempId: t.id,
+              min_qty: t.min_qty,
+              max_qty: t.max_qty ?? "",
+              price: t.price,
+              notes: t.notes || "",
+            });
+          });
+
           setItems(quotData.quotation_items.map(qi => ({
             ...emptyItem(),
             ...qi,
             tempId: qi.id,
             picturePreview: qi.picture_url || "",
+            priceTiers: tiersByItem[qi.id] || [],
           })));
-          // Pre-cache supplier products and price tiers for existing items
+          // Pre-cache supplier products for existing items
           const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
           if (uniqueIds.length > 0) {
-            uniqueIds.forEach(id => {
-              fetchSupplierProducts(id);
-              fetchSupplierPriceTiers(id);
-            });
+            uniqueIds.forEach(id => fetchSupplierProducts(id));
           }
         }
       }
@@ -185,6 +201,33 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const addItem = () => setItems(prev => [...prev, emptyItem()]);
 
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx));
+
+  const addItemTier = (idx) => {
+    setItems(prev => prev.map((it, i) => i === idx ? {
+      ...it,
+      priceTiers: [...(it.priceTiers || []), {
+        tempId: Math.random().toString(36).slice(2),
+        min_qty: "",
+        max_qty: "",
+        price: "",
+        notes: "",
+      }],
+    } : it));
+  };
+
+  const updateItemTier = (idx, tierIdx, field, value) => {
+    setItems(prev => prev.map((it, i) => i === idx ? {
+      ...it,
+      priceTiers: (it.priceTiers || []).map((t, ti) => ti === tierIdx ? { ...t, [field]: value } : t),
+    } : it));
+  };
+
+  const removeItemTier = (idx, tierIdx) => {
+    setItems(prev => prev.map((it, i) => i === idx ? {
+      ...it,
+      priceTiers: (it.priceTiers || []).filter((_, ti) => ti !== tierIdx),
+    } : it));
+  };
 
   const moveItem = (idx, dir) => {
     setItems(prev => {
@@ -301,16 +344,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     }));
 
     setSupplierProductsCache(p => ({ ...p, [supplierId]: products }));
-  };
-
-  const fetchSupplierPriceTiers = async (supplierId) => {
-    if (!supplierId || supplierPriceTiersCache[supplierId] !== undefined) return;
-    const { data } = await supabase
-      .from("supplier_price_tiers")
-      .select("*")
-      .eq("supplier_id", supplierId)
-      .order("min_qty");
-    setSupplierPriceTiersCache(p => ({ ...p, [supplierId]: data || [] }));
   };
 
   const withTimeout = (promise, ms = 15000) =>
@@ -459,7 +492,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             ? (parseFloat(supplierExchangeRate) || null)
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
-          supplier_price_tier_id: documentType === "quotation" ? (it.supplier_price_tier_id || null) : null,
           sort_order: idx,
         };
       }));
@@ -481,7 +513,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         const { data: insertedRows, error: itemsError } = await supabase
           .from("quotation_items")
           .insert(validItems)
-          .select("id");
+          .select("id, sort_order");
         if (itemsError) throw itemsError;
 
         if (oldRows?.length) {
@@ -493,6 +525,30 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             // Roll back the rows we just inserted so the quotation isn't duplicated
             await supabase.from("quotation_items").delete().in("id", (insertedRows || []).map(r => r.id));
             throw new Error("Could not replace existing items — save aborted: " + delErr.message);
+          }
+        }
+
+        // 4. Re-create price tiers against the freshly inserted item ids
+        // (old items — and their cascade-linked tiers — were just deleted above)
+        if (documentType === "quotation") {
+          const tierRows = [];
+          (insertedRows || []).forEach(row => {
+            const originalItem = items[row.sort_order];
+            (originalItem?.priceTiers || []).forEach(t => {
+              if (t.price === "" || t.price == null) return;
+              tierRows.push({
+                quotation_item_id: row.id,
+                min_qty: parseInt(t.min_qty) || 1,
+                max_qty: t.max_qty ? parseInt(t.max_qty) : null,
+                price: parseFloat(t.price) || 0,
+                currency: currency,
+                notes: t.notes || null,
+              });
+            });
+          });
+          if (tierRows.length > 0) {
+            const { error: tiersError } = await supabase.from("quotation_item_price_tiers").insert(tierRows);
+            if (tiersError) throw tiersError;
           }
         }
       }
@@ -1012,48 +1068,76 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     )}
                   </div>
 
-                  {/* Volume Pricing — quotations only */}
-                  {documentType === "quotation" && item.supplier_id && (() => {
-                    const tiers = supplierPriceTiersCache[item.supplier_id] || [];
-                    if (tiers.length === 0) return null;
-                    return (
-                      <div>
-                        <label className="block text-xs text-bgray-500 mb-2">Volume Pricing (Optional)</label>
-                        <div className="grid grid-cols-1 gap-2">
-                          {tiers.map(tier => {
-                            const isSelected = item.supplier_price_tier_id === tier.id;
-                            return (
-                              <button
-                                key={tier.id}
-                                type="button"
-                                onClick={() => {
-                                  updateItem(idx, "supplier_price_tier_id", isSelected ? null : tier.id);
-                                  if (!isSelected) {
-                                    updateItem(idx, "price", tier.price);
-                                  }
-                                }}
-                                className={`p-2 rounded-lg border text-left text-sm transition ${
-                                  isSelected
-                                    ? "bg-primary/10 border-primary text-primary font-medium"
-                                    : "bg-bgray-50 dark:bg-darkblack-500 border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white hover:bg-bgray-100 dark:hover:bg-darkblack-400"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span>
-                                    {tier.description}
-                                    {tier.notes && <span className="text-xs text-bgray-400 ml-1">• {tier.notes}</span>}
-                                  </span>
-                                  <span className="font-semibold">
-                                    {tier.min_qty} {tier.max_qty ? `- ${tier.max_qty}` : "+"} units @ {tier.currency} {parseFloat(tier.price).toFixed(2)}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })}
-                        </div>
+                  {/* Price Tiers — quotations only, editable per item, saved with this quotation */}
+                  {documentType === "quotation" && (
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs text-bgray-500">Price Tiers by Quantity (Optional)</label>
+                        <button
+                          type="button"
+                          onClick={() => addItemTier(idx)}
+                          className="text-xs text-primary hover:underline font-medium"
+                        >
+                          + Add tier
+                        </button>
                       </div>
-                    );
-                  })()}
+                      {(item.priceTiers || []).length > 0 && (
+                        <div className="space-y-2">
+                          {item.priceTiers.map((tier, tIdx) => (
+                            <div key={tier.tempId} className="flex items-center gap-2 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg p-2">
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Min qty"
+                                value={tier.min_qty}
+                                onChange={e => updateItemTier(idx, tIdx, "min_qty", e.target.value)}
+                                onWheel={e => e.target.blur()}
+                                className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <span className="text-bgray-400 text-xs shrink-0">–</span>
+                              <input
+                                type="number"
+                                min="1"
+                                placeholder="Max (∞)"
+                                value={tier.max_qty}
+                                onChange={e => updateItemTier(idx, tIdx, "max_qty", e.target.value)}
+                                onWheel={e => e.target.blur()}
+                                className="w-20 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <span className="text-bgray-400 text-xs shrink-0">@</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                placeholder="Price"
+                                value={tier.price}
+                                onChange={e => updateItemTier(idx, tIdx, "price", e.target.value)}
+                                onWheel={e => e.target.blur()}
+                                className="w-24 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <span className="text-bgray-400 text-xs shrink-0">{currency}</span>
+                              <input
+                                type="text"
+                                placeholder="Notes (optional)"
+                                value={tier.notes}
+                                onChange={e => updateItemTier(idx, tIdx, "notes", e.target.value)}
+                                className="flex-1 min-w-0 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => removeItemTier(idx, tIdx)}
+                                className="text-bgray-400 hover:text-red-500 shrink-0"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Supplier Cost — internal only, never shown in PDF */}
                   {type === "product" && (() => {
@@ -1203,7 +1287,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                                           setSupplierSearches(p => ({ ...p, [item.tempId]: s.name }));
                                           setShowSupplierDropdown(null);
                                           fetchSupplierProducts(s.id);
-                                          fetchSupplierPriceTiers(s.id);
                                         }}
                                         className={`w-full text-left px-3 py-2 text-sm hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition ${
                                           item.supplier_id === s.id ? "font-semibold text-primary" : "text-darkblack-700 dark:text-white"
