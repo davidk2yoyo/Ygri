@@ -600,13 +600,14 @@ export default function ItemsPage() {
                 </div>
               </div>
 
-              <div>
+              <div className="col-span-2">
                 <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-1">Description</label>
                 <textarea
-                  rows={3}
+                  rows={8}
                   value={editForm.description}
                   onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
                   className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-500 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary resize-y"
+                  placeholder="Enter detailed item description..."
                 />
               </div>
 
