@@ -289,6 +289,7 @@ export default function ClientsPage() {
   const [search, setSearch] = useState("");
   const [modalClient, setModalClient] = useState(undefined);
   const [orderCounts, setOrderCounts] = useState({});
+  const [viewMode, setViewMode] = useState("list");
 
   const loadClients = useCallback(async () => {
     setLoading(true);
@@ -343,15 +344,38 @@ export default function ClientsPage() {
             {clients.length} client{clients.length !== 1 ? "s" : ""} registered
           </p>
         </div>
-        <button
-          onClick={() => setModalClient(null)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Client
-        </button>
+        <div className="flex items-center gap-3">
+          {/* View toggle */}
+          <div className="flex items-center bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode("list")}
+              title="List view"
+              className={`p-1.5 rounded-md transition ${viewMode === "list" ? "bg-white dark:bg-darkblack-600 shadow text-primary" : "text-bgray-400 hover:text-bgray-600"}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+            </button>
+            <button
+              onClick={() => setViewMode("grid")}
+              title="Grid view"
+              className={`p-1.5 rounded-md transition ${viewMode === "grid" ? "bg-white dark:bg-darkblack-600 shadow text-primary" : "text-bgray-400 hover:text-bgray-600"}`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
+              </svg>
+            </button>
+          </div>
+          <button
+            onClick={() => setModalClient(null)}
+            className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-semibold hover:bg-primary/90 transition shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            New Client
+          </button>
+        </div>
       </div>
 
       {/* Search */}
@@ -370,7 +394,7 @@ export default function ClientsPage() {
 
       {error && <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm mb-4">{error}</div>}
 
-      {/* Grid of client cards */}
+      {/* Client list / grid */}
       {loading ? (
         <div className="flex items-center justify-center py-20 gap-2 text-bgray-500">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -394,6 +418,53 @@ export default function ClientsPage() {
               Add First Client
             </button>
           )}
+        </div>
+      ) : viewMode === "list" ? (
+        <div className="bg-white dark:bg-darkblack-600 rounded-2xl border border-bgray-200 dark:border-darkblack-400 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-bgray-50 dark:bg-darkblack-500 border-b border-bgray-200 dark:border-darkblack-400">
+                <th className="px-5 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Company</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Contact</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide hidden md:table-cell">Email</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide hidden lg:table-cell">Phone</th>
+                <th className="px-5 py-3 text-left text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide hidden lg:table-cell">Country</th>
+                <th className="px-5 py-3 text-right text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Orders</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-bgray-100 dark:divide-darkblack-400">
+              {filtered.map(c => (
+                <tr
+                  key={c.id}
+                  onClick={() => setModalClient(c)}
+                  className="hover:bg-bgray-50 dark:hover:bg-darkblack-500 cursor-pointer transition-colors group"
+                >
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0"
+                        style={{ backgroundColor: `hsl(${c.company_name.charCodeAt(0) * 7 % 360}, 60%, 45%)` }}
+                      >
+                        {c.company_name.slice(0, 2).toUpperCase()}
+                      </div>
+                      <span className="font-semibold text-darkblack-700 dark:text-white group-hover:text-primary transition-colors">{c.company_name}</span>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-bgray-600 dark:text-bgray-300">{c.contact_person || <span className="text-bgray-300">—</span>}</td>
+                  <td className="px-5 py-3 text-bgray-600 dark:text-bgray-300 hidden md:table-cell">{c.email || <span className="text-bgray-300">—</span>}</td>
+                  <td className="px-5 py-3 text-bgray-600 dark:text-bgray-300 hidden lg:table-cell">{c.phone || <span className="text-bgray-300">—</span>}</td>
+                  <td className="px-5 py-3 text-bgray-600 dark:text-bgray-300 hidden lg:table-cell">{c.country || <span className="text-bgray-300">—</span>}</td>
+                  <td className="px-5 py-3 text-right">
+                    {orderCounts[c.id] > 0 && (
+                      <span className="text-xs bg-bgray-100 dark:bg-darkblack-400 text-bgray-500 dark:text-bgray-400 px-2 py-0.5 rounded-full">
+                        {orderCounts[c.id]}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
