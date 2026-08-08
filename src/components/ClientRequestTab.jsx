@@ -26,6 +26,7 @@ export default function ClientRequestTab({ trackId }) {
   const [summary, setSummary] = useState({
     product_summary: "", quantity_summary: "", key_requirements: "", budget_terms: "", open_questions: "",
   });
+  const [summaryLang, setSummaryLang] = useState("es");
 
   const fileRef = useRef(null);
 
@@ -154,7 +155,7 @@ export default function ClientRequestTab({ trackId }) {
       const res = await fetch("/api/ai-scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "digest", text: contextText, language: "es" }),
+        body: JSON.stringify({ type: "digest", text: contextText, language: summaryLang }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
@@ -229,7 +230,25 @@ export default function ClientRequestTab({ trackId }) {
           </div>
         )}
 
-        <div className="flex justify-end mt-4">
+        <div className="flex items-center justify-end gap-3 mt-4">
+          <div className="flex items-center bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-lg p-0.5">
+            <button
+              onClick={() => setSummaryLang("es")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                summaryLang === "es" ? "bg-primary text-white" : "text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
+              }`}
+            >
+              Español
+            </button>
+            <button
+              onClick={() => setSummaryLang("en")}
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                summaryLang === "en" ? "bg-primary text-white" : "text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
+              }`}
+            >
+              English
+            </button>
+          </div>
           <button
             onClick={generateSummary}
             disabled={generating}
