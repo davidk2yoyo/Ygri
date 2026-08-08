@@ -208,6 +208,18 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
     }
   };
 
+  const updateFileDescriptionLocal = (fileId, value) =>
+    setFiles(prev => prev.map(f => f.id === fileId ? { ...f, description: value } : f));
+
+  const saveFileDescription = async (fileId, value) => {
+    try {
+      const { error } = await supabase.from("client_request_files").update({ description: value || null }).eq("id", fileId);
+      if (error) throw error;
+    } catch (e) {
+      sileo.error({ title: "Could not save file description", description: e.message });
+    }
+  };
+
   const handleFileInputChange = (e) => {
     const file = e.target.files?.[0];
     if (file) handleFileUpload(file);
@@ -233,7 +245,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
         rawText.trim(),
         links.length > 0 ? `\nLinks shared:\n${links.join("\n")}` : "",
         filesWithText.length > 0
-          ? `\nAttached files:\n${filesWithText.map(f => `--- ${f.file_name} ---\n${f.extracted_text}`).join("\n\n")}`
+          ? `\nAttached files:\n${filesWithText.map(f => `--- ${f.file_name}${f.description ? ` (${f.description})` : ""} ---\n${f.extracted_text}`).join("\n\n")}`
           : "",
       ].join("\n");
       const res = await fetch("/api/ai-scan", {
@@ -287,11 +299,30 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
     setDownloadingPDF(true);
     try {
       await new Promise(r => setTimeout(r, 50));
+
+      // Measure each attached file's label position (in CSS px, relative to the
+      // printed element) before capture — used to overlay real clickable links,
+      // since html2canvas rasterizes everything into a plain image
+      const elRect = el.getBoundingClientRect();
+      const elWidthPx = elRect.width;
+      const fileLinkRects = [...el.querySelectorAll("[data-file-id]")].map(node => {
+        const r = node.getBoundingClientRect();
+        const fileUrl = files.find(f => String(f.id) === node.getAttribute("data-file-id"))?.file_url;
+        return { url: fileUrl, top: r.top - elRect.top, left: r.left - elRect.left, width: r.width, height: r.height };
+      }).filter(r => r.url);
+
       const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pdfW = pdf.internal.pageSize.getWidth();
       const pdfH = (canvas.height * pdfW) / canvas.width;
       pdf.addImage(canvas.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, pdfW, pdfH);
+
+      // Overlay real clickable link annotations on top of each file name
+      const mmPerPx = pdfW / elWidthPx;
+      fileLinkRects.forEach(r => {
+        pdf.link(r.left * mmPerPx, r.top * mmPerPx, r.width * mmPerPx, r.height * mmPerPx, { url: r.url });
+      });
+
       pdf.save(`Client_Request_${(projectName || "digest").replace(/\s+/g, "_")}.pdf`);
     } catch (e) {
       sileo.error({ title: "Could not generate PDF", description: e.message });
@@ -497,14 +528,24 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
           {files.length > 0 && (
             <div className="mt-2 space-y-1.5">
               {files.map(f => (
-                <div key={f.id} className="flex items-center justify-between px-3 py-2 bg-bgray-50 dark:bg-darkblack-500 rounded-lg text-sm">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <a href={f.file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">{f.file_name}</a>
-                    {extractionBadge(f)}
+                <div key={f.id} className="px-3 py-2 bg-bgray-50 dark:bg-darkblack-500 rounded-lg text-sm space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <a href={f.file_url} target="_blank" rel="noreferrer" className="text-primary hover:underline truncate">{f.file_name}</a>
+                      {extractionBadge(f)}
+                    </div>
+                    <button onClick={() => removeFile(f)} className="text-bgray-400 hover:text-red-500 shrink-0 ml-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                   </div>
-                  <button onClick={() => removeFile(f)} className="text-bgray-400 hover:text-red-500 shrink-0 ml-2">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                  </button>
+                  <input
+                    type="text"
+                    value={f.description || ""}
+                    onChange={e => updateFileDescriptionLocal(f.id, e.target.value)}
+                    onBlur={e => saveFileDescription(f.id, e.target.value)}
+                    placeholder="What is this file? e.g. Technical datasheet, Quotation, Catalog..."
+                    className="w-full px-2 py-1 border border-bgray-200 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-1 focus:ring-primary placeholder-bgray-400"
+                  />
                 </div>
               ))}
             </div>
@@ -582,7 +623,11 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             <div>
               <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase" }}>📎 Attached Files</div>
               <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                {files.map(f => <li key={f.id} style={{ fontSize: "12px", color: "#555", marginBottom: "3px" }}>{f.file_name}</li>)}
+                {files.map(f => (
+                  <li key={f.id} data-file-id={f.id} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "underline", marginBottom: "5px" }}>
+                    {f.file_name}{f.description ? ` — ${f.description}` : ""}
+                  </li>
+                ))}
               </ul>
             </div>
           )}
