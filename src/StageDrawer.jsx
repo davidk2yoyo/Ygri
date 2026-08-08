@@ -1085,7 +1085,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
           {/* Client Request Tab */}
           {stageDetail && activeTab === "request" && trackId && (
-            <ClientRequestTab trackId={trackId} />
+            <ClientRequestTab trackId={trackId} clientName={clientName} projectName={projectName} />
           )}
 
           {/* Documents Tab */}
