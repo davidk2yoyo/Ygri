@@ -572,7 +572,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
           )}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-start">
           <button
             onClick={handleSave}
             disabled={saving}
