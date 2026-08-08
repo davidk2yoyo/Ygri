@@ -4,6 +4,7 @@ import { supabase } from "./supabaseClient";
 import { sileo } from "sileo";
 import QuotationForm from "./components/QuotationForm";
 import TrackDocumentsTab from "./components/TrackDocumentsTab";
+import ClientRequestTab from "./components/ClientRequestTab";
 
 // ─── Key Dates Section ────────────────────────────────────────────────────────
 const MILESTONE_CONFIG = {
@@ -983,6 +984,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
             <div className="flex gap-0 px-6">
               {[
                 { key: "details",   label: "Stage Details" },
+                { key: "request",   label: "🧾 Request" },
                 { key: "quotation", label: "📋 Quotation" },
                 { key: "report",    label: "📄 Report" },
                 { key: "documents", label: "📁 Documents" },
@@ -1079,6 +1081,11 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                 />
               </div>
             </div>
+          )}
+
+          {/* Client Request Tab */}
+          {stageDetail && activeTab === "request" && trackId && (
+            <ClientRequestTab trackId={trackId} />
           )}
 
           {/* Documents Tab */}

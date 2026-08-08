@@ -92,6 +92,29 @@ Rules:
 - recommendations should be specific and actionable`;
   },
 
+  digest: (lang = "en") => {
+    const langLine = lang === "es"
+      ? "Write ALL output values in Spanish."
+      : "Write ALL output values in English.";
+    return `You are a sales assistant at an international trade / sourcing company. A client sent a messy inquiry — often a WhatsApp conversation mixing casual chat, product requests, links, and back-and-forth questions. Turn it into a clean quoting brief the sales team can act on immediately. ${langLine}
+
+Return ONLY a valid JSON object — no markdown, no explanation:
+{
+  "product_summary": "what product(s)/service the client wants — name, type, key specs mentioned. If unclear, say what is known and flag it's incomplete",
+  "quantity_summary": "quantities mentioned (per product if several), or 'Not specified' if none given",
+  "key_requirements": "bullet-style list of specs, materials, certifications, customization, packaging, etc. mentioned (use \\n for line breaks between points). Empty string if none",
+  "budget_terms": "any budget, target price, incoterm, deadline, destination, or payment terms mentioned, or 'Not specified'",
+  "open_questions": "specific questions the sales team should still ask the client to be able to quote accurately (use \\n for line breaks between points)"
+}
+
+Rules:
+- Base everything ONLY on the text and links provided — never invent details
+- Ignore greetings/small talk — focus on the actual request
+- If links were shared, factor in what they likely represent (e.g. a product page, image) even though you cannot open them — just note them in the relevant section
+- Keep each field concise and scannable — this is read quickly by a busy sales team
+- open_questions should be genuinely useful gaps, not generic filler`;
+  },
+
   retouch: (lang = "en") => {
     const langLine = lang === "es"
       ? "Write your output in Spanish."
@@ -259,7 +282,7 @@ export default async function handler(req, res) {
     res.end(JSON.stringify({ error: `Unknown type: ${type}` }));
     return;
   }
-  const TEXT_ONLY = ["retouch", "conclusions", "diagram"];
+  const TEXT_ONLY = ["retouch", "conclusions", "diagram", "digest"];
   if (TEXT_ONLY.includes(type) && !text) {
     res.statusCode = 400;
     res.end(JSON.stringify({ error: "Missing required field: text" }));
@@ -287,6 +310,9 @@ export default async function handler(req, res) {
     messages = [{ role: "user", content: `${conclusionsPrompt}\n\nInspection context:\n${text}` }];
   } else if (type === "diagram") {
     messages = [{ role: "user", content: `${PROMPTS.diagram}\n\n${text}` }];
+  } else if (type === "digest") {
+    const digestPrompt = typeof PROMPTS.digest === "function" ? PROMPTS.digest(language) : PROMPTS.digest;
+    messages = [{ role: "user", content: `${digestPrompt}\n\nClient inquiry:\n${text}` }];
   } else {
     messages = [{ role: "user", content: [
       { type: "image_url", image_url: { url: `data:${mimeType};base64,${image}`, detail: "high" } },
@@ -303,7 +329,7 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
-        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "table" || type === "packing_list" ? 3000 : type === "conclusions" ? 1500 : type === "diagram" ? 1200 : 800,
+        max_tokens: type === "quotation" ? 2000 : type === "extract" || type === "retouch" ? 2000 : type === "table" || type === "packing_list" ? 3000 : type === "conclusions" || type === "digest" ? 1500 : type === "diagram" ? 1200 : 800,
         messages,
       }),
     });
