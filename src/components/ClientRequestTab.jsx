@@ -650,14 +650,39 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
 
           {files.length > 0 && (
             <div>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase" }}>📎 Attached Files</div>
-              <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                {files.map(f => (
-                  <li key={f.id} data-file-id={f.id} style={{ fontSize: "12px", color: "#2563eb", textDecoration: "underline", marginBottom: "5px" }}>
-                    {f.file_name}{f.description ? ` — ${f.description}` : ""}
-                  </li>
-                ))}
-              </ul>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "10px", textTransform: "uppercase" }}>📎 Attached Files</div>
+
+              {/* Images grid */}
+              {files.filter(f => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).length > 0 && (
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
+                  {files.filter(f => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).map(f => (
+                    <div key={f.id} data-file-id={f.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "180px" }}>
+                      <img
+                        src={f.file_url}
+                        alt={f.file_name}
+                        crossOrigin="anonymous"
+                        style={{ width: "160px", height: "120px", objectFit: "contain", border: "1px solid #e5e7eb", borderRadius: "6px", backgroundColor: "#f9fafb" }}
+                      />
+                      <span style={{ fontSize: "10px", color: "#2563eb", textDecoration: "underline", marginTop: "4px", textAlign: "center", wordBreak: "break-all", maxWidth: "160px" }}>
+                        {f.file_name}{f.description ? ` — ${f.description}` : ""}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Non-image files */}
+              {files.filter(f => !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).length > 0 && (
+                <ul style={{ margin: 0, paddingLeft: "18px" }}>
+                  {files.filter(f => !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).map(f => (
+                    <li key={f.id} data-file-id={f.id} style={{ fontSize: "12px", marginBottom: "5px" }}>
+                      <a href={f.file_url} target="_blank" rel="noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
+                        {f.file_name}{f.description ? ` — ${f.description}` : ""}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
 
