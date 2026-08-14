@@ -236,6 +236,7 @@ export default function QuotationPDF({
   totalAmount,
   commissionPct = 0,
   showCommission = false,
+  payments = [],
   onClose,
   standalone = false,
   readOnly = false,
@@ -253,6 +254,9 @@ export default function QuotationPDF({
 
   const commissionAmount = totalAmount * (commissionPct / 100);
   const grandTotal = totalAmount + commissionAmount;
+  const showPayments = (quotation.document_type === "proforma" || quotation.document_type === "invoice") && payments.length > 0;
+  const totalPaid = payments.reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0);
+  const balanceDue = Math.max(grandTotal - totalPaid, 0);
 
   const handleDownloadPDF = async () => {
     const el = printRef.current;
@@ -618,6 +622,33 @@ export default function QuotationPDF({
           </div>
         </div>
       </div>
+
+      {/* ── Payment Status ── */}
+      {showPayments && (
+        <div className="pdf-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "28px" }}>
+          <div style={{ minWidth: "260px", border: "1px solid #e0e4ea", borderRadius: "8px", overflow: "hidden" }}>
+            <div style={{ padding: "10px 16px", backgroundColor: "#f7f8fa", fontSize: "11px", fontWeight: "700", color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+              Payment Status
+            </div>
+            <div style={{ padding: "12px 16px" }}>
+              {payments.map((p, i) => (
+                <div key={p.id || i} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#555", marginBottom: "4px" }}>
+                  <span>{formatDateLong(p.payment_date)}{p.method ? ` · ${p.method}` : ""}</span>
+                  <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{p.currency} {formatMoney(p.amount)}</span>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0", marginTop: "6px", borderTop: "1px solid #e8eaed", fontSize: "13px" }}>
+                <span style={{ color: "#16a34a", fontWeight: "700" }}>Paid:</span>
+                <span style={{ fontWeight: "700", color: "#16a34a" }}>{currency} {formatMoney(totalPaid)}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", fontSize: "13px" }}>
+                <span style={{ color: balanceDue > 0.004 ? "#c9922a" : "#16a34a", fontWeight: "700" }}>Balance Due:</span>
+                <span style={{ fontWeight: "900", color: balanceDue > 0.004 ? "#c9922a" : "#16a34a" }}>{currency} {formatMoney(balanceDue)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Notes / Terms ── */}
       {(quotation.notes || quotation.negotiation_term) && (

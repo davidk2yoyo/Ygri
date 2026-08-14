@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
+import QuotationPaymentsSection from "./QuotationPaymentsSection";
 import AIClientScanner from "./AIClientScanner";
 
 const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
@@ -62,6 +63,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showSupplierDropdown, setShowSupplierDropdown] = useState(null);
   const [supplierProductsCache, setSupplierProductsCache] = useState({});
   const [showProductPicker, setShowProductPicker] = useState(null);
+  const [payments, setPayments] = useState([]);
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -91,6 +93,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setCommissionPct(0);
     setShowCommission(false);
     setItems([emptyItem()]);
+    setPayments([]);
     try {
       // Load suppliers
       const { data: suppData } = await supabase.from("suppliers").select("*").order("name");
@@ -127,6 +130,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setNotes(quotData.notes || "");
         setCommissionPct(parseFloat(quotData.commission_pct) || 0);
         setShowCommission(quotData.show_commission || false);
+
+        if (quotData.document_type === "proforma" || quotData.document_type === "invoice") {
+          const { data: paymentsData } = await supabase
+            .from("quotation_payments")
+            .select("*")
+            .eq("quotation_id", quotData.id)
+            .order("payment_date");
+          setPayments(paymentsData || []);
+        }
+
         if (quotData.quotation_items?.length > 0) {
           // Load per-item price tiers for this quotation
           const itemIds = quotData.quotation_items.map(qi => qi.id);
@@ -603,6 +616,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         totalAmount={totalAmount}
         commissionPct={parseFloat(commissionPct) || 0}
         showCommission={showCommission}
+        payments={payments}
         onClose={() => setShowPDF(false)}
       />
     );
@@ -1532,6 +1546,17 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           </p>
         </div>
       </div>
+
+      {/* Client Payments — proforma/invoice only */}
+      {savedQuotation && (documentType === "proforma" || documentType === "invoice") && (
+        <QuotationPaymentsSection
+          quotationId={savedQuotation.id}
+          currency={currency}
+          grandTotal={grandTotal}
+          payments={payments}
+          setPayments={setPayments}
+        />
+      )}
 
       {/* Image Lightbox */}
       {previewImage && (

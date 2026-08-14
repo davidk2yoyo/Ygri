@@ -94,6 +94,17 @@ export default function InvoicesPage() {
         tiersByItem[t.quotation_item_id].push(t);
       });
     }
+
+    let payments = [];
+    if (q.document_type === "proforma" || q.document_type === "invoice") {
+      const { data: paymentsData } = await supabase
+        .from("quotation_payments")
+        .select("*")
+        .eq("quotation_id", q.id)
+        .order("payment_date");
+      payments = paymentsData || [];
+    }
+
     setPdfData({
       quotation: q,
       items: (q.quotation_items || []).map(it => ({
@@ -105,6 +116,7 @@ export default function InvoicesPage() {
       clientName: q.company_name,
       projectName: q.track_name,
       totalAmount: Number(q.total_amount || 0),
+      payments,
     });
   };
 
@@ -116,6 +128,7 @@ export default function InvoicesPage() {
         clientName={pdfData.clientName}
         projectName={pdfData.projectName}
         totalAmount={pdfData.totalAmount}
+        payments={pdfData.payments}
         onClose={() => setPdfData(null)}
       />
     );

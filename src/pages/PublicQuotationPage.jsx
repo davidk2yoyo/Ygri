@@ -66,7 +66,17 @@ export default function PublicQuotationPage() {
       const totalAmount = Number(quotation.total_amount || 0);
       const grandTotal = totalAmount + totalAmount * (commissionPct / 100);
 
-      setData({ quotation, items, clientName, projectName, totalAmount, grandTotal, commissionPct });
+      let payments = [];
+      if (quotation.document_type === "proforma" || quotation.document_type === "invoice") {
+        const { data: paymentsData } = await supabase
+          .from("quotation_payments")
+          .select("*")
+          .eq("quotation_id", quotation.id)
+          .order("payment_date");
+        payments = paymentsData || [];
+      }
+
+      setData({ quotation, items, clientName, projectName, totalAmount, grandTotal, commissionPct, payments });
       setLoading(false);
     }
 
@@ -107,6 +117,7 @@ export default function PublicQuotationPage() {
       totalAmount={data.totalAmount}
       commissionPct={data.commissionPct}
       showCommission={data.quotation.show_commission || false}
+      payments={data.payments}
       standalone={true}
       readOnly={true}
     />
