@@ -671,6 +671,18 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                 </svg>
                 Packing List
               </button>
+              {type === "product" && (
+                <button
+                  onClick={() => navigate(`/purchase-orders/new?quotationId=${savedQuotation.id}`)}
+                  title="Purchase Order"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-bgray-200 text-darkblack-700 rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition whitespace-nowrap"
+                >
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 2.25a.75.75 0 01.75.75v.756a49.106 49.106 0 019.152 1 .75.75 0 01-.152 1.485h-1.918l2.474 10.124a.75.75 0 01-.375.84A6.723 6.723 0 0115.75 18a6.723 6.723 0 01-3.181-.795.75.75 0 01-.375-.84l2.474-10.124H9.75v13.5h4.5a.75.75 0 010 1.5H4.75a.75.75 0 010-1.5h4.5V5.75H6.5L8.974 15.87a.75.75 0 01-.375.84A6.723 6.723 0 015.418 17.5a6.723 6.723 0 01-3.181-.795.75.75 0 01-.375-.84L4.336 5.741H2.418a.75.75 0 01-.152-1.485 49.107 49.107 0 019.152-1V3a.75.75 0 01.75-.75z" />
+                  </svg>
+                  Purchase Order
+                </button>
+              )}
               <button
                 onClick={() => setShowPDF(true)}
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-navy-600 text-white rounded-lg text-sm font-medium hover:bg-navy-700 transition"

@@ -23,6 +23,9 @@ import PublicQuotationPage from "./pages/PublicQuotationPage";
 import AnnexEditorPage from "./pages/AnnexEditorPage";
 import AnnexPublicPage from "./pages/AnnexPublicPage";
 import PackingListEditorPage from "./pages/PackingListEditorPage";
+import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
+import PurchaseOrderNewPage from "./pages/PurchaseOrderNewPage";
+import PurchaseOrderDetailPage from "./pages/PurchaseOrderDetailPage";
 import InspectionReportsPage from "./pages/InspectionReportsPage";
 import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
 import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
@@ -72,6 +75,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
           <Route path="/quotations/:quotationId/packing-list" element={<PackingListEditorPage />} />
+          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="/purchase-orders/new" element={<PurchaseOrderNewPage />} />
+          <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
         </Route>
         <Route path="/reports/:reportId/edit" element={
           <ProtectedRoute>
