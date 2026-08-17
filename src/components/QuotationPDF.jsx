@@ -244,6 +244,16 @@ export default function QuotationPDF({
   const printRef = useRef(null);
   const navigate = useNavigate();
   const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [clientDetails, setClientDetails] = useState(null);
+
+  useEffect(() => {
+    if (!clientName) { setClientDetails(null); return; }
+    let cancelled = false;
+    supabase.from("clients").select("*").eq("company_name", clientName).maybeSingle().then(({ data }) => {
+      if (!cancelled) setClientDetails(data || null);
+    });
+    return () => { cancelled = true; };
+  }, [clientName]);
 
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const currency = quotation.currency || "USD";
@@ -459,7 +469,21 @@ export default function QuotationPDF({
           <div style={{ fontWeight: "700", fontSize: "14px", color: "#1a1a1a", marginBottom: "2px" }}>
             {clientName?.toUpperCase() || "CLIENT NAME"}
           </div>
-          <div style={{ fontSize: "11px", color: "#555" }}>{projectName}</div>
+          <div style={{ fontSize: "11px", color: "#555", marginBottom: clientDetails ? "4px" : "0" }}>{projectName}</div>
+          {clientDetails?.contact_person && (
+            <div style={{ fontSize: "11px", color: "#555" }}>Attn: {clientDetails.contact_person}</div>
+          )}
+          {clientDetails?.address && (
+            <div style={{ fontSize: "11px", color: "#555" }}>
+              {[clientDetails.address, clientDetails.city, clientDetails.country].filter(Boolean).join(", ")}
+            </div>
+          )}
+          {clientDetails?.phone && (
+            <div style={{ fontSize: "11px", color: "#555" }}>Tel: {clientDetails.phone}</div>
+          )}
+          {clientDetails?.email && (
+            <div style={{ fontSize: "11px", color: "#555" }}>{clientDetails.email}</div>
+          )}
         </div>
 
         <div style={{
