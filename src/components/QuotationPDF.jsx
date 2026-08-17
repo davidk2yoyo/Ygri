@@ -470,6 +470,9 @@ export default function QuotationPDF({
             {clientName?.toUpperCase() || "CLIENT NAME"}
           </div>
           <div style={{ fontSize: "11px", color: "#555", marginBottom: clientDetails ? "4px" : "0" }}>{projectName}</div>
+          {clientDetails?.rut_nit && (
+            <div style={{ fontSize: "11px", color: "#555" }}>RUT/NIT: {clientDetails.rut_nit}</div>
+          )}
           {clientDetails?.contact_person && (
             <div style={{ fontSize: "11px", color: "#555" }}>Attn: {clientDetails.contact_person}</div>
           )}
