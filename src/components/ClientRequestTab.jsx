@@ -23,6 +23,8 @@ const SUMMARY_FIELDS = [
   { key: "open_questions", label: "Open Questions", icon: "❓" },
 ];
 
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
 const toBase64 = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -91,7 +93,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: existing } = await supabase.from("client_requests").select("*").eq("track_id", trackId).single();
+      const { data: existing } = await supabase.from("client_requests").select("*").eq("track_id", trackId).maybeSingle();
       if (existing) {
         setClientRequest(existing);
         setRawText(existing.raw_text || "");
@@ -175,25 +177,42 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
     }
   };
 
-  const handleFileUpload = async (file) => {
-    if (!file) return;
+  // Uploads and processes files ONE AT A TIME (never in parallel) — bursts of
+  // simultaneous Supabase requests (storage + insert + status updates + AI
+  // calls, multiplied by several files at once) are what triggers the auth
+  // rate-limit / forced-logout bug on this project, so every file's full
+  // upload+extraction cycle finishes before the next one starts.
+  const handleFilesUpload = async (fileList) => {
+    const fileArray = Array.from(fileList || []).filter(Boolean);
+    if (fileArray.length === 0) return;
     setUploadingFile(true);
+    let uploaded = 0;
+    let failed = 0;
     try {
       const req = await ensureRequest();
-      const path = `${trackId}/${Date.now()}-${file.name}`;
-      const { error: upErr } = await supabase.storage.from("client-request-files").upload(path, file);
-      if (upErr) throw upErr;
-      const { data: { publicUrl } } = supabase.storage.from("client-request-files").getPublicUrl(path);
-      const { data: fileRow, error: insErr } = await supabase.from("client_request_files").insert({
-        client_request_id: req.id,
-        file_url: publicUrl,
-        file_name: file.name,
-        file_size: file.size,
-      }).select().single();
-      if (insErr) throw insErr;
-      setFiles(prev => [...prev, fileRow]);
-      sileo.success({ title: "File uploaded — reading content…" });
-      runExtraction(fileRow, file);
+      for (const file of fileArray) {
+        try {
+          const path = `${trackId}/${Date.now()}-${file.name}`;
+          const { error: upErr } = await supabase.storage.from("client-request-files").upload(path, file);
+          if (upErr) throw upErr;
+          const { data: { publicUrl } } = supabase.storage.from("client-request-files").getPublicUrl(path);
+          const { data: fileRow, error: insErr } = await supabase.from("client_request_files").insert({
+            client_request_id: req.id,
+            file_url: publicUrl,
+            file_name: file.name,
+            file_size: file.size,
+          }).select().single();
+          if (insErr) throw insErr;
+          setFiles(prev => [...prev, fileRow]);
+          uploaded++;
+          await runExtraction(fileRow, file);
+        } catch (e) {
+          failed++;
+        }
+        await sleep(250);
+      }
+      if (uploaded > 0) sileo.success({ title: `${uploaded} file${uploaded !== 1 ? "s" : ""} uploaded — content read automatically` });
+      if (failed > 0) sileo.error({ title: `${failed} file${failed !== 1 ? "s" : ""} failed to upload` });
     } catch (e) {
       sileo.error({ title: "Upload failed", description: e.message });
     } finally {
@@ -224,16 +243,14 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
   };
 
   const handleFileInputChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) handleFileUpload(file);
+    handleFilesUpload(e.target.files);
     e.target.value = "";
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFileUpload(file);
+    handleFilesUpload(e.dataTransfer.files);
   };
 
   const generateSummary = async () => {
@@ -529,7 +546,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
           <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1">
             Files <span className="font-normal text-bgray-400">— images and PDFs are read automatically for the digest</span>
           </label>
-          <input ref={fileRef} type="file" className="hidden" onChange={handleFileInputChange} />
+          <input ref={fileRef} type="file" multiple className="hidden" onChange={handleFileInputChange} />
           <div
             onDragOver={e => { e.preventDefault(); setDragOver(true); }}
             onDragLeave={() => setDragOver(false)}
@@ -542,7 +559,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             {uploadingFile ? (
               <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block" />
             ) : (
-              <span className="text-sm text-bgray-400">Drag & drop a file, or click to browse</span>
+              <span className="text-sm text-bgray-400">Drag & drop files, or click to browse (multiple allowed)</span>
             )}
           </div>
           {files.length > 0 && (

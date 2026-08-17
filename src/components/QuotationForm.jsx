@@ -207,6 +207,24 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
   const totalMarginAmount = totalAmount - totalCostAmount;
   const totalMarginPct = totalAmount > 0 ? (totalMarginAmount / totalAmount * 100) : 0;
+
+  const costBySupplier = (() => {
+    if (type !== "product") return [];
+    const rate = parseFloat(supplierExchangeRate) || 0;
+    const map = {};
+    items.forEach(it => {
+      if (!it.supplier_id) return;
+      const supplierPriceRaw = parseFloat(it.supplier_price) || 0;
+      if (!supplierPriceRaw) return;
+      const isFx = it.supplier_currency && it.supplier_currency !== currency;
+      const supplierPriceInDocCurrency = isFx && rate > 0 ? supplierPriceRaw / rate : supplierPriceRaw;
+      const amount = supplierPriceInDocCurrency * (parseInt(it.quantity) || 1);
+      map[it.supplier_id] = (map[it.supplier_id] || 0) + amount;
+    });
+    return Object.entries(map)
+      .map(([supplierId, amount]) => ({ supplierId, name: suppliers.find(s => s.id === supplierId)?.name || "Unknown supplier", amount }))
+      .sort((a, b) => b.amount - a.amount);
+  })();
   const marginColor = totalMarginPct >= 20 ? "text-green-600" : totalMarginPct >= 10 ? "text-amber-600" : "text-red-500";
 
   // ---------- Item helpers ----------
@@ -1543,9 +1561,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             </p>
           )}
           {type === "product" && totalCostAmount > 0 && (
-            <p className="text-xs text-bgray-400 mb-1">
-              Total Cost: {currency} {totalCostAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-            </p>
+            <div className="mb-1">
+              <p className="text-xs text-bgray-400">
+                Total Cost (all suppliers): {currency} {totalCostAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </p>
+              {costBySupplier.length > 1 && (
+                <div className="mt-1 space-y-0.5">
+                  {costBySupplier.map(s => (
+                    <p key={s.supplierId} className="text-[11px] text-bgray-500 dark:text-bgray-400">
+                      🏭 {s.name}: {currency} {s.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </p>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
           {type === "product" && totalMarginAmount > 0 && (
             <p className={`text-xs font-medium mb-2 ${marginColor}`}>
