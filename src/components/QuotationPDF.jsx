@@ -624,9 +624,48 @@ export default function QuotationPDF({
         </tbody>
       </table>
 
-      {/* ── Totals ── */}
-      <div className="pdf-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "28px" }}>
-        <div style={{ minWidth: "260px" }}>
+      {/* ── Terms/Bank (left) + Totals/Payment Status (right) ── */}
+      <div className="pdf-block" style={{ display: "flex", justifyContent: "space-between", gap: "24px", marginBottom: "28px", alignItems: "flex-start" }}>
+        {/* Left column */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {(quotation.notes || quotation.negotiation_term) && (
+            <div style={{ marginBottom: "16px" }}>
+              <div style={{ fontSize: "11px", color: "#888", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", fontWeight: "700" }}>
+                Notes / Terms
+              </div>
+              {quotation.negotiation_term && (
+                <div style={{ fontSize: "12px", color: "#1a1a1a", marginBottom: "4px" }}>
+                  <strong>Negotiation Terms:</strong> {quotation.negotiation_term}
+                </div>
+              )}
+              {quotation.notes && (
+                <div style={{ fontSize: "12px", color: "#555", whiteSpace: "pre-wrap" }}>{quotation.notes}</div>
+              )}
+            </div>
+          )}
+
+          <div style={{
+            backgroundColor: "#f7f8fa",
+            border: "1px solid #e0e4ea",
+            borderRadius: "8px",
+            padding: "14px 16px",
+            fontSize: "11px",
+          }}>
+            <div style={{ fontWeight: "700", fontSize: "12px", color: "#1a1a1a", marginBottom: "8px" }}>Bank Details:</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+              <div><span style={{ color: "#777" }}>Company Name: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.company}</span></div>
+              <div><span style={{ color: "#777" }}>Address: </span><span>{BANK_DETAILS.address}</span></div>
+              <div><span style={{ color: "#777" }}>Account Number: </span><span style={{ fontWeight: "600", fontFamily: "monospace" }}>{BANK_DETAILS.accountNumber}</span></div>
+              <div><span style={{ color: "#777" }}>Bank Name: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.bankName}</span></div>
+              <div><span style={{ color: "#777" }}>Bank Address: </span><span>{BANK_DETAILS.bankAddress}</span></div>
+              <div><span style={{ color: "#777" }}>Bank Code: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.bankCode}</span></div>
+              <div><span style={{ color: "#777" }}>SWIFT Code: </span><span style={{ fontWeight: "600", fontFamily: "monospace" }}>{BANK_DETAILS.swift}</span></div>
+            </div>
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div style={{ minWidth: "260px", flexShrink: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid #e8eaed", fontSize: "13px" }}>
             <span style={{ color: "#555" }}>Subtotal:</span>
             <span style={{ fontWeight: "600" }}>{currency} {formatMoney(totalAmount)}</span>
@@ -647,70 +686,30 @@ export default function QuotationPDF({
             <span style={{ color: "#fff", fontWeight: "700", fontSize: "14px" }}>{docMeta.amountLabel} ({currency}):</span>
             <span style={{ color: "#c9922a", fontWeight: "900", fontSize: "16px" }}>${formatMoney(grandTotal)}</span>
           </div>
-        </div>
-      </div>
 
-      {/* ── Payment Status ── */}
-      {showPayments && (
-        <div className="pdf-block" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "28px" }}>
-          <div style={{ minWidth: "260px", border: "1px solid #e0e4ea", borderRadius: "8px", overflow: "hidden" }}>
-            <div style={{ padding: "10px 16px", backgroundColor: "#f7f8fa", fontSize: "11px", fontWeight: "700", color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-              Payment Status
-            </div>
-            <div style={{ padding: "12px 16px" }}>
-              {payments.map((p, i) => (
-                <div key={p.id || i} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#555", marginBottom: "4px" }}>
-                  <span>{formatDateLong(p.payment_date)}{p.method ? ` · ${p.method}` : ""}</span>
-                  <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{p.currency} {formatMoney(p.amount)}</span>
+          {showPayments && (
+            <div style={{ marginTop: "16px", border: "1px solid #e0e4ea", borderRadius: "8px", overflow: "hidden" }}>
+              <div style={{ padding: "10px 16px", backgroundColor: "#f7f8fa", fontSize: "11px", fontWeight: "700", color: "#1e3a5f", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                Payment Status
+              </div>
+              <div style={{ padding: "12px 16px" }}>
+                {payments.map((p, i) => (
+                  <div key={p.id || i} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#555", marginBottom: "4px" }}>
+                    <span>{formatDateLong(p.payment_date)}{p.method ? ` · ${p.method}` : ""}</span>
+                    <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{p.currency} {formatMoney(p.amount)}</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0", marginTop: "6px", borderTop: "1px solid #e8eaed", fontSize: "13px" }}>
+                  <span style={{ color: "#16a34a", fontWeight: "700" }}>Paid:</span>
+                  <span style={{ fontWeight: "700", color: "#16a34a" }}>{currency} {formatMoney(totalPaid)}</span>
                 </div>
-              ))}
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0 0", marginTop: "6px", borderTop: "1px solid #e8eaed", fontSize: "13px" }}>
-                <span style={{ color: "#16a34a", fontWeight: "700" }}>Paid:</span>
-                <span style={{ fontWeight: "700", color: "#16a34a" }}>{currency} {formatMoney(totalPaid)}</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", fontSize: "13px" }}>
-                <span style={{ color: balanceDue > 0.004 ? "#c9922a" : "#16a34a", fontWeight: "700" }}>Balance Due:</span>
-                <span style={{ fontWeight: "900", color: balanceDue > 0.004 ? "#c9922a" : "#16a34a" }}>{currency} {formatMoney(balanceDue)}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0 0", fontSize: "13px" }}>
+                  <span style={{ color: balanceDue > 0.004 ? "#c9922a" : "#16a34a", fontWeight: "700" }}>Balance Due:</span>
+                  <span style={{ fontWeight: "900", color: balanceDue > 0.004 ? "#c9922a" : "#16a34a" }}>{currency} {formatMoney(balanceDue)}</span>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── Notes / Terms ── */}
-      {(quotation.notes || quotation.negotiation_term) && (
-        <div className="pdf-block" style={{ marginBottom: "28px" }}>
-          <div style={{ fontSize: "11px", color: "#888", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "8px", fontWeight: "700" }}>
-            Notes / Terms
-          </div>
-          {quotation.negotiation_term && (
-            <div style={{ fontSize: "12px", color: "#1a1a1a", marginBottom: "4px" }}>
-              <strong>Negotiation Terms:</strong> {quotation.negotiation_term}
-            </div>
           )}
-          {quotation.notes && (
-            <div style={{ fontSize: "12px", color: "#555", whiteSpace: "pre-wrap" }}>{quotation.notes}</div>
-          )}
-        </div>
-      )}
-
-      {/* ── Bank Details ── */}
-      <div className="pdf-block" style={{
-        backgroundColor: "#f7f8fa",
-        border: "1px solid #e0e4ea",
-        borderRadius: "8px",
-        padding: "16px 20px",
-        fontSize: "11px",
-      }}>
-        <div style={{ fontWeight: "700", fontSize: "12px", color: "#1a1a1a", marginBottom: "8px" }}>Bank Details:</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "4px 24px" }}>
-          <div><span style={{ color: "#777" }}>Company Name: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.company}</span></div>
-          <div><span style={{ color: "#777" }}>Bank Name: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.bankName}</span></div>
-          <div><span style={{ color: "#777" }}>Address: </span><span>{BANK_DETAILS.address}</span></div>
-          <div><span style={{ color: "#777" }}>Bank Address: </span><span>{BANK_DETAILS.bankAddress}</span></div>
-          <div><span style={{ color: "#777" }}>Account Number: </span><span style={{ fontWeight: "600", fontFamily: "monospace" }}>{BANK_DETAILS.accountNumber}</span></div>
-          <div><span style={{ color: "#777" }}>Bank Code: </span><span style={{ fontWeight: "600" }}>{BANK_DETAILS.bankCode}</span></div>
-          <div><span style={{ color: "#777" }}>SWIFT Code: </span><span style={{ fontWeight: "600", fontFamily: "monospace" }}>{BANK_DETAILS.swift}</span></div>
         </div>
       </div>
 
