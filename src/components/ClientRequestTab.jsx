@@ -361,29 +361,96 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
     if (!el) return;
     setDownloadingPDF(true);
     try {
+      const prevMinH = el.style.minHeight;
+      el.style.minHeight = "auto";
       await new Promise(r => setTimeout(r, 50));
 
-      // Measure each attached file's label position (in CSS px, relative to the
-      // printed element) before capture — used to overlay real clickable links,
-      // since html2canvas rasterizes everything into a plain image
+      const scale = 2;
       const elRect = el.getBoundingClientRect();
       const elWidthPx = elRect.width;
+
+      // Measure each attached file's label position (in scaled canvas px,
+      // relative to the printed element) before capture — used to overlay
+      // real clickable links, since html2canvas rasterizes everything into
+      // a plain image. left/width stay in CSS px (page width never changes).
       const fileLinkRects = [...el.querySelectorAll("[data-file-id]")].map(node => {
         const r = node.getBoundingClientRect();
         const fileUrl = files.find(f => String(f.id) === node.getAttribute("data-file-id"))?.file_url;
-        return { url: fileUrl, top: r.top - elRect.top, left: r.left - elRect.left, width: r.width, height: r.height };
+        return {
+          url: fileUrl,
+          top: (r.top - elRect.top) * scale,
+          bottom: (r.bottom - elRect.top) * scale,
+          left: r.left - elRect.left,
+          width: r.width,
+        };
       }).filter(r => r.url);
 
-      const canvas = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: "#ffffff" });
+      // Measure unbreakable blocks so page cuts never slice through a section
+      const blocks = [...el.querySelectorAll(".pdf-block")].map(b => {
+        const r = b.getBoundingClientRect();
+        return { top: (r.top - elRect.top) * scale, bottom: (r.bottom - elRect.top) * scale };
+      });
+
+      const canvas = await html2canvas(el, { scale, useCORS: true, backgroundColor: "#ffffff" });
+      el.style.minHeight = prevMinH;
+
       const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
       const pdfW = pdf.internal.pageSize.getWidth();
-      const pdfH = (canvas.height * pdfW) / canvas.width;
-      pdf.addImage(canvas.toDataURL("image/jpeg", 0.9), "JPEG", 0, 0, pdfW, pdfH);
+      const pdfPageH = pdf.internal.pageSize.getHeight();
+      const pxPerMm = canvas.width / pdfW;
+      const topM = 8, botM = 8;
+      const fullHpx = pdfPageH * pxPerMm;
+      const topMpx = topM * pxPerMm;
+      const botMpx = botM * pxPerMm;
 
-      // Overlay real clickable link annotations on top of each file name
+      // Compute cut positions that never slice through a block: if the natural
+      // cut lands inside a section, move the cut up to that section's top edge
+      const cuts = [];
+      let cursor = 0;
+      let cap = fullHpx - botMpx;
+      while (cursor + cap < canvas.height) {
+        let cut = cursor + cap;
+        const straddling = blocks.filter(b => b.top < cut && b.bottom > cut && b.top > cursor);
+        if (straddling.length) {
+          const minTop = Math.min(...straddling.map(b => b.top));
+          if (minTop > cursor + cap * 0.25) cut = minTop;
+        }
+        cuts.push(cut);
+        cursor = cut;
+        cap = fullHpx - topMpx - botMpx;
+      }
+
+      const pageEnds = [...cuts, canvas.height];
+      let prev = 0;
+      const pages = [];
+      pageEnds.forEach((end, i) => {
+        const sliceH = Math.ceil(end - prev);
+        if (sliceH <= 0) return;
+        const tmp = window.document.createElement("canvas");
+        tmp.width = canvas.width;
+        tmp.height = sliceH;
+        const ctx = tmp.getContext("2d");
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, tmp.width, tmp.height);
+        ctx.drawImage(canvas, 0, prev, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        const img = tmp.toDataURL("image/jpeg", 0.9);
+        if (i > 0) pdf.addPage();
+        const yOffsetMm = i === 0 ? 0 : topM;
+        pdf.addImage(img, "JPEG", 0, yOffsetMm, pdfW, (sliceH * pdfW) / canvas.width);
+        pages.push({ pageNumber: pages.length + 1, start: prev, end, yOffsetMm });
+        prev = end;
+      });
+
+      // Overlay real clickable link annotations, mapped onto whichever page
+      // each file's label actually landed on
       const mmPerPx = pdfW / elWidthPx;
       fileLinkRects.forEach(r => {
-        pdf.link(r.left * mmPerPx, r.top * mmPerPx, r.width * mmPerPx, r.height * mmPerPx, { url: r.url });
+        const page = pages.find(p => r.top >= p.start && r.top < p.end) || pages[pages.length - 1];
+        if (!page) return;
+        pdf.setPage(page.pageNumber);
+        const yMm = page.yOffsetMm + ((r.top - page.start) * pdfW) / canvas.width;
+        const hMm = ((r.bottom - r.top) * pdfW) / canvas.width;
+        pdf.link(r.left * mmPerPx, yMm, r.width * mmPerPx, hMm, { url: r.url });
       });
 
       pdf.save(`Client_Request_${(projectName || "digest").replace(/\s+/g, "_")}.pdf`);
@@ -436,9 +503,16 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
               <button
                 onClick={handleDownloadPDF}
                 disabled={downloadingPDF}
-                className="flex items-center gap-1 text-xs text-bgray-500 dark:text-bgray-400 hover:text-primary disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition disabled:opacity-50 whitespace-nowrap"
               >
-                {downloadingPDF ? "Generating…" : "⬇ PDF"}
+                {downloadingPDF ? (
+                  <span className="w-3.5 h-3.5 border-2 border-bgray-400 border-t-transparent rounded-full animate-spin inline-block" />
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                )}
+                {downloadingPDF ? "Generating…" : "Download PDF"}
               </button>
             )}
           </div>
@@ -660,7 +734,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
 
           {hasSummary ? (
             SUMMARY_FIELDS.map(f => (
-              <div key={f.key} style={{ marginBottom: "18px" }}>
+              <div key={f.key} className="pdf-block" style={{ marginBottom: "18px" }}>
                 <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                   {f.icon} {f.label}
                 </div>
@@ -672,7 +746,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
               </div>
             ))
           ) : rawText.trim() && (
-            <div style={{ marginBottom: "18px" }}>
+            <div className="pdf-block" style={{ marginBottom: "18px" }}>
               <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 💬 Client Conversation
               </div>
@@ -681,7 +755,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
           )}
 
           {teamNotes.trim() && (
-            <div style={{ marginBottom: "18px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 14px" }}>
+            <div className="pdf-block" style={{ marginBottom: "18px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 14px" }}>
               <div style={{ fontSize: "12px", fontWeight: "700", color: "#92400e", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
                 📌 Team Notes / Instructions
               </div>
@@ -693,7 +767,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             <div style={{ marginBottom: "18px" }}>
               <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase" }}>🔗 Links</div>
               <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                {links.map((l, i) => <li key={i} style={{ fontSize: "12px", color: "#555", marginBottom: "3px", wordBreak: "break-all" }}>{l}</li>)}
+                {links.map((l, i) => <li key={i} className="pdf-block" style={{ fontSize: "12px", color: "#555", marginBottom: "3px", wordBreak: "break-all" }}>{l}</li>)}
               </ul>
             </div>
           )}
@@ -706,7 +780,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
               {files.filter(f => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", marginBottom: "12px" }}>
                   {files.filter(f => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).map(f => (
-                    <div key={f.id} data-file-id={f.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "180px" }}>
+                    <div key={f.id} data-file-id={f.id} className="pdf-block" style={{ display: "flex", flexDirection: "column", alignItems: "center", maxWidth: "180px" }}>
                       <img
                         src={f.file_url}
                         alt={f.file_name}
@@ -725,7 +799,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
               {files.filter(f => !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).length > 0 && (
                 <ul style={{ margin: 0, paddingLeft: "18px" }}>
                   {files.filter(f => !/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(f.file_name)).map(f => (
-                    <li key={f.id} data-file-id={f.id} style={{ fontSize: "12px", marginBottom: "5px" }}>
+                    <li key={f.id} data-file-id={f.id} className="pdf-block" style={{ fontSize: "12px", marginBottom: "5px" }}>
                       <a href={f.file_url} target="_blank" rel="noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>
                         {f.file_name}{f.description ? ` — ${f.description}` : ""}
                       </a>
