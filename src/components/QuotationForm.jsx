@@ -64,6 +64,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [supplierProductsCache, setSupplierProductsCache] = useState({});
   const [showProductPicker, setShowProductPicker] = useState(null);
   const [payments, setPayments] = useState([]);
+  const [payingSupplierId, setPayingSupplierId] = useState(null);
 
   // New supplier form state
   const [newSupplier, setNewSupplier] = useState({
@@ -226,6 +227,64 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       .sort((a, b) => b.amount - a.amount);
   })();
   const marginColor = totalMarginPct >= 20 ? "text-green-600" : totalMarginPct >= 10 ? "text-amber-600" : "text-red-500";
+
+  // Jump to (or create) the Purchase Order for this supplier's items on this
+  // quotation, so payments can be registered without duplicating that flow
+  const goToSupplierPayment = async (supplierId) => {
+    if (!savedQuotation) return;
+    setPayingSupplierId(supplierId);
+    try {
+      const { data: existingPO } = await supabase
+        .from("purchase_orders")
+        .select("id")
+        .eq("quotation_id", savedQuotation.id)
+        .eq("supplier_id", supplierId)
+        .maybeSingle();
+      if (existingPO) {
+        navigate(`/purchase-orders/${existingPO.id}`);
+        return;
+      }
+
+      const { data: supplierItems, error: itemsErr } = await supabase
+        .from("quotation_items")
+        .select("*")
+        .eq("quotation_id", savedQuotation.id)
+        .eq("supplier_id", supplierId);
+      if (itemsErr) throw itemsErr;
+      if (!supplierItems?.length) {
+        setError("No saved items found for this supplier — save the quotation first.");
+        return;
+      }
+
+      const poCurrency = supplierItems[0]?.supplier_currency || currency;
+      const { data: po, error: poErr } = await supabase.from("purchase_orders").insert({
+        track_id: trackId,
+        quotation_id: savedQuotation.id,
+        supplier_id: supplierId,
+        currency: poCurrency,
+      }).select().single();
+      if (poErr) throw poErr;
+
+      const poItems = supplierItems.map((it, idx) => ({
+        purchase_order_id: po.id,
+        quotation_item_id: it.id,
+        item_number: it.item_number,
+        description: it.description,
+        picture_url: it.picture_url,
+        quantity: it.quantity,
+        price: parseFloat(it.supplier_price) || 0,
+        sort_order: idx,
+      }));
+      const { error: poItemsErr } = await supabase.from("purchase_order_items").insert(poItems);
+      if (poItemsErr) throw poItemsErr;
+
+      navigate(`/purchase-orders/${po.id}`);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setPayingSupplierId(null);
+    }
+  };
 
   // ---------- Item helpers ----------
   const updateItem = (idx, field, value) => {
@@ -1551,6 +1610,49 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         </div>
       </div>
 
+      {/* Supplier Costs — internal only, readable card */}
+      {type === "product" && totalCostAmount > 0 && (
+        <div className="bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-bold text-darkblack-700 dark:text-white flex items-center gap-1.5">
+              🏭 Supplier Costs
+              <span className="text-[10px] font-medium text-amber-600 bg-amber-50 dark:bg-amber-900/20 px-1.5 py-0.5 rounded-full">Internal</span>
+            </h4>
+            <span className="text-base font-bold text-darkblack-700 dark:text-white">
+              {currency} {totalCostAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+            </span>
+          </div>
+          {costBySupplier.length > 0 && (
+            <div className="space-y-2 pt-3 border-t border-bgray-100 dark:border-darkblack-500">
+              {costBySupplier.map(s => (
+                <div key={s.supplierId} className="flex items-center justify-between gap-3">
+                  <span className="text-sm text-bgray-600 dark:text-bgray-300 truncate">{s.name}</span>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-sm font-semibold text-darkblack-700 dark:text-white">
+                      {currency} {s.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                    </span>
+                    {savedQuotation && (
+                      <button
+                        onClick={() => goToSupplierPayment(s.supplierId)}
+                        disabled={payingSupplierId === s.supplierId}
+                        className="flex items-center gap-1 text-xs text-primary hover:underline font-medium disabled:opacity-50 whitespace-nowrap"
+                      >
+                        {payingSupplierId === s.supplierId ? "Opening..." : "💳 Register Payment"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {totalMarginAmount > 0 && (
+            <p className={`text-xs font-semibold mt-3 pt-3 border-t border-bgray-100 dark:border-darkblack-500 ${marginColor}`}>
+              Margin: {currency} {totalMarginAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({totalMarginPct.toFixed(1)}%)
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Total */}
       <div className="flex justify-end">
         <div className="bg-darkblack-700 dark:bg-darkblack-400 rounded-xl px-6 py-4 text-right">
@@ -1558,27 +1660,6 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             <p className="text-xs text-bgray-400 mb-1">
               Subtotal: {currency} {totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               {" · "}Commission ({commissionPct}%): {currency} {commissionAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-          )}
-          {type === "product" && totalCostAmount > 0 && (
-            <div className="mb-1">
-              <p className="text-xs text-bgray-400">
-                Total Cost (all suppliers): {currency} {totalCostAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-              </p>
-              {costBySupplier.length > 1 && (
-                <div className="mt-1 space-y-0.5">
-                  {costBySupplier.map(s => (
-                    <p key={s.supplierId} className="text-[11px] text-bgray-500 dark:text-bgray-400">
-                      🏭 {s.name}: {currency} {s.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                    </p>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {type === "product" && totalMarginAmount > 0 && (
-            <p className={`text-xs font-medium mb-2 ${marginColor}`}>
-              Total Margin: {currency} {totalMarginAmount.toLocaleString("en-US", { minimumFractionDigits: 2 })} ({totalMarginPct.toFixed(1)}%)
             </p>
           )}
           <p className="text-xs text-bgray-300 uppercase tracking-wider mb-1">Total Amount</p>
