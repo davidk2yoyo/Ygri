@@ -244,6 +244,25 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
     }
   };
 
+  // Ctrl+V a screenshot anywhere on this tab — treated exactly like a
+  // dropped/selected image file (uploaded + auto-read for the digest).
+  // Uses a ref so the listener (registered once) always calls the latest
+  // handleFilesUpload closure instead of a stale one.
+  const handleFilesUploadRef = useRef();
+  handleFilesUploadRef.current = handleFilesUpload;
+
+  useEffect(() => {
+    const handlePaste = (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items.filter(it => it.type.startsWith("image/")).map(it => it.getAsFile()).filter(Boolean);
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      handleFilesUploadRef.current(imageFiles);
+    };
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, []);
+
   const removeFile = async (fileRow) => {
     try {
       const { error } = await supabase.from("client_request_files").delete().eq("id", fileRow.id);
@@ -280,7 +299,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
   const generateSummary = async () => {
     const filesWithText = files.filter(f => f.extraction_status === "done" && f.extracted_text?.trim());
     if (!rawText.trim() && links.length === 0 && filesWithText.length === 0) {
-      sileo.warning({ title: "Add the conversation text, a link, or a file first" });
+      sileo.warning({ title: "Nothing to summarize yet", description: "Add the client conversation, a link, or a file — or just skip this and use Save + PDF with your Team Notes directly." });
       return;
     }
     setGenerating(true);
@@ -413,7 +432,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             {hasSummary && editingSummary && (
               <button onClick={saveSummaryEdits} className="text-xs text-primary hover:underline font-medium">✓ Done editing</button>
             )}
-            {hasSummary && (
+            {(hasSummary || teamNotes.trim() || rawText.trim() || links.length > 0 || files.length > 0) && (
               <button
                 onClick={handleDownloadPDF}
                 disabled={downloadingPDF}
@@ -514,13 +533,13 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
       <div className="space-y-4">
         <div>
           <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1">
-            Client Conversation (paste WhatsApp text, emails, etc.)
+            Client Conversation (paste WhatsApp text, emails, etc.) <span className="font-normal text-bgray-400">— or Ctrl+V a screenshot anywhere on this page, it's read automatically</span>
           </label>
           <textarea
             rows={8}
             value={rawText}
             onChange={e => setRawText(e.target.value)}
-            placeholder="Paste the raw conversation with the client here..."
+            placeholder="Paste the raw conversation with the client here, or Ctrl+V a screenshot..."
             className={`${inputCls} resize-y`}
           />
         </div>
@@ -571,7 +590,7 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             {uploadingFile ? (
               <span className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin inline-block" />
             ) : (
-              <span className="text-sm text-bgray-400">Drag & drop files, or click to browse (multiple allowed)</span>
+              <span className="text-sm text-bgray-400">Drag & drop files, click to browse, or Ctrl+V a screenshot (multiple allowed)</span>
             )}
           </div>
           {files.length > 0 && (
@@ -639,18 +658,27 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             </div>
           </div>
 
-          {SUMMARY_FIELDS.map(f => (
-            <div key={f.key} style={{ marginBottom: "18px" }}>
-              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                {f.icon} {f.label}
+          {hasSummary ? (
+            SUMMARY_FIELDS.map(f => (
+              <div key={f.key} style={{ marginBottom: "18px" }}>
+                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                  {f.icon} {f.label}
+                </div>
+                {summary[f.key]?.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={pdfMarkdownComponents}>{summary[f.key]}</ReactMarkdown>
+                ) : (
+                  <div style={{ fontSize: "13px", color: "#aaa" }}>—</div>
+                )}
               </div>
-              {summary[f.key]?.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={pdfMarkdownComponents}>{summary[f.key]}</ReactMarkdown>
-              ) : (
-                <div style={{ fontSize: "13px", color: "#aaa" }}>—</div>
-              )}
+            ))
+          ) : rawText.trim() && (
+            <div style={{ marginBottom: "18px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                💬 Client Conversation
+              </div>
+              <div style={{ fontSize: "12px", color: "#555", whiteSpace: "pre-wrap" }}>{rawText}</div>
             </div>
-          ))}
+          )}
 
           {teamNotes.trim() && (
             <div style={{ marginBottom: "18px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 14px" }}>
