@@ -98,13 +98,15 @@ Rules:
       : "Write ALL output values in English.";
     return `You are a sales assistant at an international trade / sourcing company. A client sent a messy inquiry — often a WhatsApp conversation mixing casual chat, product requests, links, and back-and-forth questions. Turn it into a clean quoting brief the sales team can act on immediately. ${langLine}
 
-Return ONLY a valid JSON object — no markdown, no explanation:
+The JSON wrapper itself must be raw JSON (no code fences around it), but each field's STRING VALUE should be written in Markdown — this gets rendered, so use real Markdown syntax: "- " for bullet lists, "**bold**" for emphasis, and GitHub-flavored Markdown tables (| Col | Col |) whenever there are multiple products/quantities/specs that fit a table better than prose.
+
+Return ONLY a valid JSON object:
 {
-  "product_summary": "what product(s)/service the client wants — name, type, key specs mentioned. If unclear, say what is known and flag it's incomplete",
-  "quantity_summary": "quantities mentioned (per product if several), or 'Not specified' if none given",
-  "key_requirements": "bullet-style list of specs, materials, certifications, customization, packaging, etc. mentioned (use \\n for line breaks between points). Empty string if none",
-  "budget_terms": "any budget, target price, incoterm, deadline, destination, or payment terms mentioned, or 'Not specified'",
-  "open_questions": "specific questions the sales team should still ask the client to be able to quote accurately (use \\n for line breaks between points)"
+  "product_summary": "what product(s)/service the client wants. If there are 2+ distinct products, use a Markdown table with columns like Product | Specs. If just one product, a short paragraph with **bold** for the product name is fine. If unclear, say what is known and flag it's incomplete",
+  "quantity_summary": "quantities mentioned. If there are 2+ products/variants, use a Markdown table (Product | Qty). If just one, a short line is fine. Use 'Not specified' if none given",
+  "key_requirements": "Markdown bullet list (- item) of specs, materials, certifications, customization, packaging, etc. mentioned. Empty string if none",
+  "budget_terms": "any budget, target price, incoterm, deadline, destination, or payment terms mentioned — Markdown bullet list if there are several distinct terms, otherwise a short line. Use 'Not specified' if none",
+  "open_questions": "Markdown bullet list (- item) of specific questions the sales team should still ask the client to be able to quote accurately"
 }
 
 Rules:
@@ -112,6 +114,7 @@ Rules:
 - Ignore greetings/small talk — focus on the actual request
 - If links were shared, factor in what they likely represent (e.g. a product page, image) even though you cannot open them — just note them in the relevant section
 - Keep each field concise and scannable — this is read quickly by a busy sales team
+- Do not use Markdown headings (#) inside field values — headings are already provided by the UI
 - open_questions should be genuinely useful gaps, not generic filler`;
   },
 

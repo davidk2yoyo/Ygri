@@ -3,8 +3,34 @@ import * as pdfjsLib from "pdfjs-dist";
 import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
+
+const markdownComponents = {
+  p: (props) => <p className="text-sm text-darkblack-700 dark:text-white mb-2 last:mb-0" {...props} />,
+  strong: (props) => <strong className="font-semibold text-darkblack-700 dark:text-white" {...props} />,
+  ul: (props) => <ul className="list-disc list-outside pl-5 space-y-1 mb-2 marker:text-primary" {...props} />,
+  ol: (props) => <ol className="list-decimal list-outside pl-5 space-y-1 mb-2" {...props} />,
+  li: (props) => <li className="text-sm text-darkblack-700 dark:text-white" {...props} />,
+  table: (props) => <div className="overflow-x-auto mb-2 rounded-lg border border-bgray-200 dark:border-darkblack-400"><table className="min-w-full text-xs border-collapse" {...props} /></div>,
+  thead: (props) => <thead className="bg-bgray-100 dark:bg-darkblack-500" {...props} />,
+  th: (props) => <th className="text-left px-2.5 py-1.5 font-semibold text-bgray-600 dark:text-bgray-300 border-b border-bgray-200 dark:border-darkblack-400" {...props} />,
+  td: (props) => <td className="px-2.5 py-1.5 text-darkblack-700 dark:text-white border-b border-bgray-100 dark:border-darkblack-500" {...props} />,
+};
+
+const pdfMarkdownComponents = {
+  p: (props) => <p style={{ fontSize: "13px", color: "#1a1a1a", margin: "0 0 6px" }} {...props} />,
+  strong: (props) => <strong style={{ fontWeight: "700", color: "#1a1a1a" }} {...props} />,
+  ul: (props) => <ul style={{ margin: "0 0 6px", paddingLeft: "18px" }} {...props} />,
+  ol: (props) => <ol style={{ margin: "0 0 6px", paddingLeft: "18px" }} {...props} />,
+  li: (props) => <li style={{ fontSize: "13px", color: "#1a1a1a", marginBottom: "3px" }} {...props} />,
+  table: (props) => <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "6px", fontSize: "12px" }} {...props} />,
+  thead: (props) => <thead style={{ backgroundColor: "#f7f8fa" }} {...props} />,
+  th: (props) => <th style={{ textAlign: "left", padding: "5px 8px", fontWeight: "700", color: "#555", borderBottom: "1px solid #e0e4ea" }} {...props} />,
+  td: (props) => <td style={{ padding: "5px 8px", color: "#1a1a1a", borderBottom: "1px solid #f0f2f5" }} {...props} />,
+};
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -63,8 +89,6 @@ const extractTextFromPdf = async (file) => {
   }
   return pageTexts.join("\n\n");
 };
-
-const bulletLines = (text) => (text || "").split("\n").map(l => l.trim()).filter(Boolean);
 
 export default function ClientRequestTab({ trackId, clientName, projectName }) {
   const [clientRequest, setClientRequest] = useState(null);
@@ -422,29 +446,17 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {SUMMARY_FIELDS.map(f => {
-              const lines = bulletLines(summary[f.key]);
-              return (
-                <div key={f.key} className={f.key === "key_requirements" || f.key === "open_questions" ? "md:col-span-2" : ""}>
-                  <p className="text-xs font-semibold text-bgray-500 dark:text-bgray-400 mb-1.5">{f.icon} {f.label}</p>
-                  {lines.length === 0 ? (
-                    <p className="text-sm text-bgray-400 italic">—</p>
-                  ) : lines.length === 1 ? (
-                    <p className="text-sm text-darkblack-700 dark:text-white">{lines[0]}</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {lines.map((l, i) => (
-                        <li key={i} className="text-sm text-darkblack-700 dark:text-white flex gap-2">
-                          <span className="text-primary shrink-0">•</span>
-                          <span>{l}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              );
-            })}
+          <div className="space-y-4">
+            {SUMMARY_FIELDS.map(f => (
+              <div key={f.key}>
+                <p className="text-xs font-semibold text-bgray-500 dark:text-bgray-400 mb-1.5">{f.icon} {f.label}</p>
+                {summary[f.key]?.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{summary[f.key]}</ReactMarkdown>
+                ) : (
+                  <p className="text-sm text-bgray-400 italic">—</p>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
@@ -627,25 +639,18 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
             </div>
           </div>
 
-          {SUMMARY_FIELDS.map(f => {
-            const lines = bulletLines(summary[f.key]);
-            return (
-              <div key={f.key} style={{ marginBottom: "18px" }}>
-                <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
-                  {f.icon} {f.label}
-                </div>
-                {lines.length === 0 ? (
-                  <div style={{ fontSize: "13px", color: "#aaa" }}>—</div>
-                ) : (
-                  <ul style={{ margin: 0, paddingLeft: "18px" }}>
-                    {lines.map((l, i) => (
-                      <li key={i} style={{ fontSize: "13px", color: "#1a1a1a", marginBottom: "4px" }}>{l}</li>
-                    ))}
-                  </ul>
-                )}
+          {SUMMARY_FIELDS.map(f => (
+            <div key={f.key} style={{ marginBottom: "18px" }}>
+              <div style={{ fontSize: "12px", fontWeight: "700", color: "#1e3a5f", marginBottom: "6px", textTransform: "uppercase", letterSpacing: "0.5px" }}>
+                {f.icon} {f.label}
               </div>
-            );
-          })}
+              {summary[f.key]?.trim() ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={pdfMarkdownComponents}>{summary[f.key]}</ReactMarkdown>
+              ) : (
+                <div style={{ fontSize: "13px", color: "#aaa" }}>—</div>
+              )}
+            </div>
+          ))}
 
           {teamNotes.trim() && (
             <div style={{ marginBottom: "18px", backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: "8px", padding: "12px 14px" }}>
