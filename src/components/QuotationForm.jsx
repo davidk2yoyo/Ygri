@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { sileo } from "sileo";
 import { supabase } from "../supabaseClient";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
@@ -234,12 +235,13 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     if (!savedQuotation) return;
     setPayingSupplierId(supplierId);
     try {
-      const { data: existingPO } = await supabase
+      const { data: existingPO, error: existingErr } = await supabase
         .from("purchase_orders")
         .select("id")
         .eq("quotation_id", savedQuotation.id)
         .eq("supplier_id", supplierId)
         .maybeSingle();
+      if (existingErr) throw existingErr;
       if (existingPO) {
         navigate(`/purchase-orders/${existingPO.id}`);
         return;
@@ -252,7 +254,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         .eq("supplier_id", supplierId);
       if (itemsErr) throw itemsErr;
       if (!supplierItems?.length) {
-        setError("No saved items found for this supplier — save the quotation first.");
+        sileo.warning({ title: "No saved items found for this supplier — save the quotation first." });
         return;
       }
 
@@ -280,7 +282,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
       navigate(`/purchase-orders/${po.id}`);
     } catch (e) {
-      setError(e.message);
+      sileo.error({ title: "Could not open supplier payment", description: e.message });
     } finally {
       setPayingSupplierId(null);
     }
