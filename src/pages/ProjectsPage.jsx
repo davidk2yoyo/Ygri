@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { createProjectActivity } from "../lib/projectActivity";
+import { sanitizeMessageHtml } from "../lib/sanitizeMessageHtml";
 import StageDrawer from "../StageDrawer";
 import NetworkGraphView from "../components/NetworkGraphView";
 import PipelineView from "../components/PipelineView";
@@ -1796,9 +1797,10 @@ export default function ProjectsPage() {
                               </div>
 
                               {/* Comment body */}
-                              <div className="text-sm text-bgray-700 dark:text-bgray-200 whitespace-pre-wrap">
-                                {comment.body}
-                              </div>
+                              <div
+                                className="message-body text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-darkblack-700 dark:[&_strong]:text-white [&_ul]:list-disc [&_ul]:list-outside [&_ul]:pl-5 [&_ul]:mb-1.5 [&_ol]:list-decimal [&_ol]:list-outside [&_ol]:pl-5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_a]:text-primary [&_a]:hover:underline [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded"
+                                dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(comment.body) }}
+                              />
 
                               {/* Metadata */}
                               {(comment.mentioned_files?.length > 0 || comment.reply_to) && (

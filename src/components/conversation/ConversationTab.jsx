@@ -5,6 +5,15 @@ import MessageItem from "./MessageItem";
 import MessageComposer from "./MessageComposer";
 
 const PAGE_SIZE = 40;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+// Mentions are stored as <span data-type="mention" data-id="..."> inside the
+// message's HTML body (Tiptap's Mention node) — pull the user ids back out.
+const extractMentionIds = (html) => {
+  if (!html) return [];
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return [...new Set([...doc.querySelectorAll('span[data-type="mention"]')].map(el => el.getAttribute("data-id")).filter(Boolean))];
+};
 
 const STAGE_STATUS_DOT = {
   done: "bg-green-500",
@@ -120,7 +129,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
   };
   useEffect(() => { if (!loading) scrollToBottom(); }, [loading]);
 
-  const handleSend = async ({ body, file }) => {
+  const handleSend = async ({ body, files }) => {
     const { data: { session } } = await supabase.auth.getSession();
     const userId = session?.user?.id;
     if (!userId) { sileo.error({ title: "Not signed in" }); return; }
@@ -132,25 +141,33 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
       .single();
     if (error) { sileo.error({ title: "Could not send message", description: error.message }); return; }
 
-    // Record any @mentions (stored inline in body as [@Name](mention:id)) for future notifications
-    const mentionedIds = [...(body || "").matchAll(/\(mention:([a-f0-9-]+)\)/g)].map(m => m[1]);
+    // Record any @mentions for future notifications
+    const mentionedIds = extractMentionIds(body);
     if (mentionedIds.length > 0) {
       await supabase.from("message_mentions").insert(
-        [...new Set(mentionedIds)].map(uid => ({ message_id: inserted.id, user_id: uid }))
+        mentionedIds.map(uid => ({ message_id: inserted.id, user_id: uid }))
       );
     }
 
-    if (file) {
-      try {
-        const path = `message-files/${trackId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
-        const { error: upErr } = await supabase.storage.from("crm-files").upload(path, file);
-        if (upErr) throw upErr;
-        await supabase.from("message_attachments").insert({
-          message_id: inserted.id, file_path: path, file_name: file.name, file_size: file.size,
-        });
-      } catch (e) {
-        sileo.error({ title: "Message sent, but attachment failed", description: e.message });
+    // Upload attachments ONE AT A TIME (never in parallel) — a burst of
+    // simultaneous Supabase requests is what triggers the auth rate-limit /
+    // forced-logout bug seen elsewhere in this app with multi-file uploads.
+    if (files?.length > 0) {
+      let failed = 0;
+      for (const file of files) {
+        try {
+          const path = `message-files/${trackId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
+          const { error: upErr } = await supabase.storage.from("crm-files").upload(path, file);
+          if (upErr) throw upErr;
+          await supabase.from("message_attachments").insert({
+            message_id: inserted.id, file_path: path, file_name: file.name, file_size: file.size,
+          });
+        } catch (e) {
+          failed++;
+        }
+        await sleep(200);
       }
+      if (failed > 0) sileo.error({ title: `Message sent, but ${failed} attachment${failed !== 1 ? "s" : ""} failed` });
     }
     await loadMessages();
     scrollToBottom();
@@ -162,6 +179,15 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
       .update({ body: newBody, edited_at: new Date().toISOString() })
       .eq("id", message.id);
     if (error) { sileo.error({ title: "Could not save edit", description: error.message }); return; }
+
+    // Refresh mentions to reflect the edited body
+    await supabase.from("message_mentions").delete().eq("message_id", message.id);
+    const mentionedIds = extractMentionIds(newBody);
+    if (mentionedIds.length > 0) {
+      await supabase.from("message_mentions").insert(
+        mentionedIds.map(uid => ({ message_id: message.id, user_id: uid }))
+      );
+    }
     await loadMessages();
   };
 
@@ -249,7 +275,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
             <p className="text-sm text-bgray-400 text-center py-10">No messages yet. Start the conversation below.</p>
           )}
           {messages.map(m => (
-            <MessageItem key={m.id} message={m} currentUserId={currentUserId} onSaveEdit={handleSaveEdit} onDelete={handleDelete} />
+            <MessageItem key={m.id} message={m} currentUserId={currentUserId} onSaveEdit={handleSaveEdit} onDelete={handleDelete} profiles={Object.values(profilesById)} />
           ))}
         </div>
         <MessageComposer onSend={handleSend} profiles={Object.values(profilesById)} />

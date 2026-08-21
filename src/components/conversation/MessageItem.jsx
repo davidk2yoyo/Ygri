@@ -1,25 +1,11 @@
-import React, { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import React, { useState, useRef } from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
 import { supabase } from "../../supabaseClient";
+import { buildMessageExtensions } from "./messageEditorExtensions";
+import MessageEditorToolbar from "./MessageEditorToolbar";
+import { sanitizeMessageHtml } from "../../lib/sanitizeMessageHtml";
 
 const AVATAR_COLORS = ["from-purple-400 to-pink-400", "from-blue-400 to-cyan-400", "from-emerald-400 to-teal-400", "from-orange-400 to-rose-400", "from-indigo-400 to-violet-400"];
-
-const messageMarkdownComponents = {
-  p: (props) => <p className="text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed mb-1.5 last:mb-0" {...props} />,
-  strong: (props) => <strong className="font-semibold text-darkblack-700 dark:text-white" {...props} />,
-  em: (props) => <em {...props} />,
-  ul: (props) => <ul className="list-disc list-outside pl-5 space-y-0.5 mb-1.5 marker:text-bgray-400" {...props} />,
-  ol: (props) => <ol className="list-decimal list-outside pl-5 space-y-0.5 mb-1.5" {...props} />,
-  li: (props) => <li className="text-sm text-bgray-700 dark:text-bgray-200" {...props} />,
-  code: (props) => <code className="px-1 py-0.5 bg-bgray-100 dark:bg-darkblack-500 rounded text-xs font-mono" {...props} />,
-  a: ({ href, children, ...props }) => {
-    if (href?.startsWith("mention:")) {
-      return <span className="bg-primary/10 text-primary font-medium px-1 rounded">{children}</span>;
-    }
-    return <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline" {...props}>{children}</a>;
-  },
-};
 
 const getRelativeTime = (date) => {
   const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -51,10 +37,63 @@ function fileUrl(filePath) {
   return data.publicUrl;
 }
 
-export default function MessageItem({ message, currentUserId, onSaveEdit, onDelete }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [draft, setDraft] = useState(message.body || "");
+const isImageFile = (fileName) => /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName || "");
+
+function MessageBody({ html }) {
+  return (
+    <div
+      className="message-body mt-0.5 text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-darkblack-700 dark:[&_strong]:text-white [&_ul]:list-disc [&_ul]:list-outside [&_ul]:pl-5 [&_ul]:mb-1.5 [&_ol]:list-decimal [&_ol]:list-outside [&_ol]:pl-5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_a]:text-primary [&_a]:hover:underline [&_code]:px-1 [&_code]:py-0.5 [&_code]:bg-bgray-100 dark:[&_code]:bg-darkblack-500 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded"
+      dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(html) }}
+    />
+  );
+}
+
+function EditableBody({ message, profiles, onSave, onCancel }) {
   const [saving, setSaving] = useState(false);
+  const profilesRef = useRef(profiles || []);
+  profilesRef.current = profiles || [];
+
+  const editor = useEditor({
+    extensions: buildMessageExtensions(profilesRef, "Edit message..."),
+    content: message.body || "",
+    editorProps: {
+      attributes: { class: "text-sm text-darkblack-700 dark:text-white outline-none min-h-[24px] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded" },
+    },
+  });
+
+  const handleSave = async () => {
+    if (!editor || editor.isEmpty || saving) return;
+    setSaving(true);
+    try {
+      await onSave(editor.getHTML());
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editor) return null;
+
+  return (
+    <div className="mt-1 space-y-1.5">
+      <MessageEditorToolbar editor={editor} showEmoji={false} />
+      <div className="border border-bgray-300 dark:border-darkblack-400 rounded-lg px-2.5 py-1.5 max-h-40 overflow-y-auto focus-within:ring-2 focus-within:ring-primary">
+        <EditorContent editor={editor} />
+      </div>
+      <div className="flex gap-3">
+        <button onClick={handleSave} disabled={saving || editor.isEmpty} className="text-xs font-semibold text-primary hover:underline disabled:opacity-40">
+          {saving ? "Saving..." : "Save"}
+        </button>
+        <button onClick={onCancel} className="text-xs text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-300">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export default function MessageItem({ message, currentUserId, onSaveEdit, onDelete, profiles }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState(null);
 
   if (message.message_type === "system_event") {
     return (
@@ -72,15 +111,9 @@ export default function MessageItem({ message, currentUserId, onSaveEdit, onDele
   const isOwn = message.user_id === currentUserId;
   const isAI = message.message_type === "ai_message";
 
-  const handleSave = async () => {
-    if (!draft.trim() || saving) return;
-    setSaving(true);
-    try {
-      await onSaveEdit(message, draft.trim());
-      setIsEditing(false);
-    } finally {
-      setSaving(false);
-    }
+  const handleSave = async (html) => {
+    await onSaveEdit(message, html);
+    setIsEditing(false);
   };
 
   return (
@@ -96,49 +129,43 @@ export default function MessageItem({ message, currentUserId, onSaveEdit, onDele
         </div>
 
         {isEditing ? (
-          <div className="mt-1 space-y-1.5">
-            <textarea
-              autoFocus
-              rows={2}
-              value={draft}
-              onChange={e => setDraft(e.target.value)}
-              className="w-full px-2.5 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm resize-none bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-            />
-            <div className="flex gap-3">
-              <button onClick={handleSave} disabled={saving || !draft.trim()} className="text-xs font-semibold text-primary hover:underline disabled:opacity-40">
-                {saving ? "Saving..." : "Save"}
-              </button>
-              <button onClick={() => { setIsEditing(false); setDraft(message.body || ""); }} className="text-xs text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-300">
-                Cancel
-              </button>
-            </div>
-          </div>
+          <EditableBody message={message} profiles={profiles} onSave={handleSave} onCancel={() => setIsEditing(false)} />
         ) : (
           <>
-            {message.body && (
-              <div className="mt-0.5">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={messageMarkdownComponents}>{message.body}</ReactMarkdown>
-              </div>
-            )}
+            {message.body && <MessageBody html={message.body} />}
             {message.message_attachments?.length > 0 && (
-              <div className="mt-1.5 space-y-1.5">
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {message.message_attachments.map(att => (
-                  <a
-                    key={att.id}
-                    href={fileUrl(att.file_path)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="flex items-center gap-2 px-2.5 py-2 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-100 dark:border-darkblack-400 rounded-lg text-xs hover:border-primary transition max-w-xs"
-                  >
-                    <span className="shrink-0">📄</span>
-                    <span className="truncate text-darkblack-700 dark:text-white">{att.file_name}</span>
-                  </a>
+                  isImageFile(att.file_name) ? (
+                    <button key={att.id} type="button" onClick={() => setLightboxUrl(fileUrl(att.file_path))} className="block">
+                      <img src={fileUrl(att.file_path)} alt={att.file_name} className="w-32 h-32 object-cover rounded-lg border border-bgray-100 dark:border-darkblack-400 hover:opacity-90 transition" />
+                    </button>
+                  ) : (
+                    <a
+                      key={att.id}
+                      href={fileUrl(att.file_path)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 px-2.5 py-2 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-100 dark:border-darkblack-400 rounded-lg text-xs hover:border-primary transition max-w-xs"
+                    >
+                      <span className="shrink-0">📄</span>
+                      <span className="truncate text-darkblack-700 dark:text-white">{att.file_name}</span>
+                    </a>
+                  )
                 ))}
               </div>
             )}
           </>
         )}
       </div>
+      {lightboxUrl && (
+        <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-[200] p-4" onClick={() => setLightboxUrl(null)}>
+          <button className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition" onClick={() => setLightboxUrl(null)}>
+            <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+          <img src={lightboxUrl} alt="Preview" className="max-w-full max-h-full object-contain rounded-xl shadow-2xl" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
       {isOwn && !isEditing && (
         <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0">
           <button onClick={() => setIsEditing(true)} className="text-bgray-400 hover:text-primary p-1" title="Edit">

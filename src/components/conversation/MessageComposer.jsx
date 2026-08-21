@@ -1,166 +1,115 @@
-import React, { useState, useRef } from "react";
-
-const wrapSelection = (el, before, after = before) => {
-  const start = el.selectionStart;
-  const end = el.selectionEnd;
-  const value = el.value;
-  const selected = value.slice(start, end);
-  const newValue = value.slice(0, start) + before + selected + after + value.slice(end);
-  return { newValue, selStart: start + before.length, selEnd: start + before.length + selected.length };
-};
+import React, { useState, useRef, useEffect } from "react";
+import { useEditor, EditorContent } from "@tiptap/react";
+import { buildMessageExtensions } from "./messageEditorExtensions";
+import MessageEditorToolbar from "./MessageEditorToolbar";
 
 export default function MessageComposer({ onSend, disabled, profiles = [] }) {
-  const [text, setText] = useState("");
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
-  const [showMentions, setShowMentions] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [mentionStart, setMentionStart] = useState(null);
   const fileRef = useRef(null);
-  const textareaRef = useRef(null);
+  const composerRef = useRef(null);
+  const profilesRef = useRef(profiles);
+  profilesRef.current = profiles;
+  const handleSendRef = useRef(() => {});
 
-  const autoResize = (el) => {
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
-  };
+  const editor = useEditor({
+    extensions: buildMessageExtensions(profilesRef, "Write a message..."),
+    content: "",
+    editorProps: {
+      attributes: { class: "text-sm text-darkblack-700 dark:text-white outline-none min-h-[24px] [&_.ProseMirror-selectednode]:outline-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded [&_p.is-editor-empty:first-child]:before:content-[attr(data-placeholder)] [&_p.is-editor-empty:first-child]:before:text-bgray-400 [&_p.is-editor-empty:first-child]:before:float-left [&_p.is-editor-empty:first-child]:before:pointer-events-none [&_p.is-editor-empty:first-child]:before:h-0" },
+      handleKeyDown: (_view, event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault();
+          handleSendRef.current();
+          return true;
+        }
+        return false;
+      },
+    },
+  });
 
-  const applyFormat = (before, after) => {
-    const el = textareaRef.current;
+  // Ctrl+V to paste an image straight into the message
+  useEffect(() => {
+    const el = composerRef.current;
     if (!el) return;
-    const { newValue, selStart, selEnd } = wrapSelection(el, before, after);
-    setText(newValue);
-    requestAnimationFrame(() => {
-      el.focus();
-      el.setSelectionRange(selStart, selEnd);
-      autoResize(el);
-    });
-  };
-
-  const handleTextChange = (e) => {
-    const el = e.target;
-    const value = el.value;
-    setText(value);
-    autoResize(el);
-
-    const cursor = el.selectionStart;
-    const beforeCursor = value.slice(0, cursor);
-    const atIndex = beforeCursor.lastIndexOf("@");
-    if (atIndex !== -1) {
-      const afterAt = beforeCursor.slice(atIndex + 1);
-      if (!/\s/.test(afterAt)) {
-        setShowMentions(true);
-        setMentionQuery(afterAt);
-        setMentionStart(atIndex);
-        return;
-      }
-    }
-    setShowMentions(false);
-  };
-
-  const insertMention = (profile) => {
-    const el = textareaRef.current;
-    if (!el || mentionStart === null) return;
-    const cursor = el.selectionStart;
-    const before = text.slice(0, mentionStart);
-    const after = text.slice(cursor);
-    const mentionText = `[@${profile.full_name}](mention:${profile.id}) `;
-    const newValue = before + mentionText + after;
-    setText(newValue);
-    setShowMentions(false);
-    setMentionQuery("");
-    requestAnimationFrame(() => {
-      el.focus();
-      const pos = before.length + mentionText.length;
-      el.setSelectionRange(pos, pos);
-      autoResize(el);
-    });
-  };
-
-  const filteredProfiles = profiles.filter(p => p.full_name?.toLowerCase().includes(mentionQuery.toLowerCase()));
-
-  const handleKeyDown = (e) => {
-    if (e.key === "Escape" && showMentions) { setShowMentions(false); return; }
-    if (e.key === "Enter" && !e.shiftKey && !showMentions) {
+    const handlePaste = (e) => {
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageFiles = items.filter(it => it.type.startsWith("image/")).map(it => it.getAsFile()).filter(Boolean);
+      if (imageFiles.length === 0) return;
       e.preventDefault();
-      handleSend();
-    }
+      setFiles(prev => [...prev, ...imageFiles]);
+    };
+    el.addEventListener("paste", handlePaste);
+    return () => el.removeEventListener("paste", handlePaste);
+  }, []);
+
+  const addFiles = (fileList) => {
+    const arr = Array.from(fileList || []);
+    if (arr.length > 0) setFiles(prev => [...prev, ...arr]);
   };
 
   const handleSend = async () => {
-    if (sending || disabled) return;
-    if (!text.trim() && !file) return;
+    if (sending || disabled || !editor) return;
+    const isEmpty = editor.isEmpty;
+    if (isEmpty && files.length === 0) return;
     setSending(true);
     try {
-      await onSend({ body: text.trim(), file });
-      setText("");
-      setFile(null);
+      const body = isEmpty ? "" : editor.getHTML();
+      await onSend({ body, files });
+      editor.commands.clearContent();
+      setFiles([]);
       if (fileRef.current) fileRef.current.value = "";
-      textareaRef.current?.focus();
-      if (textareaRef.current) textareaRef.current.style.height = "auto";
+      editor.commands.focus();
     } finally {
       setSending(false);
     }
   };
+  handleSendRef.current = handleSend;
+
+  if (!editor) return null;
+
+  const canSend = !sending && !disabled && (!editor.isEmpty || files.length > 0);
 
   return (
-    <div className="border-t border-bgray-100 dark:border-darkblack-400 p-3 bg-white dark:bg-darkblack-600">
-      {file && (
-        <div className="flex items-center gap-2 mb-2 px-2.5 py-1.5 bg-bgray-50 dark:bg-darkblack-500 rounded-lg text-xs">
-          <svg className="w-3.5 h-3.5 text-bgray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-          </svg>
-          <span className="truncate flex-1 text-bgray-600 dark:text-bgray-300">{file.name}</span>
-          <button onClick={() => { setFile(null); if (fileRef.current) fileRef.current.value = ""; }} className="text-bgray-400 hover:text-red-500 shrink-0">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
+    <div ref={composerRef} className="border-t border-bgray-100 dark:border-darkblack-400 p-3 bg-white dark:bg-darkblack-600">
+      {files.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {files.map((f, i) => {
+            const isImage = f.type.startsWith("image/");
+            return (
+              <div key={i} className="flex items-center gap-2 px-2.5 py-1.5 bg-bgray-50 dark:bg-darkblack-500 rounded-lg text-xs max-w-[200px]">
+                {isImage ? (
+                  <img src={URL.createObjectURL(f)} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
+                ) : (
+                  <svg className="w-3.5 h-3.5 text-bgray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                  </svg>
+                )}
+                <span className="truncate flex-1 text-bgray-600 dark:text-bgray-300">{f.name}</span>
+                <button onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))} className="text-bgray-400 hover:text-red-500 shrink-0">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
-      {/* Formatting toolbar */}
-      <div className="flex items-center gap-1 mb-1.5">
-        <button type="button" onClick={() => applyFormat("**")} disabled={disabled} title="Bold" className="w-6 h-6 flex items-center justify-center rounded text-bgray-500 hover:bg-bgray-100 dark:hover:bg-darkblack-500 hover:text-darkblack-700 dark:hover:text-white text-sm font-bold transition disabled:opacity-40">
-          B
-        </button>
-        <button type="button" onClick={() => applyFormat("_")} disabled={disabled} title="Italic" className="w-6 h-6 flex items-center justify-center rounded text-bgray-500 hover:bg-bgray-100 dark:hover:bg-darkblack-500 hover:text-darkblack-700 dark:hover:text-white text-sm italic transition disabled:opacity-40">
-          i
-        </button>
-        <button type="button" onClick={() => applyFormat("\n- ", "")} disabled={disabled} title="Bullet list" className="w-6 h-6 flex items-center justify-center rounded text-bgray-500 hover:bg-bgray-100 dark:hover:bg-darkblack-500 hover:text-darkblack-700 dark:hover:text-white transition disabled:opacity-40">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
-        </button>
+      <div className="mb-1.5">
+        <MessageEditorToolbar editor={editor} disabled={disabled} />
       </div>
 
-      <div className="relative flex items-end gap-2 border border-bgray-200 dark:border-darkblack-400 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
-        {showMentions && filteredProfiles.length > 0 && (
-          <div className="absolute bottom-full mb-2 left-0 w-64 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg max-h-48 overflow-y-auto z-10">
-            {filteredProfiles.map(p => (
-              <button
-                key={p.id}
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); insertMention(p); }}
-                className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm text-darkblack-700 dark:text-white transition"
-              >
-                {p.full_name}
-              </button>
-            ))}
-          </div>
-        )}
-        <textarea
-          ref={textareaRef}
-          rows={1}
-          value={text}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          placeholder="Message this project... (@ to mention someone)"
-          disabled={disabled}
-          className="flex-1 resize-none border-0 outline-none bg-transparent text-sm text-darkblack-700 dark:text-white placeholder-bgray-400 py-1 max-h-40"
-        />
-        <input ref={fileRef} type="file" className="hidden" onChange={e => setFile(e.target.files?.[0] || null)} />
+      <div className="flex items-end gap-2 border border-bgray-200 dark:border-darkblack-400 rounded-xl px-3 py-2 focus-within:ring-2 focus-within:ring-primary">
+        <div className="flex-1 min-w-0 max-h-40 overflow-y-auto message-composer-editor">
+          <EditorContent editor={editor} />
+        </div>
+        <input ref={fileRef} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
         <button
           type="button"
           onClick={() => fileRef.current?.click()}
           disabled={disabled}
           className="shrink-0 p-1.5 text-bgray-400 hover:text-primary transition disabled:opacity-40"
-          title="Attach file"
+          title="Attach photo or file"
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -169,7 +118,7 @@ export default function MessageComposer({ onSend, disabled, profiles = [] }) {
         <button
           type="button"
           onClick={handleSend}
-          disabled={disabled || sending || (!text.trim() && !file)}
+          disabled={!canSend}
           className="shrink-0 flex items-center justify-center w-8 h-8 bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-40 transition"
           title="Send"
         >
