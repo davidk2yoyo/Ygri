@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ClientDocumentsTab from "../components/ClientDocumentsTab";
 import AIClientScanner from "../components/AIClientScanner";
@@ -298,6 +299,7 @@ function ClientDrawer({ client, onClose, onSaved }) {
 }
 
 export default function ClientsPage() {
+  const location = useLocation();
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -305,6 +307,13 @@ export default function ClientsPage() {
   const [modalClient, setModalClient] = useState(undefined);
   const [orderCounts, setOrderCounts] = useState({});
   const [viewMode, setViewMode] = useState("list");
+
+  // Open the "New Client" form directly when navigated here with that intent
+  useEffect(() => {
+    if (location.state?.openNewClient) {
+      setModalClient(null);
+    }
+  }, [location.state?.openNewClient]);
 
   const loadClients = useCallback(async () => {
     setLoading(true);

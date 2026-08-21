@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
 import SupplierProductsTab from "../components/SupplierProductsTab";
@@ -302,6 +303,7 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
 }
 
 export default function SuppliersPage() {
+  const location = useLocation();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -310,6 +312,13 @@ export default function SuppliersPage() {
   const [itemCounts, setItemCounts] = useState({}); // supplierId → count
   const [clientMap, setClientMap] = useState({}); // supplierId → [clientName, ...]
   const [viewMode, setViewMode] = useState("list");
+
+  // Open the "New Supplier" form directly when navigated here with that intent
+  useEffect(() => {
+    if (location.state?.openNewSupplier) {
+      setModalSupplier(null);
+    }
+  }, [location.state?.openNewSupplier]);
 
   const loadSuppliers = useCallback(async () => {
     setLoading(true);

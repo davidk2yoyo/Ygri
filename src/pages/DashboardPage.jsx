@@ -685,9 +685,40 @@ export default function DashboardPage() {
     <div className="p-6 font-urbanist min-h-screen bg-bgray-50 dark:bg-darkblack-700">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white">{t("dashboard")}</h1>
-          <p className="text-bgray-500 dark:text-bgray-400 mt-1">{t("overviewText")}</p>
+        <div className="mb-8 flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-3xl font-bold text-darkblack-700 dark:text-white">{t("dashboard")}</h1>
+            <p className="text-bgray-500 dark:text-bgray-400 mt-1">{t("overviewText")}</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => navigate("/projects", { state: { openNewProject: true } })}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Project
+            </button>
+            <button
+              onClick={() => navigate("/clients", { state: { openNewClient: true } })}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white rounded-lg text-sm font-semibold hover:border-primary hover:text-primary transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Client
+            </button>
+            <button
+              onClick={() => navigate("/suppliers", { state: { openNewSupplier: true } })}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 text-darkblack-700 dark:text-white rounded-lg text-sm font-semibold hover:border-primary hover:text-primary transition"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              New Supplier
+            </button>
+          </div>
         </div>
 
         {error && <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-600 text-sm">{error}</div>}

@@ -757,8 +757,10 @@ export default function ProjectsPage() {
     if (location.state?.newProjectClientId) {
       setNewProjectInitialClient({ id: location.state.newProjectClientId, name: location.state.newProjectClientName || "" });
       setShowNewProjectModal(true);
+    } else if (location.state?.openNewProject) {
+      setShowNewProjectModal(true);
     }
-  }, [location.state?.newProjectClientId]);
+  }, [location.state?.newProjectClientId, location.state?.openNewProject]);
 
   // Handle navigation from dashboard
   useEffect(() => {
