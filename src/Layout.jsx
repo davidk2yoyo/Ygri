@@ -5,6 +5,7 @@ import { supabase } from "./supabaseClient";
 import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
 import YgriAiChat from "./pages/AiAssistantPage";
+import NotificationBell from "./components/NotificationBell";
 import { Toaster, sileo } from "sileo";
 import "sileo/styles.css";
 
@@ -409,6 +410,7 @@ export default function Layout() {
 
           {/* Right side - Language toggle, Dark mode toggle and user */}
           <div className="flex items-center space-x-2">
+            <NotificationBell />
             <button
               onClick={toggleLanguage}
               className="px-3 py-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-white/5 text-gray-500 dark:text-gray-400 transition-colors text-xs font-semibold tracking-wide"

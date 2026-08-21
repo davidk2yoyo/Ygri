@@ -395,7 +395,7 @@ function ReportTab({ trackId, projectName, clientName, onClose }) {
   );
 }
 
-export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId }) {
+export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId, initialTab, initialTabToken }) {
   const [stageDetail, setStageDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -414,6 +414,13 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
   // Quotation tab state
   const [activeTab, setActiveTab] = useState("details"); // "details" | "quotation"
+
+  // Deep-linked from a notification (e.g. "you were mentioned") — jump to a
+  // specific tab once per link, without overriding normal manual tab clicks
+  useEffect(() => {
+    if (initialTab && initialTabToken) setActiveTab(initialTab);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTabToken]);
   const [quotations, setQuotations] = useState([]);
   const [selectedQuotationId, setSelectedQuotationId] = useState("unset"); // "unset" = not yet loaded, null = new, uuid = existing
   const [quotationAmount, setQuotationAmount] = useState(null);

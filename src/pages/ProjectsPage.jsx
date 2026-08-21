@@ -608,6 +608,8 @@ export default function ProjectsPage() {
   const [commentDraft, setCommentDraft] = useState("");
   const [error, setError] = useState("");
   const [selectedStageId, setSelectedStageId] = useState(null);
+  const [drawerInitialTab, setDrawerInitialTab] = useState(null);
+  const [drawerInitialTabToken, setDrawerInitialTabToken] = useState(0);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
   const [newProjectInitialClient, setNewProjectInitialClient] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -777,6 +779,10 @@ export default function ProjectsPage() {
         setTimeout(() => {
           console.log('Setting selected stage from dashboard navigation:', location.state.selectedStageId);
           setSelectedStageId(location.state.selectedStageId);
+          if (location.state.openTab) {
+            setDrawerInitialTab(location.state.openTab);
+            setDrawerInitialTabToken(t => t + 1);
+          }
         }, 100);
       }
     }
@@ -1877,7 +1883,9 @@ export default function ProjectsPage() {
         <StageDrawer
           stageId={selectedStageId}
           trackId={activeTrackId}
-          onClose={() => setSelectedStageId(null)}
+          initialTab={drawerInitialTab}
+          initialTabToken={drawerInitialTabToken}
+          onClose={() => { setSelectedStageId(null); setDrawerInitialTab(null); }}
           onUpdate={() => {
             loadTrackDetail(); // Refresh track detail when stage is updated
             loadAllComments(); // Refresh comments timeline
