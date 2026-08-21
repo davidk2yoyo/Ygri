@@ -5,6 +5,8 @@ import { sileo } from "sileo";
 import QuotationForm from "./components/QuotationForm";
 import TrackDocumentsTab from "./components/TrackDocumentsTab";
 import ClientRequestTab from "./components/ClientRequestTab";
+import ConversationTab from "./components/conversation/ConversationTab";
+import { createProjectActivity } from "./lib/projectActivity";
 
 // ─── Key Dates Section ────────────────────────────────────────────────────────
 const MILESTONE_CONFIG = {
@@ -400,7 +402,6 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const [busy, setBusy] = useState(false);
   
   // Form states
-  const [commentDraft, setCommentDraft] = useState("");
   const [todoDraft, setTodoDraft] = useState("");
   const [newTodoDueDate, setNewTodoDueDate] = useState("");
   const [newTodoAssignee, setNewTodoAssignee] = useState("");
@@ -410,17 +411,6 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const [fileLabel, setFileLabel] = useState("");
   const [uploadingFile, setUploadingFile] = useState(false);
   const [previewFile, setPreviewFile] = useState(null);
-  
-  // Enhanced comment states
-  const [editingCommentId, setEditingCommentId] = useState(null);
-  const [editCommentText, setEditCommentText] = useState("");
-  const [showFileMentions, setShowFileMentions] = useState(false);
-  const [mentionQuery, setMentionQuery] = useState("");
-  const [cursorPosition, setCursorPosition] = useState(0);
-  const [activeMenu, setActiveMenu] = useState(null);
-  const [likedComments, setLikedComments] = useState({});
-  const [replyingTo, setReplyingTo] = useState(null); // { id, userName }
-  const commentInputRef = useRef(null);
 
   // Quotation tab state
   const [activeTab, setActiveTab] = useState("details"); // "details" | "quotation"
@@ -428,15 +418,6 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const [selectedQuotationId, setSelectedQuotationId] = useState("unset"); // "unset" = not yet loaded, null = new, uuid = existing
   const [quotationAmount, setQuotationAmount] = useState(null);
   const [quotationCurrency, setQuotationCurrency] = useState("USD");
-
-  // Close active ··· menu on outside click
-  useEffect(() => {
-    const handler = () => setActiveMenu(null);
-    if (activeMenu !== null) {
-      document.addEventListener("mousedown", handler);
-    }
-    return () => document.removeEventListener("mousedown", handler);
-  }, [activeMenu]);
 
   // Load current user + profiles
   useEffect(() => {
@@ -591,273 +572,6 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     setPreviewFile(file);
   };
 
-  // Add comment
-  const handleAddComment = async (e) => {
-    e.preventDefault();
-    if (!commentDraft.trim() || busy) return;
-    
-    try {
-      setBusy(true);
-      
-      // Get current user
-      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
-      if (!user) throw new Error("User not authenticated");
-      
-      // Convert clean @filename mentions to UUID storage format
-      const storageText = convertMentionsForStorage(commentDraft.trim());
-      
-      await supabase.rpc("add_stage_comment", {
-        p_track_stage_id: stageId,
-        p_body: storageText,
-        p_user: user.id
-      });
-      
-      // Reload stage detail
-      const { data } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
-      });
-      setStageDetail(data);
-      setCommentDraft("");
-      setReplyingTo(null);
-      onUpdate?.(); // Refresh parent component
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Edit comment
-  const handleEditComment = async (commentId) => {
-    try {
-      setBusy(true);
-      
-      // Get current user
-      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
-      if (!user) throw new Error("User not authenticated");
-      
-      // Convert clean @filename mentions to UUID storage format
-      const storageText = convertMentionsForStorage(editCommentText.trim());
-      
-      // Try to call the RPC function
-      const { data, error } = await supabase.rpc("update_stage_comment", {
-        p_comment_id: commentId,
-        p_new_body: storageText,
-        p_user: user.id
-      });
-      
-      if (error) {
-        console.error("Update comment RPC error:", error);
-        throw new Error(`Failed to update comment: ${error.message}`);
-      }
-      
-      // Reload stage detail
-      const { data: stageData } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
-      });
-      setStageDetail(stageData);
-      setEditingCommentId(null);
-      setEditCommentText("");
-      onUpdate?.();
-    } catch (e) {
-      console.error("Edit comment error:", e);
-      setError(e.message || "Failed to edit comment");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Delete comment
-  const handleDeleteComment = async (commentId) => {
-    if (!confirm("Are you sure you want to delete this comment?")) return;
-    
-    try {
-      setBusy(true);
-      
-      // Get current user
-      const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
-      if (!user) throw new Error("User not authenticated");
-      
-      // Try to call the RPC function
-      const { data, error } = await supabase.rpc("delete_stage_comment", {
-        p_comment_id: commentId,
-        p_user: user.id
-      });
-      
-      if (error) {
-        console.error("Delete comment RPC error:", error);
-        throw new Error(`Failed to delete comment: ${error.message}`);
-      }
-      
-      // Reload stage detail
-      const { data: stageData } = await supabase.rpc("get_stage_detail", { 
-        p_track_stage_id: stageId 
-      });
-      setStageDetail(stageData);
-      onUpdate?.();
-    } catch (e) {
-      console.error("Delete comment error:", e);
-      setError(e.message || "Failed to delete comment");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  // Start editing comment
-  const startEditingComment = (comment) => {
-    setEditingCommentId(comment.id);
-    // Convert from storage format to clean display format for editing
-    const displayText = comment.body.replace(/@\{([a-f0-9\-]+):(.*?)\}/g, '@$2');
-    setEditCommentText(displayText);
-  };
-
-  // Cancel editing comment
-  const cancelEditingComment = () => {
-    setEditingCommentId(null);
-    setEditCommentText("");
-  };
-
-  // Handle @ file mentions in comment
-  const handleCommentTextChange = (e, isEdit = false) => {
-    const text = e.target.value;
-    const cursorPos = e.target.selectionStart;
-    
-    if (isEdit) {
-      setEditCommentText(text);
-    } else {
-      setCommentDraft(text);
-    }
-    
-    setCursorPosition(cursorPos);
-    
-    // Check for @ mentions
-    const beforeCursor = text.substring(0, cursorPos);
-    const atIndex = beforeCursor.lastIndexOf("@");
-    
-    if (atIndex !== -1 && atIndex === beforeCursor.length - 1) {
-      // Just typed @, show file mentions
-      setShowFileMentions(true);
-      setMentionQuery("");
-    } else if (atIndex !== -1) {
-      // Check if we're in the middle of a mention
-      const afterAt = beforeCursor.substring(atIndex + 1);
-      const spaceIndex = afterAt.indexOf(" ");
-      
-      if (spaceIndex === -1) {
-        // Still typing mention
-        setShowFileMentions(true);
-        setMentionQuery(afterAt);
-      } else {
-        setShowFileMentions(false);
-      }
-    } else {
-      setShowFileMentions(false);
-    }
-  };
-
-  // Insert file mention
-  const insertFileMention = (file, isEdit = false) => {
-    const currentText = isEdit ? editCommentText : commentDraft;
-    const beforeCursor = currentText.substring(0, cursorPosition);
-    const afterCursor = currentText.substring(cursorPosition);
-    
-    // Find the @ that started the mention
-    const atIndex = beforeCursor.lastIndexOf("@");
-    const beforeAt = currentText.substring(0, atIndex);
-    
-    // Show only clean filename to user, but store UUID format for backend
-    const fileName = file.label || file.file_path.split("/").pop();
-    const mentionText = `@${fileName}`;  // Clean display format
-    const newText = beforeAt + mentionText + " " + afterCursor;
-    
-    if (isEdit) {
-      setEditCommentText(newText);
-    } else {
-      setCommentDraft(newText);
-    }
-    
-    setShowFileMentions(false);
-    setMentionQuery("");
-  };
-
-  // Parse file mentions in comment text
-  const parseFileMentions = (text) => {
-    // Updated regex to match UUID format (with hyphens)
-    const mentionRegex = /@\{([a-f0-9\-]+):(.*?)\}/g;
-    let lastIndex = 0;
-    const parts = [];
-    let match;
-    
-    while ((match = mentionRegex.exec(text)) !== null) {
-      // Add text before the mention
-      if (match.index > lastIndex) {
-        parts.push({ type: "text", content: text.substring(lastIndex, match.index) });
-      }
-      
-      // Add the mention
-      parts.push({
-        type: "mention",
-        fileId: match[1],
-        fileName: match[2],
-        content: `@${match[2]}`
-      });
-      
-      lastIndex = match.index + match[0].length;
-    }
-    
-    // Add remaining text
-    if (lastIndex < text.length) {
-      parts.push({ type: "text", content: text.substring(lastIndex) });
-    }
-    
-    return parts;
-  };
-
-  // Filter files for mentions
-  const getFilteredFiles = () => {
-    if (!stageDetail?.files) return [];
-    
-    return stageDetail.files.filter(file => {
-      const fileName = file.label || file.file_path.split("/").pop();
-      return fileName.toLowerCase().includes(mentionQuery.toLowerCase());
-    });
-  };
-
-  // Convert clean @filename format to UUID storage format before saving
-  const convertMentionsForStorage = (text) => {
-    if (!stageDetail?.files) return text;
-    
-    // Replace @filename with @{uuid:filename} format
-    let convertedText = text;
-    
-    // Find all @filename mentions
-    const mentionRegex = /@([^@\s]+)/g;
-    let match;
-    const replacements = [];
-    
-    while ((match = mentionRegex.exec(text)) !== null) {
-      const fileName = match[1];
-      // Find the file by filename
-      const file = stageDetail.files.find(f => {
-        const fName = f.label || f.file_path.split("/").pop();
-        return fName === fileName;
-      });
-      
-      if (file) {
-        replacements.push({
-          original: match[0],
-          replacement: `@{${file.id}:${fileName}}`
-        });
-      }
-    }
-    
-    // Apply replacements
-    replacements.forEach(({ original, replacement }) => {
-      convertedText = convertedText.replace(original, replacement);
-    });
-    
-    return convertedText;
-  };
 
   // Add todo
   const handleAddTodo = async (e) => {
@@ -923,9 +637,13 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   const handleCompleteStage = async () => {
     try {
       setBusy(true);
+      const completedStageName = stageDetail?.stage?.name;
       await supabase.rpc("complete_stage_and_advance", {
         p_track_stage_id: stageId
       });
+      if (trackId && completedStageName) {
+        createProjectActivity(trackId, "stage_completed", { stage: completedStageName }, { trackStageId: stageId });
+      }
       sileo.success({ title: "Stage completed", description: "Moving to next stage" });
       onUpdate?.();
       onClose?.();
@@ -983,11 +701,12 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
           {stageDetail && trackId && (
             <div className="flex gap-0 px-6">
               {[
-                { key: "details",   label: "Stage Details" },
-                { key: "request",   label: "🧾 Request" },
-                { key: "quotation", label: "📋 Quotation" },
-                { key: "report",    label: "📄 Report" },
-                { key: "documents", label: "📁 Documents" },
+                { key: "details",      label: "Stage Details" },
+                { key: "conversation", label: "💬 Conversation" },
+                { key: "request",      label: "🧾 Request" },
+                { key: "quotation",    label: "📋 Quotation" },
+                { key: "report",       label: "📄 Report" },
+                { key: "documents",    label: "📁 Documents" },
               ].map(tab => (
                 <button
                   key={tab.key}
@@ -1081,6 +800,11 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                 />
               </div>
             </div>
+          )}
+
+          {/* Conversation Tab */}
+          {stageDetail && activeTab === "conversation" && trackId && (
+            <ConversationTab trackId={trackId} projectName={projectName} clientName={clientName} />
           )}
 
           {/* Client Request Tab */}
@@ -1312,281 +1036,6 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                       ))}
                     </div>
                   )}
-                </div>
-
-                {/* Comments Section — Instagram bottom-sheet style */}
-                <div className="bg-white dark:bg-darkblack-600 rounded-t-2xl shadow-lg border border-bgray-100 dark:border-darkblack-400 flex flex-col" style={{ maxHeight: "420px" }}>
-
-                  {/* Drag handle */}
-                  <div className="flex justify-center pt-2 pb-1">
-                    <div className="w-10 h-1 rounded-full bg-bgray-300 dark:bg-darkblack-400"></div>
-                  </div>
-
-                  {/* Centered header */}
-                  <div className="flex items-center justify-center gap-2 pb-2">
-                    <h4 className="text-sm font-semibold text-darkblack-700 dark:text-white">Comments</h4>
-                    <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-bgray-100 dark:bg-darkblack-500 text-xs text-bgray-500 dark:text-bgray-300">
-                      {stageDetail.comments?.length || 0}
-                    </span>
-                  </div>
-
-                  {/* Scrollable comment list — fills remaining space */}
-                  <div className="flex-1 overflow-y-auto divide-y divide-bgray-100 dark:divide-darkblack-400 px-3">
-                    {stageDetail.comments?.length === 0 && (
-                      <p className="text-xs text-bgray-400 dark:text-bgray-500 text-center py-5">No comments yet. Be the first!</p>
-                    )}
-                    {stageDetail.comments?.map((comment) => {
-                      const userName = comment.user_name ||
-                        (comment.user_id === currentUser?.id ? (currentUser?.email?.split("@")[0] || "You") : "Unknown");
-                      const initials = userName.slice(0, 2).toUpperCase();
-                      const colors = ["from-purple-400 to-pink-400","from-blue-400 to-cyan-400","from-emerald-400 to-teal-400","from-orange-400 to-rose-400","from-indigo-400 to-violet-400"];
-                      const colorClass = colors[userName.charCodeAt(0) % colors.length];
-                      const isLiked = !!likedComments[comment.id];
-                      const likeCount = isLiked ? 1 : 0;
-
-                      const getRelativeTime = (date) => {
-                        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-                        if (seconds < 60) return "just now";
-                        const minutes = Math.floor(seconds / 60);
-                        if (minutes < 60) return minutes === 1 ? "1m" : `${minutes}m`;
-                        const hours = Math.floor(minutes / 60);
-                        if (hours < 24) return hours === 1 ? "1h" : `${hours}h`;
-                        const days = Math.floor(hours / 24);
-                        if (days < 7) return days === 1 ? "1d" : `${days}d`;
-                        return new Date(date).toLocaleDateString();
-                      };
-
-                      return (
-                        <div key={comment.id} className="flex items-start gap-3 py-3 group">
-                          {/* Avatar */}
-                          <div className={`shrink-0 w-8 h-8 rounded-full bg-gradient-to-br ${colorClass} flex items-center justify-center shadow-sm`}>
-                            <span className="text-white text-xs font-semibold">{initials}</span>
-                          </div>
-
-                          {/* Content */}
-                          <div className="flex-1 min-w-0">
-                            {editingCommentId === comment.id ? (
-                              /* ── Edit mode ── */
-                              <div className="space-y-2">
-                                <div className="relative">
-                                  <textarea
-                                    value={editCommentText}
-                                    onChange={(e) => handleCommentTextChange(e, true)}
-                                    rows={2}
-                                    autoFocus
-                                    className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-xl text-sm resize-none focus:ring-2 focus:ring-primary focus:border-transparent bg-bgray-50 dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
-                                  />
-                                  {showFileMentions && getFilteredFiles().length > 0 && (
-                                    <div className="absolute z-10 mt-1 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                                      {getFilteredFiles().map(file => (
-                                        <button
-                                          key={file.id}
-                                          onClick={() => insertFileMention(file, true)}
-                                          className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
-                                        >
-                                          <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                          </svg>
-                                          {file.label || file.file_path.split("/").pop()}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                                <div className="flex gap-3">
-                                  <button
-                                    onClick={() => handleEditComment(comment.id)}
-                                    disabled={!editCommentText.trim() || busy}
-                                    className="text-xs font-semibold text-blue-600 hover:text-blue-500 disabled:opacity-40 transition-colors"
-                                  >
-                                    {busy ? "Saving..." : "Save"}
-                                  </button>
-                                  <button
-                                    onClick={cancelEditingComment}
-                                    className="text-xs text-bgray-400 dark:text-bgray-500 hover:text-bgray-600 dark:hover:text-bgray-300 transition-colors"
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              /* ── Display mode ── */
-                              <>
-                                {/* username + text inline */}
-                                <p className="text-sm leading-snug">
-                                  <span className="font-semibold text-darkblack-700 dark:text-white">{userName} </span>
-                                  <span className="text-bgray-600 dark:text-bgray-300">
-                                    {parseFileMentions(comment.body).map((part, index) => (
-                                      part.type === "mention" ? (
-                                        <button
-                                          key={index}
-                                          onClick={() => {
-                                            const file = stageDetail.files?.find(f => f.id === part.fileId);
-                                            if (file) setPreviewFile(file);
-                                          }}
-                                          className="text-blue-600 dark:text-blue-400 hover:underline transition-colors"
-                                        >
-                                          {part.content}
-                                        </button>
-                                      ) : (
-                                        <span key={index}>{part.content}</span>
-                                      )
-                                    ))}
-                                  </span>
-                                </p>
-
-                                {/* time · heart · like count · Reply row */}
-                                <div className="flex items-center gap-3 mt-1.5">
-                                  <span className="text-xs text-bgray-400 dark:text-bgray-500">
-                                    {getRelativeTime(comment.created_at)}
-                                    {comment.updated_at && comment.updated_at !== comment.created_at && (
-                                      <span className="ml-1 italic">(edited)</span>
-                                    )}
-                                  </span>
-
-                                  {/* Heart like button */}
-                                  <button
-                                    type="button"
-                                    onClick={() => setLikedComments(prev => ({ ...prev, [comment.id]: !prev[comment.id] }))}
-                                    className="flex items-center gap-1 transition-transform active:scale-90"
-                                  >
-                                    <svg
-                                      className={`w-3.5 h-3.5 transition-colors ${isLiked ? "fill-red-500 text-red-500" : "fill-none text-bgray-400 dark:text-bgray-500 hover:text-red-400"}`}
-                                      stroke="currentColor"
-                                      viewBox="0 0 24 24"
-                                    >
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-                                    </svg>
-                                  </button>
-
-                                  {/* Like count */}
-                                  {likeCount > 0 && (
-                                    <span className="text-xs font-semibold text-darkblack-700 dark:text-white">{likeCount} like</span>
-                                  )}
-
-                                  {/* Reply */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setReplyingTo({ id: comment.id, userName });
-                                      setCommentDraft(`@${userName} `);
-                                      setTimeout(() => commentInputRef.current?.focus(), 0);
-                                    }}
-                                    className="text-xs font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-500 transition-colors"
-                                  >
-                                    Reply
-                                  </button>
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          {/* ··· menu — own comments only */}
-                          {comment.user_id === currentUser?.id && editingCommentId !== comment.id && (
-                            <div className="relative shrink-0">
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveMenu(activeMenu === comment.id ? null : comment.id);
-                                }}
-                                className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-full hover:bg-bgray-100 dark:hover:bg-darkblack-400 text-bgray-400 dark:text-bgray-500"
-                              >
-                                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                  <circle cx="12" cy="5" r="1.5" />
-                                  <circle cx="12" cy="12" r="1.5" />
-                                  <circle cx="12" cy="19" r="1.5" />
-                                </svg>
-                              </button>
-                              {activeMenu === comment.id && (
-                                <div className="absolute right-0 top-6 z-10 w-28 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg overflow-hidden">
-                                  <button
-                                    onClick={() => { startEditingComment(comment); setActiveMenu(null); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-darkblack-700 dark:text-white hover:bg-bgray-50 dark:hover:bg-darkblack-400 transition-colors"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => { handleDeleteComment(comment.id); setActiveMenu(null); }}
-                                    className="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                                  >
-                                    Delete
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* ── Pinned bottom input bar ── */}
-                  <div className="border-t border-bgray-100 dark:border-darkblack-400 bg-white dark:bg-darkblack-600 rounded-b-0 px-3 py-2.5">
-                    {/* Replying-to pill */}
-                    {replyingTo && (
-                      <div className="flex items-center justify-between mb-1.5 px-1">
-                        <span className="text-xs text-bgray-500 dark:text-bgray-400">
-                          Replying to <span className="font-semibold text-darkblack-700 dark:text-white">@{replyingTo.userName}</span>
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => { setReplyingTo(null); setCommentDraft(""); }}
-                          className="text-xs text-bgray-400 dark:text-bgray-500 hover:text-red-500 transition-colors"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    )}
-
-                    <form onSubmit={handleAddComment} className="flex items-center gap-3">
-                      {/* Current user avatar */}
-                      <div className="shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-400 flex items-center justify-center shadow-sm">
-                        <span className="text-white text-xs font-semibold">
-                          {currentUser?.email?.slice(0, 2).toUpperCase() || "ME"}
-                        </span>
-                      </div>
-
-                      {/* Input + mention dropdown */}
-                      <div className="relative flex-1">
-                        <input
-                          ref={commentInputRef}
-                          type="text"
-                          value={commentDraft}
-                          onChange={(e) => handleCommentTextChange(e, false)}
-                          placeholder="Add a comment..."
-                          disabled={busy}
-                          className="w-full px-4 py-2 rounded-full border border-bgray-200 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-600 text-sm text-darkblack-700 dark:text-white placeholder-bgray-400 dark:placeholder-bgray-500 focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                        />
-                        {/* File mention dropdown — pops above input */}
-                        {showFileMentions && getFilteredFiles().length > 0 && (
-                          <div className="absolute bottom-full mb-2 left-0 w-full bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                            {getFilteredFiles().map(file => (
-                              <button
-                                key={file.id}
-                                type="button"
-                                onClick={() => insertFileMention(file, false)}
-                                className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
-                              >
-                                <svg className="w-4 h-4 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                                </svg>
-                                {file.label || file.file_path.split("/").pop()}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Post button — IG blue text link */}
-                      <button
-                        type="submit"
-                        disabled={!commentDraft.trim() || busy}
-                        className="shrink-0 text-sm font-semibold text-blue-600 hover:text-blue-500 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                      >
-                        {busy ? "..." : "Post"}
-                      </button>
-                    </form>
-                  </div>
                 </div>
               </div>
             </div>

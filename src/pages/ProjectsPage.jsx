@@ -5,6 +5,7 @@ import "reactflow/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
+import { createProjectActivity } from "../lib/projectActivity";
 import StageDrawer from "../StageDrawer";
 import NetworkGraphView from "../components/NetworkGraphView";
 import PipelineView from "../components/PipelineView";
@@ -745,6 +746,9 @@ export default function ProjectsPage() {
       }).filter(Boolean);
 
       await Promise.all(updates);
+      if (project.current_stage_name && project.current_stage_name !== targetStageName) {
+        createProjectActivity(project.track_id, "stage_changed", { from: project.current_stage_name, to: targetStageName });
+      }
       await fetchTracksOverview();
     } catch (e) {
       await fetchTracksOverview();
@@ -805,50 +809,33 @@ export default function ProjectsPage() {
     }
   };
 
-  // --- Load all comments from all stages ---
+  // --- Load the project's conversation timeline (single query, no per-stage fan-out) ---
   const loadAllComments = async () => {
-    if (!detail?.stages || detail.stages.length === 0) {
+    if (!activeTrackId) {
       setAllComments([]);
       return;
     }
     setLoadingComments(true);
     try {
-      // Get all stage IDs
-      const stageIds = detail.stages.map(s => s.track_stage_id);
+      const { data, error } = await supabase
+        .from("project_messages")
+        .select("*, profiles(full_name), track_stages(stage_templates(name, order_index))")
+        .eq("track_id", activeTrackId)
+        .eq("message_type", "message")
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
 
-      // Fetch all stage details with comments using the same RPC used by StageDrawer
-      const stageDetailsPromises = stageIds.map(stageId =>
-        supabase.rpc("get_stage_detail", { p_track_stage_id: stageId })
-      );
+      const mapped = (data || []).map(m => ({
+        id: m.id,
+        created_at: m.created_at,
+        body: m.body,
+        stage_name: m.track_stages?.stage_templates?.name || null,
+        stage_order: m.track_stages?.stage_templates?.order_index ?? null,
+        profile: { full_name: m.profiles?.full_name || "Unknown User", avatar_url: null },
+      }));
 
-      const results = await Promise.all(stageDetailsPromises);
-
-      // Collect all comments from all stages
-      const allStageComments = [];
-
-      results.forEach((result, index) => {
-        const stageData = result.data;
-        const stage = detail.stages[index];
-
-        if (stageData?.comments && stageData.comments.length > 0) {
-          stageData.comments.forEach(comment => {
-            allStageComments.push({
-              ...comment,
-              stage_name: stage.name,
-              stage_order: stage.order_index,
-              profile: {
-                full_name: comment.user_name || 'Unknown User',
-                avatar_url: null
-              }
-            });
-          });
-        }
-      });
-
-      // Sort by created_at descending (newest first)
-      allStageComments.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-      setAllComments(allStageComments);
+      setAllComments(mapped);
     } catch (err) {
       console.error('Error loading comments:', err);
       setAllComments([]);
@@ -1800,10 +1787,12 @@ export default function ProjectsPage() {
                                 <span className="text-xs text-bgray-500 dark:text-bgray-400">
                                   {new Date(comment.created_at).toLocaleString()}
                                 </span>
-                                {/* Stage badge */}
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium rounded-full">
-                                  {comment.stage_order}. {comment.stage_name}
-                                </span>
+                                {/* Stage badge — only present for messages tagged to a specific stage */}
+                                {comment.stage_name && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium rounded-full">
+                                    {comment.stage_order}. {comment.stage_name}
+                                  </span>
+                                )}
                               </div>
 
                               {/* Comment body */}

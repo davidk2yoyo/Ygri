@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { sileo } from "sileo";
 import { supabase } from "../supabaseClient";
+import { createProjectActivity } from "../lib/projectActivity";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
 import QuotationPaymentsSection from "./QuotationPaymentsSection";
@@ -519,6 +520,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       };
 
       let quotId;
+      const previousTotal = savedQuotation?.total_amount;
       if (savedQuotation) {
         const { data, error } = await supabase
           .from("quotations")
@@ -667,6 +669,12 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           affectedSuppliers.forEach(id => delete updated[id]);
           return updated;
         });
+      }
+
+      if (previousTotal != null && Math.abs(previousTotal - grandTotal) > 0.004 && trackId) {
+        createProjectActivity(trackId, "quotation_updated", {
+          quote_number: quoteNumber, currency, from_total: previousTotal, to_total: grandTotal,
+        }, { quotationId: quotId });
       }
 
       if (onSaved) onSaved(grandTotal, currency);
