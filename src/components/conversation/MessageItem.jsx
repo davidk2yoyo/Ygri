@@ -3,7 +3,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { supabase } from "../../supabaseClient";
 import { buildMessageExtensions } from "./messageEditorExtensions";
 import MessageEditorToolbar from "./MessageEditorToolbar";
-import { sanitizeMessageHtml } from "../../lib/sanitizeMessageHtml";
+import { sanitizeMessageHtml, legacyBodyToHtml } from "../../lib/sanitizeMessageHtml";
 
 const AVATAR_COLORS = ["from-purple-400 to-pink-400", "from-blue-400 to-cyan-400", "from-emerald-400 to-teal-400", "from-orange-400 to-rose-400", "from-indigo-400 to-violet-400"];
 
@@ -43,7 +43,7 @@ function MessageBody({ html }) {
   return (
     <div
       className="message-body mt-0.5 text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-darkblack-700 dark:[&_strong]:text-white [&_ul]:list-disc [&_ul]:list-outside [&_ul]:pl-5 [&_ul]:mb-1.5 [&_ol]:list-decimal [&_ol]:list-outside [&_ol]:pl-5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_a]:text-primary [&_a]:hover:underline [&_code]:px-1 [&_code]:py-0.5 [&_code]:bg-bgray-100 dark:[&_code]:bg-darkblack-500 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded"
-      dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(html) }}
+      dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(legacyBodyToHtml(html)) }}
     />
   );
 }
@@ -55,7 +55,7 @@ function EditableBody({ message, profiles, onSave, onCancel }) {
 
   const editor = useEditor({
     extensions: buildMessageExtensions(profilesRef, "Edit message..."),
-    content: message.body || "",
+    content: legacyBodyToHtml(message.body) || "",
     editorProps: {
       attributes: { class: "text-sm text-darkblack-700 dark:text-white outline-none min-h-[24px] [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded" },
     },
