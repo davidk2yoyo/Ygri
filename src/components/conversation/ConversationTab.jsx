@@ -132,6 +132,14 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
       .single();
     if (error) { sileo.error({ title: "Could not send message", description: error.message }); return; }
 
+    // Record any @mentions (stored inline in body as [@Name](mention:id)) for future notifications
+    const mentionedIds = [...(body || "").matchAll(/\(mention:([a-f0-9-]+)\)/g)].map(m => m[1]);
+    if (mentionedIds.length > 0) {
+      await supabase.from("message_mentions").insert(
+        [...new Set(mentionedIds)].map(uid => ({ message_id: inserted.id, user_id: uid }))
+      );
+    }
+
     if (file) {
       try {
         const path = `message-files/${trackId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${file.name}`;
@@ -244,7 +252,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
             <MessageItem key={m.id} message={m} currentUserId={currentUserId} onSaveEdit={handleSaveEdit} onDelete={handleDelete} />
           ))}
         </div>
-        <MessageComposer onSend={handleSend} />
+        <MessageComposer onSend={handleSend} profiles={Object.values(profilesById)} />
       </div>
     </div>
   );

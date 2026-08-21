@@ -1,7 +1,25 @@
 import React, { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { supabase } from "../../supabaseClient";
 
 const AVATAR_COLORS = ["from-purple-400 to-pink-400", "from-blue-400 to-cyan-400", "from-emerald-400 to-teal-400", "from-orange-400 to-rose-400", "from-indigo-400 to-violet-400"];
+
+const messageMarkdownComponents = {
+  p: (props) => <p className="text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed mb-1.5 last:mb-0" {...props} />,
+  strong: (props) => <strong className="font-semibold text-darkblack-700 dark:text-white" {...props} />,
+  em: (props) => <em {...props} />,
+  ul: (props) => <ul className="list-disc list-outside pl-5 space-y-0.5 mb-1.5 marker:text-bgray-400" {...props} />,
+  ol: (props) => <ol className="list-decimal list-outside pl-5 space-y-0.5 mb-1.5" {...props} />,
+  li: (props) => <li className="text-sm text-bgray-700 dark:text-bgray-200" {...props} />,
+  code: (props) => <code className="px-1 py-0.5 bg-bgray-100 dark:bg-darkblack-500 rounded text-xs font-mono" {...props} />,
+  a: ({ href, children, ...props }) => {
+    if (href?.startsWith("mention:")) {
+      return <span className="bg-primary/10 text-primary font-medium px-1 rounded">{children}</span>;
+    }
+    return <a href={href} target="_blank" rel="noreferrer" className="text-primary hover:underline" {...props}>{children}</a>;
+  },
+};
 
 const getRelativeTime = (date) => {
   const seconds = Math.floor((new Date() - new Date(date)) / 1000);
@@ -98,7 +116,9 @@ export default function MessageItem({ message, currentUserId, onSaveEdit, onDele
         ) : (
           <>
             {message.body && (
-              <p className="text-sm text-bgray-700 dark:text-bgray-200 whitespace-pre-wrap mt-0.5 leading-relaxed">{message.body}</p>
+              <div className="mt-0.5">
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={messageMarkdownComponents}>{message.body}</ReactMarkdown>
+              </div>
             )}
             {message.message_attachments?.length > 0 && (
               <div className="mt-1.5 space-y-1.5">
