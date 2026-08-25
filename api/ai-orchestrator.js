@@ -11,20 +11,22 @@ export default async function handler(req, res) {
 
     const { userId, supabase } = await authenticateRequest(req);
 
-    const { message, pageContext, history } = req.body || {};
+    const { message, pageContext, conversationId } = req.body || {};
     if (!message || typeof message !== "string" || !message.trim()) {
       throw new HttpError(400, "Missing required field: message");
     }
-    if (history && (!Array.isArray(history) || history.length > 20)) {
-      throw new HttpError(400, "history must be an array of at most 20 messages");
+    if (conversationId && typeof conversationId !== "string") {
+      throw new HttpError(400, "conversationId must be a string");
     }
 
+    // Chat history lives server-side now (ai_conversation_messages) — the
+    // browser only needs to remember which conversation it's continuing.
     const result = await runOrchestratorTurn({
       supabase,
       userId,
       pageContext: pageContext || {},
       userMessage: message.trim(),
-      history: (history || []).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "") })),
+      conversationId: conversationId || null,
     });
 
     res.status(200).json(result);

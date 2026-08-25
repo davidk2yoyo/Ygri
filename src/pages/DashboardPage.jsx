@@ -521,6 +521,50 @@ function TodoDetailsModal({ selectedDate, todos, onClose }) {
   );
 }
 
+const COPILOT_SUGGESTIONS = ["How are we doing across all projects?", "What needs attention this week?", "Are there overdue tasks?"];
+
+function CopilotDashboardSection({ navigate }) {
+  const [draft, setDraft] = useState("");
+  const go = (message) => {
+    const trimmed = (message ?? draft).trim();
+    if (!trimmed) { navigate("/copilot"); return; }
+    navigate("/copilot", { state: { initialMessage: trimmed } });
+  };
+  return (
+    <div className="mt-4 bg-gradient-to-br from-primary/5 to-transparent dark:from-primary/10 border border-primary/15 rounded-2xl p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+        </svg>
+        <h3 className="text-sm font-bold text-darkblack-700 dark:text-white">Ask Ygri Copilot</h3>
+      </div>
+      <div className="flex items-center gap-2 mb-3">
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") go(); }}
+          placeholder="Ask about any project, client, or supplier..."
+          className="flex-1 px-4 py-2.5 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-xl bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary outline-none"
+        />
+        <button onClick={() => go()} className="shrink-0 px-4 py-2.5 bg-primary text-white text-sm font-semibold rounded-xl hover:bg-primary/90 transition">
+          Ask
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {COPILOT_SUGGESTIONS.map((s) => (
+          <button
+            key={s}
+            onClick={() => go(s)}
+            className="text-xs px-3 py-1.5 rounded-full border border-bgray-200 dark:border-darkblack-400 text-bgray-500 dark:text-bgray-400 hover:border-primary hover:text-primary transition"
+          >
+            {s}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ──────────────────────────────────────────────
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -754,6 +798,8 @@ export default function DashboardPage() {
             <RecentClientsWidget clients={dashboardData.clients} onClientClick={handleClientClick} onAddClient={handleAddClient} />
           </div>
         </div>
+
+        <CopilotDashboardSection navigate={navigate} />
 
         <TodoDetailsModal selectedDate={selectedDateForTodos} todos={dashboardData.todos} onClose={() => setSelectedDateForTodos(null)} />
       </div>

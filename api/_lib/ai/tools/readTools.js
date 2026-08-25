@@ -24,8 +24,22 @@ export const READ_TOOLS = [
     handler: async ({ client_id }, { supabase }) => (await buildClientContext(supabase, client_id)) || { error: "Client not found" },
   },
   {
+    key: "get_projects_overview",
+    description: "Exact total project count and a breakdown by status (active, completed, cancelled, etc.). Use this — never search_projects or your own arithmetic — for ANY question about how many projects exist in total or per status; search_projects is capped at 10 rows and cannot answer 'how many'.",
+    parameters: { type: "object", properties: {} },
+    handler: async (_args, { supabase }) => {
+      const { data } = await supabase.from("tracks").select("id, status");
+      const rows = data || [];
+      const by_status = rows.reduce((acc, r) => {
+        acc[r.status || "unknown"] = (acc[r.status || "unknown"] || 0) + 1;
+        return acc;
+      }, {});
+      return { total: rows.length, by_status };
+    },
+  },
+  {
     key: "search_projects",
-    description: "Search projects/tracks by name or client name.",
+    description: "Search projects/tracks by name or client name. Results are capped at 10 — never use this (or count its results) to answer 'how many projects' questions; use get_projects_overview for that.",
     parameters: { type: "object", properties: { query: { type: "string" } }, required: ["query"] },
     handler: async ({ query }, { supabase }) => {
       const { data } = await supabase.from("tracks").select("id, name, status, clients(company_name)").ilike("name", `%${query}%`).limit(10);

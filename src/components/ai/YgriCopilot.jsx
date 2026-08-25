@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { useNavigate } from "react-router-dom";
 import { useCopilotPageContext } from "../../contexts/CopilotPageContext";
 import { sendCopilotMessage } from "../../lib/ai/copilotClient";
-import ActionPlanPanel from "./ActionPlanPanel";
+import { listConversations, loadConversationMessages } from "../../lib/ai/conversationsClient";
+import CopilotMessage from "./CopilotMessage";
 
 const SUGGESTIONS = ["How are we doing?", "What needs attention?", "What did the client originally request?", "Are there overdue tasks?"];
 
@@ -11,16 +11,6 @@ const MIN_WIDTH = 340;
 const MIN_HEIGHT = 420;
 const DEFAULT_WIDTH = 400;
 const DEFAULT_HEIGHT = 560;
-
-const markdownComponents = {
-  p: (props) => <p className="mb-1.5 last:mb-0" {...props} />,
-  strong: (props) => <strong className="font-semibold text-darkblack-700 dark:text-white" {...props} />,
-  ul: (props) => <ul className="list-disc list-outside pl-4 space-y-0.5 mb-1.5 marker:text-bgray-400" {...props} />,
-  ol: (props) => <ol className="list-decimal list-outside pl-4 space-y-0.5 mb-1.5" {...props} />,
-  li: (props) => <li {...props} />,
-  code: (props) => <code className="px-1 py-0.5 bg-black/5 dark:bg-white/10 rounded text-xs font-mono" {...props} />,
-  a: (props) => <a className="text-primary hover:underline" target="_blank" rel="noreferrer" {...props} />,
-};
 
 function CopilotIcon({ className }) {
   return (
@@ -30,35 +20,17 @@ function CopilotIcon({ className }) {
   );
 }
 
-function CopilotMessage({ message }) {
-  if (message.role === "user") {
-    return (
-      <div className="flex justify-end mb-3">
-        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm bg-primary text-white text-sm">{message.content}</div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex justify-start mb-3">
-      <div className="max-w-[90%] w-full">
-        {message.content && (
-          <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-bgray-100 dark:bg-darkblack-500 text-darkblack-700 dark:text-white text-sm">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{message.content}</ReactMarkdown>
-          </div>
-        )}
-        {message.plan && <ActionPlanPanel plan={message.plan} onDone={message.onPlanDone} />}
-      </div>
-    </div>
-  );
-}
-
 export default function YgriCopilot() {
+  const navigate = useNavigate();
   const { pageContext } = useCopilotPageContext();
   const [isOpen, setIsOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [size, setSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT });
   const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [conversationId, setConversationId] = useState(null);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [hasLoadedInitial, setHasLoadedInitial] = useState(false);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
@@ -69,6 +41,31 @@ export default function YgriCopilot() {
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, isOpen]);
+
+  // Continue the most recent conversation automatically the first time the
+  // widget is opened, so context survives closing it / reloading the page —
+  // "always have context," per how this was asked for.
+  useEffect(() => {
+    if (!isOpen || hasLoadedInitial) return;
+    setHasLoadedInitial(true);
+    (async () => {
+      setLoadingHistory(true);
+      try {
+        const recent = await listConversations(1);
+        if (recent[0]) {
+          const msgs = await loadConversationMessages(recent[0].id);
+          if (msgs.length) {
+            setConversationId(recent[0].id);
+            setMessages(msgs);
+          }
+        }
+      } catch {
+        // Silent — worst case they start a fresh conversation, nothing lost.
+      } finally {
+        setLoadingHistory(false);
+      }
+    })();
+  }, [isOpen, hasLoadedInitial]);
 
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -105,11 +102,11 @@ export default function YgriCopilot() {
     if (!trimmed || sending) return;
     setError("");
     setDraft("");
-    const history = messages.map((m) => ({ role: m.role, content: m.content || "" }));
     setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
     setSending(true);
     try {
-      const result = await sendCopilotMessage({ message: trimmed, pageContext, history });
+      const result = await sendCopilotMessage({ message: trimmed, pageContext, conversationId });
+      setConversationId(result.conversation_id);
       setMessages((prev) => [...prev, { role: "assistant", content: result.message, plan: result.plan }]);
     } catch (e) {
       setError(e.message);
@@ -117,6 +114,12 @@ export default function YgriCopilot() {
     } finally {
       setSending(false);
     }
+  };
+
+  const startNewChat = () => {
+    setConversationId(null);
+    setMessages([]);
+    setError("");
   };
 
   const contextLabel = pageContext?.page === "project" ? pageContext.projectName || "this project" : null;
@@ -161,6 +164,12 @@ export default function YgriCopilot() {
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
+              <button onClick={startNewChat} className="p-1.5 rounded-lg hover:bg-white/15 transition" title="New chat">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
+              </button>
+              <button onClick={() => navigate("/copilot", { state: { conversationId, pageContext } })} className="p-1.5 rounded-lg hover:bg-white/15 transition" title="Open full page">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
+              </button>
               <button
                 onClick={() => setIsExpanded((v) => !v)}
                 className="p-1.5 rounded-lg hover:bg-white/15 transition"
@@ -183,7 +192,12 @@ export default function YgriCopilot() {
           </div>
 
           <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
-            {messages.length === 0 && (
+            {loadingHistory && (
+              <div className="h-full flex items-center justify-center">
+                <span className="w-4 h-4 border-2 border-bgray-300 border-t-primary rounded-full animate-spin inline-block" />
+              </div>
+            )}
+            {!loadingHistory && messages.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-center px-4">
                 <CopilotIcon className="w-8 h-8 text-bgray-300 dark:text-bgray-600 mb-2" />
                 <p className="text-sm text-bgray-400 dark:text-bgray-500 mb-4">
@@ -204,7 +218,7 @@ export default function YgriCopilot() {
                 )}
               </div>
             )}
-            {messages.map((m, i) => <CopilotMessage key={i} message={m} />)}
+            {!loadingHistory && messages.map((m, i) => <CopilotMessage key={i} message={m} />)}
             {sending && (
               <div className="flex justify-start mb-3">
                 <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-bgray-100 dark:bg-darkblack-500">

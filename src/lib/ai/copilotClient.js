@@ -14,9 +14,11 @@ async function postJson(url, body) {
   return data;
 }
 
-// { message, plan } — plan is null unless the turn produced WRITE proposals.
-export function sendCopilotMessage({ message, pageContext, history }) {
-  return postJson("/api/ai-orchestrator", { message, pageContext, history });
+// { message, plan, conversation_id, conversation_title } — plan is null
+// unless the turn produced WRITE proposals. History now lives server-side,
+// keyed by conversationId — pass null/undefined to start a new one.
+export function sendCopilotMessage({ message, pageContext, conversationId }) {
+  return postJson("/api/ai-orchestrator", { message, pageContext, conversationId });
 }
 
 // { plan_id, status, actions: [{action_id, label, status, result, error}] }

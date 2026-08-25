@@ -4,6 +4,7 @@ import { loadRelevantSkills, renderSkillsBlock } from "./skills.js";
 import { READ_TOOLS } from "./tools/readTools.js";
 import { WRITE_TOOLS } from "./tools/writeTools.js";
 import { buildActionPlan, planForClient } from "./actionPlan.js";
+import { loadOrCreateConversation, loadHistory, appendMessage } from "./conversations.js";
 
 // Hardcoded default until an organization-level timezone setting exists —
 // this business operates out of Colombia (see Copilot Blueprint / audit
@@ -29,8 +30,12 @@ function todayInOrgTimezone() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: ORG_TIMEZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
-export async function runOrchestratorTurn({ supabase, userId, pageContext, userMessage, history = [] }) {
+export async function runOrchestratorTurn({ supabase, userId, pageContext, userMessage, conversationId }) {
   const started = Date.now();
+  const conversation = await loadOrCreateConversation(supabase, userId, conversationId, pageContext, userMessage);
+  const history = await loadHistory(supabase, conversation.id);
+  await appendMessage(supabase, conversation.id, userId, "user", userMessage);
+
   const prompt = await loadActivePrompt(supabase);
   const isEnabled = await getEnabledToolKeys(supabase);
   const activeToolDefs = ALL_TOOL_DEFS.filter((t) => !isEnabled || isEnabled(t.key));
@@ -114,6 +119,9 @@ export async function runOrchestratorTurn({ supabase, userId, pageContext, userM
     plan = planForClient(rawPlan);
   }
 
+  const assistantContent = plan ? plan.assistant_message : finalText;
+  await appendMessage(supabase, conversation.id, userId, "assistant", assistantContent, plan?.plan_id || null);
+
   await supabase.from("ai_executions").insert({
     user_id: userId,
     plan_id: plan?.plan_id || null,
@@ -130,7 +138,7 @@ export async function runOrchestratorTurn({ supabase, userId, pageContext, userM
     latency_ms: Date.now() - started,
   });
 
-  return plan ? { message: plan.assistant_message, plan } : { message: finalText, plan: null };
+  return { message: assistantContent, plan, conversation_id: conversation.id, conversation_title: conversation.title };
 }
 
 function safeParseArgs(raw) {
