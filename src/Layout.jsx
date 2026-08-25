@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 import { supabase } from "./supabaseClient";
 import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
-import YgriAiChat from "./pages/AiAssistantPage";
 import NotificationBell from "./components/NotificationBell";
 import YgriCopilot from "./components/ai/YgriCopilot";
 import { CopilotPageProvider } from "./contexts/CopilotPageContext";
@@ -457,7 +456,6 @@ export default function Layout() {
         </div>
       </main>
 
-      <YgriAiChat />
       <YgriCopilot />
       <Toaster position="bottom-left" />
     </div>
