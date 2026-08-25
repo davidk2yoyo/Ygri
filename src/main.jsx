@@ -31,6 +31,7 @@ import InspectionReportEditorPage from "./pages/InspectionReportEditorPage";
 import InspectionReportPublicPage from "./pages/InspectionReportPublicPage";
 import CalendarPage from "./pages/CalendarPage";
 import ShipmentsPage from "./pages/ShipmentsPage";
+import AiManagementPage from "./pages/AiManagementPage";
 import { ClientPortalProvider } from "./portal/ClientPortalContext";
 import ClientProtectedRoute from "./portal/ClientProtectedRoute";
 import ClientLoginPage from "./portal/ClientLoginPage";
@@ -73,6 +74,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/shipments" element={<ShipmentsPage />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/ai-management" element={<AiManagementPage />} />
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
           <Route path="/quotations/:quotationId/packing-list" element={<PackingListEditorPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />

@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { createProjectActivity } from "../lib/projectActivity";
+import { useCopilotPageContext } from "../contexts/CopilotPageContext";
 import { sanitizeMessageHtml, legacyBodyToHtml } from "../lib/sanitizeMessageHtml";
 import StageDrawer from "../StageDrawer";
 import NetworkGraphView from "../components/NetworkGraphView";
@@ -597,6 +598,7 @@ function DeleteProjectModal({ isOpen, onClose, project, onConfirm, isDeleting })
 export default function ProjectsPage() {
   const { t } = useTranslation();
   const location = useLocation();
+  const { setPageContext } = useCopilotPageContext();
   const [overview, setOverview] = useState([]);
   const [cancelledProjects, setCancelledProjects] = useState([]);
   const [showCancelledModal, setShowCancelledModal] = useState(false);
@@ -787,6 +789,22 @@ export default function ProjectsPage() {
       }
     }
   }, [location.state, overview]);
+
+  // Publish page context so Ygri Copilot automatically knows which project
+  // (and stage) the user is looking at, without them having to name it.
+  useEffect(() => {
+    if (activeTrackId) {
+      setPageContext({
+        page: "project",
+        track_id: activeTrackId,
+        stage_id: selectedStageId || null,
+        projectName: detail?.track?.name || null,
+        clientName: detail?.client?.company_name || null,
+      });
+    } else {
+      setPageContext({});
+    }
+  }, [activeTrackId, selectedStageId, detail?.track?.name, detail?.client?.company_name, setPageContext]);
 
   // --- Data: track detail ---
   const loadTrackDetail = async () => {

@@ -31,6 +31,8 @@ function systemEventText(metadata = {}) {
       return `📝 ${metadata.quote_number || "Quotation"} created${metadata.currency && metadata.total != null ? ` — ${metadata.currency} ${Number(metadata.total).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}`;
     case "quotation_promoted":
       return `⬆️ ${metadata.quote_number || "Document"} promoted: ${metadata.from || "—"} → ${metadata.to || "—"}`;
+    case "ai_task_created":
+      return `🤖 Ygri Copilot created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
     default:
       return metadata.label || "Activity update";
   }

@@ -29,11 +29,11 @@
           "parameters": [
             {
               "name": "apikey",
-              "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+              "value": "={{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
             },
             {
               "name": "Authorization",
-              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF4bnVsbnBvZ2VtanJ6d2lkdHFlIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NDMyNzMxMywiZXhwIjoyMDY5OTAzMzEzfQ.SNTxiO4HyMyFVmrgf2dmgdDfvtwWCUWDYRWMXgSp6gM"
+              "value": "=Bearer {{ $env.SUPABASE_SERVICE_ROLE_KEY }}"
             },
             {
               "name": "Content-Type",

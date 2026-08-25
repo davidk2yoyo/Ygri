@@ -6,6 +6,8 @@ import { useDarkMode } from "./hooks/useDarkMode";
 import logoShort from "./assets/images/logo/logo-short.png";
 import YgriAiChat from "./pages/AiAssistantPage";
 import NotificationBell from "./components/NotificationBell";
+import YgriCopilot from "./components/ai/YgriCopilot";
+import { CopilotPageProvider } from "./contexts/CopilotPageContext";
 import { Toaster, sileo } from "sileo";
 import "sileo/styles.css";
 
@@ -308,10 +310,20 @@ export default function Layout() {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
         </svg>
       )
+    },
+    {
+      path: "/ai-management",
+      label: "AI Management",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+        </svg>
+      )
     }
   ];
 
   return (
+    <CopilotPageProvider>
     <div className="flex min-h-screen bg-[#f8f9fb] dark:bg-gray-950 font-urbanist">
       {/* Sidebar */}
       <aside className={`fixed top-0 left-0 z-30 h-full w-64 bg-white dark:bg-gray-900 transition-transform duration-300 ease-in-out ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'} border-r border-gray-100 dark:border-white/5 flex flex-col shadow-[4px_0_24px_rgba(0,0,0,0.06)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.3)]`}>
@@ -446,7 +458,9 @@ export default function Layout() {
       </main>
 
       <YgriAiChat />
+      <YgriCopilot />
       <Toaster position="bottom-left" />
     </div>
+    </CopilotPageProvider>
   );
 }
