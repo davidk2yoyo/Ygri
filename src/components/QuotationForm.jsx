@@ -7,6 +7,7 @@ import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
 import QuotationPaymentsSection from "./QuotationPaymentsSection";
 import AIClientScanner from "./AIClientScanner";
+import ConversationTab from "./conversation/ConversationTab";
 
 const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
 const CURRENCIES = ["USD", "COP", "EUR", "CNY", "HKD"];
@@ -41,6 +42,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [validUntil, setValidUntil] = useState("");
   const [negotiationTerm, setNegotiationTerm] = useState("");
   const [notes, setNotes] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
   const [commissionPct, setCommissionPct] = useState(0);
   const [showCommission, setShowCommission] = useState(false);
   const [items, setItems] = useState([emptyItem()]);
@@ -93,6 +95,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     setValidUntil("");
     setNegotiationTerm("");
     setNotes("");
+    setInternalNotes("");
     setCommissionPct(0);
     setShowCommission(false);
     setItems([emptyItem()]);
@@ -131,6 +134,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setValidUntil(quotData.valid_until || "");
         setNegotiationTerm(quotData.negotiation_term || "");
         setNotes(quotData.notes || "");
+        setInternalNotes(quotData.internal_notes || "");
         setCommissionPct(parseFloat(quotData.commission_pct) || 0);
         setShowCommission(quotData.show_commission || false);
 
@@ -509,6 +513,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         delivery_time: type === "product" ? deliveryTime : null,
         negotiation_term: negotiationTerm,
         notes,
+        internal_notes: internalNotes,
         commission_pct: parseFloat(commissionPct) || 0,
         show_commission: showCommission,
         total_amount: grandTotal,
@@ -520,7 +525,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       };
 
       let quotId;
+      const isNewQuotation = !savedQuotation;
       const previousTotal = savedQuotation?.total_amount;
+      const previousDocType = savedQuotation?.document_type;
       if (savedQuotation) {
         const { data, error } = await supabase
           .from("quotations")
@@ -671,10 +678,27 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         });
       }
 
-      if (previousTotal != null && Math.abs(previousTotal - grandTotal) > 0.004 && trackId) {
-        createProjectActivity(trackId, "quotation_updated", {
-          quote_number: quoteNumber, currency, from_total: previousTotal, to_total: grandTotal,
-        }, { quotationId: quotId });
+      if (trackId) {
+        const { data: { session } } = await supabase.auth.getSession();
+        const userId = session?.user?.id || null;
+
+        if (isNewQuotation) {
+          createProjectActivity(trackId, "quotation_created", {
+            quote_number: quoteNumber, currency, total: grandTotal,
+          }, { quotationId: quotId, userId });
+        } else {
+          if (previousDocType && previousDocType !== documentType) {
+            const docLabel = (key) => DOC_STEPS.find(s => s.key === key)?.label || key;
+            createProjectActivity(trackId, "quotation_promoted", {
+              quote_number: quoteNumber, from: docLabel(previousDocType), to: docLabel(documentType),
+            }, { quotationId: quotId, userId });
+          }
+          if (previousTotal != null && Math.abs(previousTotal - grandTotal) > 0.004) {
+            createProjectActivity(trackId, "quotation_updated", {
+              quote_number: quoteNumber, currency, from_total: previousTotal, to_total: grandTotal,
+            }, { quotationId: quotId, userId });
+          }
+        }
       }
 
       if (onSaved) onSaved(grandTotal, currency);
@@ -1581,6 +1605,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         />
       </div>
 
+      {/* Internal Notes — never printed on the client-facing PDF */}
+      <div>
+        <label className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1.5 uppercase tracking-wide">
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Internal Notes (not visible to client)
+        </label>
+        <textarea
+          value={internalNotes}
+          onChange={e => setInternalNotes(e.target.value)}
+          rows={3}
+          placeholder="Team-only notes — pricing context, negotiation history, reminders..."
+          className="w-full px-3 py-2 border border-amber-200 dark:border-amber-900/50 rounded-lg text-sm bg-amber-50/50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-amber-700/40 dark:placeholder-amber-400/30 resize-none"
+        />
+      </div>
+
       {/* Commission */}
       <div className="border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4 bg-bgray-50 dark:bg-darkblack-500">
         <div className="flex items-center justify-between mb-3">
@@ -1688,6 +1729,20 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           payments={payments}
           setPayments={setPayments}
         />
+      )}
+
+      {/* Activity & Comments — auto-logged changes (created, promoted, price
+          updates) plus team comments, tagged to this quotation and also
+          visible in the project's full Conversation tab */}
+      {savedQuotation && trackId && (
+        <div className="border border-bgray-200 dark:border-darkblack-400 rounded-xl overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-bgray-100 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-500">
+            <p className="text-xs font-semibold text-bgray-600 dark:text-bgray-300 uppercase tracking-wide">💬 Activity & Comments</p>
+          </div>
+          <div className="h-96">
+            <ConversationTab trackId={trackId} quotationId={savedQuotation.id} compact />
+          </div>
+        </div>
       )}
 
       {/* Image Lightbox */}

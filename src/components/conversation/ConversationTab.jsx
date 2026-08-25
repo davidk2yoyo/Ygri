@@ -21,7 +21,7 @@ const STAGE_STATUS_DOT = {
   blocked: "bg-red-500",
 };
 
-export default function ConversationTab({ trackId, projectName, clientName }) {
+export default function ConversationTab({ trackId, projectName, clientName, quotationId = null, compact = false }) {
   const [messages, setMessages] = useState([]);
   const [profilesById, setProfilesById] = useState({});
   const [loading, setLoading] = useState(true);
@@ -39,18 +39,18 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
   }, []);
 
   const loadMessages = useCallback(async (names) => {
-    const { data, error } = await supabase
+    let query = supabase
       .from("project_messages")
       .select("*, message_attachments(*)")
       .eq("track_id", trackId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE);
+      .is("deleted_at", null);
+    if (quotationId) query = query.eq("quotation_id", quotationId);
+    const { data, error } = await query.order("created_at", { ascending: false }).limit(PAGE_SIZE);
     if (error) { sileo.error({ title: "Could not load conversation", description: error.message }); return; }
     const ordered = (data || []).slice().reverse();
     setMessages(attachNames(ordered, names || profilesById));
     setHasMore((data || []).length === PAGE_SIZE);
-  }, [trackId, profilesById, attachNames]);
+  }, [trackId, quotationId, profilesById, attachNames]);
 
   const loadOlder = async () => {
     if (loadingOlder || messages.length === 0) return;
@@ -59,14 +59,14 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
     const prevScrollHeight = el?.scrollHeight || 0;
     try {
       const oldest = messages[0].created_at;
-      const { data, error } = await supabase
+      let query = supabase
         .from("project_messages")
         .select("*, message_attachments(*)")
         .eq("track_id", trackId)
         .is("deleted_at", null)
-        .lt("created_at", oldest)
-        .order("created_at", { ascending: false })
-        .limit(PAGE_SIZE);
+        .lt("created_at", oldest);
+      if (quotationId) query = query.eq("quotation_id", quotationId);
+      const { data, error } = await query.order("created_at", { ascending: false }).limit(PAGE_SIZE);
       if (error) throw error;
       const older = (data || []).slice().reverse();
       setMessages(prev => [...attachNames(older, profilesById), ...prev]);
@@ -95,8 +95,10 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
       if (cancelled) return;
       setProfilesById(names);
 
-      const { data: td } = await supabase.rpc("get_track_detail", { p_track_id: trackId });
-      if (!cancelled) setTrackDetail(td);
+      if (!compact) {
+        const { data: td } = await supabase.rpc("get_track_detail", { p_track_id: trackId });
+        if (!cancelled) setTrackDetail(td);
+      }
 
       await loadMessages(names);
       if (!cancelled) setLoading(false);
@@ -104,22 +106,23 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
     init();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId]);
+  }, [trackId, quotationId]);
 
-  // Realtime: any change to this project's messages triggers a refresh.
-  // Simple and correct for a foundation pass — message volume per project
-  // is small, so a full reload per event is cheap and avoids partial-join bugs.
+  // Realtime: any change to this project's (or quotation's) messages triggers
+  // a refresh. Simple and correct for a foundation pass — message volume per
+  // project is small, so a full reload per event is cheap and avoids partial-join bugs.
   useEffect(() => {
+    const filter = quotationId ? `quotation_id=eq.${quotationId}` : `track_id=eq.${trackId}`;
     const channel = supabase
-      .channel(`project-messages-${trackId}`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "project_messages", filter: `track_id=eq.${trackId}` }, () => {
+      .channel(`project-messages-${trackId}-${quotationId || "all"}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "project_messages", filter }, () => {
         loadMessages();
       })
       .subscribe();
     channelRef.current = channel;
     return () => { supabase.removeChannel(channel); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trackId]);
+  }, [trackId, quotationId]);
 
   // Auto-scroll to bottom on first load and when sending a new message
   const scrollToBottom = () => {
@@ -136,7 +139,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
 
     const { data: inserted, error } = await supabase
       .from("project_messages")
-      .insert({ track_id: trackId, user_id: userId, message_type: "message", body: body || null })
+      .insert({ track_id: trackId, quotation_id: quotationId || null, user_id: userId, message_type: "message", body: body || null })
       .select()
       .single();
     if (error) { sileo.error({ title: "Could not send message", description: error.message }); return; }
@@ -216,6 +219,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
   return (
     <div className="flex flex-col md:flex-row h-full min-h-0">
       {/* Project context sidebar */}
+      {!compact && (
       <div className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-bgray-100 dark:border-darkblack-400">
         <button
           onClick={() => setShowContext(v => !v)}
@@ -260,6 +264,7 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
           )}
         </div>
       </div>
+      )}
 
       {/* Conversation feed */}
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
@@ -272,7 +277,9 @@ export default function ConversationTab({ trackId, projectName, clientName }) {
             </div>
           )}
           {messages.length === 0 && (
-            <p className="text-sm text-bgray-400 text-center py-10">No messages yet. Start the conversation below.</p>
+            <p className="text-sm text-bgray-400 text-center py-10">
+              {compact ? "No activity yet on this document." : "No messages yet. Start the conversation below."}
+            </p>
           )}
           {messages.map(m => (
             <MessageItem key={m.id} message={m} currentUserId={currentUserId} onSaveEdit={handleSaveEdit} onDelete={handleDelete} profiles={Object.values(profilesById)} />

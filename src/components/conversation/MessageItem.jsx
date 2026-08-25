@@ -27,6 +27,10 @@ function systemEventText(metadata = {}) {
       return `✅ Stage completed: ${metadata.stage || "—"}`;
     case "quotation_updated":
       return `${metadata.quote_number || "Quotation"} updated${metadata.from_total != null && metadata.to_total != null ? `: ${metadata.currency || ""} ${Number(metadata.from_total).toLocaleString("en-US", { minimumFractionDigits: 2 })} → ${metadata.currency || ""} ${Number(metadata.to_total).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}`;
+    case "quotation_created":
+      return `📝 ${metadata.quote_number || "Quotation"} created${metadata.currency && metadata.total != null ? ` — ${metadata.currency} ${Number(metadata.total).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}`;
+    case "quotation_promoted":
+      return `⬆️ ${metadata.quote_number || "Document"} promoted: ${metadata.from || "—"} → ${metadata.to || "—"}`;
     default:
       return metadata.label || "Activity update";
   }
@@ -99,7 +103,10 @@ export default function MessageItem({ message, currentUserId, onSaveEdit, onDele
     return (
       <div className="flex items-center gap-2 py-1.5 px-1">
         <span className="text-xs shrink-0">⚙️</span>
-        <span className="text-xs text-bgray-500 dark:text-bgray-400">{systemEventText(message.metadata)}</span>
+        <span className="text-xs text-bgray-500 dark:text-bgray-400">
+          {systemEventText(message.metadata)}
+          {message.user_name && <span className="text-bgray-400 dark:text-bgray-500"> · by {message.user_name}</span>}
+        </span>
         <span className="text-[10px] text-bgray-300 dark:text-bgray-600 ml-auto shrink-0">{getRelativeTime(message.created_at)}</span>
       </div>
     );
