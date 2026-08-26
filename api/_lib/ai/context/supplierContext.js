@@ -1,6 +1,8 @@
 // Read-only. No embeddings — "which suppliers have we used for safety
 // glasses" is a text match against description/name, not a semantic search
 // problem yet (Copilot Blueprint §D/§18).
+import { fuzzySearch } from "../textMatch.js";
+
 export async function buildSupplierContext(supabase, supplierId) {
   const { data: supplier } = await supabase
     .from("suppliers")
@@ -36,13 +38,16 @@ export async function buildSupplierContext(supabase, supplierId) {
 
 // Text-only search across supplier name/product description — used by the
 // search_suppliers tool and by "which suppliers have we used for X" style
-// questions. Plain ILIKE, not semantic.
+// questions. Name matching is fuzzy (accent/typo-tolerant, see
+// textMatch.js) since it's an identity lookup; product description
+// matching stays a plain ILIKE substring search, which is what it should be.
 export async function searchSuppliersByText(supabase, query) {
   const like = `%${query}%`;
-  const [{ data: byName }, { data: byProduct }] = await Promise.all([
-    supabase.from("suppliers").select("id, name, country, city").ilike("name", like).limit(10),
+  const [{ data: allSuppliers }, { data: byProduct }] = await Promise.all([
+    supabase.from("suppliers").select("id, name, country, city").limit(1000),
     supabase.from("quotation_items").select("supplier_id, description, suppliers(id, name, country, city)").ilike("description", like).limit(20),
   ]);
+  const byName = fuzzySearch(query, allSuppliers || [], { key: "name", limit: 10 });
   const fromProducts = (byProduct || [])
     .filter((r) => r.suppliers)
     .map((r) => ({ id: r.suppliers.id, name: r.suppliers.name, country: r.suppliers.country, city: r.suppliers.city, matched_via: r.description }));

@@ -2,6 +2,7 @@ import { buildProjectContext, getStageList, getTasks, getQuotations, getRecentMe
 import { buildClientContext } from "../context/clientContext.js";
 import { buildSupplierContext, searchSuppliersByText } from "../context/supplierContext.js";
 import { getEmailThreads } from "../context/emailContext.js";
+import { fuzzySearch } from "../textMatch.js";
 
 // Every READ tool: { key, description, parameters (JSON Schema), handler(args, ctx) }.
 // ctx = { supabase (user-scoped client), userId, pageContext }. Handlers only
@@ -10,11 +11,14 @@ import { getEmailThreads } from "../context/emailContext.js";
 export const READ_TOOLS = [
   {
     key: "search_clients",
-    description: "Search clients by company name. Returns each client's own id — this is a CLIENT id, never usable as track_id/a project. To create a task or take any project-scoped action for a client, call get_client with this id afterward to see their actual projects, and use one of THOSE ids as track_id.",
+    description: "Search clients by company name — accent- and typo-tolerant (\"guia\" finds \"Guía\", small misspellings are tolerated), not just an exact substring, so try this before telling the user no client exists. Returns each client's own id — this is a CLIENT id, never usable as track_id/a project. To create a task or take any project-scoped action for a client, call get_client with this id afterward to see their actual projects, and use one of THOSE ids as track_id.",
     parameters: { type: "object", properties: { query: { type: "string", description: "Partial company name" } }, required: ["query"] },
     handler: async ({ query }, { supabase }) => {
-      const { data } = await supabase.from("clients").select("id, company_name, country, city, contact_person").ilike("company_name", `%${query}%`).limit(10);
-      return data || [];
+      // Fuzzy-matched in memory, not a DB-side ILIKE — see textMatch.js for
+      // why (Postgres ILIKE doesn't fold accents without the `unaccent`
+      // extension, which this project doesn't have enabled).
+      const { data } = await supabase.from("clients").select("id, company_name, country, city, contact_person").limit(1000);
+      return fuzzySearch(query, data || [], { key: "company_name", limit: 10 });
     },
   },
   {
