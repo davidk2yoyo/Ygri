@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import ActionCard from "./ActionCard";
-import { confirmActionPlan } from "../../lib/ai/copilotClient";
+import { confirmActionPlan, amendActionPlan } from "../../lib/ai/copilotClient";
 
 export default function ActionPlanPanel({ plan, onDone }) {
   const [actions, setActions] = useState(plan.actions);
@@ -32,6 +32,19 @@ export default function ActionPlanPanel({ plan, onDone }) {
     }
   };
 
+  const handleAmend = async (actionId, field, value) => {
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await amendActionPlan({ planId: plan.plan_id, actionId, overrides: { [field]: value } });
+      setActions(updated.actions);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const handleCancel = () => {
     setActions((prev) => prev.map((a) => ({ ...a, status: "skipped" })));
     setFinished(true);
@@ -41,7 +54,7 @@ export default function ActionPlanPanel({ plan, onDone }) {
   return (
     <div className="mt-2 mb-1">
       {actions.map((action) => (
-        <ActionCard key={action.action_id} action={action} disabled={busy || finished} onToggle={toggle} />
+        <ActionCard key={action.action_id} action={action} disabled={busy || finished} onToggle={toggle} onAmend={handleAmend} />
       ))}
 
       {error && <p className="text-xs text-red-600 dark:text-red-400 mb-2">{error}</p>}

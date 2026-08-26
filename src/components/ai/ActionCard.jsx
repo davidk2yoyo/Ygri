@@ -10,8 +10,14 @@ const FIELD_LABELS = {
   due_date: "Due",
   assignee: "Assignee",
   project: "Project",
+  client: "Client",
   body: "Comment",
 };
+
+// Which editable field a given select/date control stands in for — so its
+// plain-text proposed_state line (if any) is skipped in favor of the
+// control, instead of showing both.
+const EDITABLE_TO_FIELD = { track_id: "project", due_date: "due_date" };
 
 const STATUS_BADGE = {
   proposed: null,
@@ -22,9 +28,11 @@ const STATUS_BADGE = {
   skipped: { text: "Skipped", cls: "text-bgray-400" },
 };
 
-export default function ActionCard({ action, disabled, onToggle }) {
+export default function ActionCard({ action, disabled, onToggle, onAmend }) {
   const invalid = action.validation?.status === "invalid";
   const badge = STATUS_BADGE[action.status];
+  const editable = action.editable || {};
+  const skipPlainField = new Set(Object.keys(editable).map((k) => EDITABLE_TO_FIELD[k] || k));
 
   return (
     <div className={`border rounded-xl p-3 mb-2 transition ${invalid ? "border-red-200 dark:border-red-900/50 bg-red-50/50 dark:bg-red-900/10" : "border-bgray-200 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-500"}`}>
@@ -48,14 +56,45 @@ export default function ActionCard({ action, disabled, onToggle }) {
         )}
       </div>
 
-      <div className="space-y-0.5">
+      <div className="space-y-1">
         {Object.entries(action.proposed_state || {}).map(([key, value]) =>
-          value == null || value === "" ? null : (
+          value == null || value === "" || skipPlainField.has(key) ? null : (
             <p key={key} className="text-sm text-darkblack-700 dark:text-white">
               <span className="text-bgray-400 dark:text-bgray-500">{FIELD_LABELS[key] || key}: </span>
               {String(value)}
             </p>
           )
+        )}
+
+        {editable.track_id && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-bgray-400 dark:text-bgray-500 shrink-0">Project: </span>
+            <select
+              value={editable.track_id.value ?? "__none__"}
+              disabled={disabled}
+              onChange={(e) => onAmend(action.action_id, "track_id", e.target.value === "__none__" ? null : e.target.value)}
+              className="min-w-0 flex-1 text-sm bg-transparent border border-bgray-200 dark:border-darkblack-400 rounded-md px-1.5 py-0.5 text-darkblack-700 dark:text-white"
+            >
+              {editable.track_id.options.map((opt) => (
+                <option key={opt.value ?? "__none__"} value={opt.value ?? "__none__"}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {editable.due_date && (
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm text-bgray-400 dark:text-bgray-500 shrink-0">Due: </span>
+            <input
+              type="date"
+              value={editable.due_date.value || ""}
+              disabled={disabled}
+              onChange={(e) => onAmend(action.action_id, "due_date", e.target.value)}
+              className="text-sm bg-transparent border border-bgray-200 dark:border-darkblack-400 rounded-md px-1.5 py-0.5 text-darkblack-700 dark:text-white"
+            />
+          </div>
         )}
       </div>
 

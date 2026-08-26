@@ -54,6 +54,17 @@ async function findLikelyDuplicates(supabase, table, nameColumn, name) {
   return data || [];
 }
 
+// Builds create_task's editable project dropdown — every one of this
+// client's own projects, plus an explicit "no project" option. Lets the
+// Action Card offer a real choice instead of the model's single silent
+// guess (the model picking the wrong project, with no way to see or
+// change it, was the exact gap reported in testing).
+async function resolveClientProjects(supabase, clientId) {
+  const { data } = await supabase.from("tracks").select("id, name, status").eq("client_id", clientId).order("created_at", { ascending: false }).limit(20);
+  const options = (data || []).map((t) => ({ value: t.id, label: t.status === "active" ? t.name : `${t.name} (${t.status})` }));
+  return [{ value: null, label: "No project (internal task)" }, ...options];
+}
+
 export const WRITE_TOOLS = [
   {
     key: "create_task",
@@ -63,7 +74,7 @@ export const WRITE_TOOLS = [
       properties: {
         track_id: { type: "string", description: "The project this task belongs to. Omit for a genuine internal/team task not tied to any project." },
         title: { type: "string" },
-        due_date: { type: "string", description: "ISO date (YYYY-MM-DD), resolved from the user's relative date against the current date given in context" },
+        due_date: { type: "string", description: "ISO date (YYYY-MM-DD), resolved from the user's relative date against the current date given in context. Omit entirely if the user didn't mention any date — never invent one; the user can set it directly on the confirmation card." },
         assignee_name: { type: "string", description: "Only if a specific person was clearly named; omit if ambiguous or unspecified" },
       },
       required: ["title"],
@@ -78,22 +89,39 @@ export const WRITE_TOOLS = [
       // an omission to flag. Only resolve project context when one was given.
       let ctx = null;
       let trackStageId = null;
+      // client_id may already be known from a previous validate() pass —
+      // amendAction persists it forward via normalizedArgs below, so the
+      // project dropdown stays scoped to the right client even after the
+      // user clears track_id back to "No project" and wants to browse
+      // other projects again, rather than the dropdown just disappearing.
+      let clientId = args.client_id || null;
+      let clientName = null;
       if (args.track_id) {
         ctx = await buildProjectContext(supabase, args.track_id);
         if (!ctx) {
           // Common model mistake: reusing a client's id (from search_clients)
           // as if it were a project id. Diagnose it precisely instead of a
           // dead-end "not found" — this also lands in conversation history,
-          // so the model can self-correct on its next turn.
-          const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
-          errors.push(
-            clientMatch
-              ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
-              : "Project not found or not accessible."
-          );
+          // so the model can self-correct on its next turn — and, since we
+          // now know which client was meant, still offer their real
+          // projects as an editable choice below rather than a dead end.
+          const { data: clientMatch } = await supabase.from("clients").select("id, company_name").eq("id", args.track_id).maybeSingle();
+          if (clientMatch) {
+            clientId = clientMatch.id;
+            clientName = clientMatch.company_name;
+            errors.push(`"${args.track_id}" is the client "${clientMatch.company_name}", not a project — pick one of their projects below, or leave it as "No project" for an internal task.`);
+          } else {
+            errors.push("Project not found or not accessible.");
+          }
+        } else {
+          clientId = ctx.project.client.id;
+          clientName = ctx.project.client.name;
         }
         trackStageId = ctx?.pipeline?.current_track_stage_id || null;
         if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
+      } else if (clientId) {
+        const { data: client } = await supabase.from("clients").select("company_name").eq("id", clientId).maybeSingle();
+        clientName = client?.company_name || null;
       }
 
       if (args.due_date && !/^\d{4}-\d{2}-\d{2}$/.test(args.due_date)) errors.push(`Invalid due date "${args.due_date}" — expected YYYY-MM-DD.`);
@@ -107,8 +135,17 @@ export const WRITE_TOOLS = [
         if (resolved.warning) warnings.push(resolved.warning);
       }
 
-      const proposedState = { title, due_date: args.due_date || null, assignee: assigneeName };
+      const proposedState = { title, assignee: assigneeName };
+      if (clientName) proposedState.client = clientName;
       if (ctx) proposedState.project = ctx.project.name;
+
+      // Always editable, regardless of validity — the whole point is that
+      // the user can fix an unresolved/wrong project or a missing date
+      // directly on the card instead of going back to the chat (§ user
+      // feedback: the model silently picked a project and never asked
+      // about a due date at all).
+      const editable = { due_date: { type: "date", value: args.due_date || null } };
+      if (clientId) editable.track_id = { type: "select", value: ctx ? args.track_id : null, options: await resolveClientProjects(supabase, clientId) };
 
       return {
         valid: errors.length === 0,
@@ -117,6 +154,8 @@ export const WRITE_TOOLS = [
         target: { entity: "stage_todos", track_id: args.track_id || null, track_stage_id: trackStageId },
         current_state: null,
         proposed_state: proposedState,
+        editable,
+        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
         label: `Create task: ${title || "(untitled)"}`,
         resolvedArgs: { track_id: args.track_id || null, track_stage_id: trackStageId, title, due_date: args.due_date || null, assignee_id: assigneeId, project_name: ctx?.project?.name || null },
       };

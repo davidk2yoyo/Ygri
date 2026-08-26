@@ -25,3 +25,10 @@ export function sendCopilotMessage({ message, pageContext, conversationId }) {
 export function confirmActionPlan({ planId, selectedActionIds }) {
   return postJson("/api/ai-action-execute", { plan_id: planId, selected_action_ids: selectedActionIds });
 }
+
+// Changes one editable field (e.g. project, due date) on a still-proposed
+// action, server-revalidated before anything is stored. Returns the
+// updated plan in the same shape sendCopilotMessage's `plan` is.
+export function amendActionPlan({ planId, actionId, overrides }) {
+  return postJson("/api/ai-action-amend", { plan_id: planId, action_id: actionId, overrides });
+}
