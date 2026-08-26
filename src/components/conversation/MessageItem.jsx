@@ -33,6 +33,8 @@ function systemEventText(metadata = {}) {
       return `⬆️ ${metadata.quote_number || "Document"} promoted: ${metadata.from || "—"} → ${metadata.to || "—"}`;
     case "ai_task_created":
       return `🤖 Ygri Copilot created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
+    case "ai_project_created":
+      return `🤖 Ygri Copilot created this project${metadata.workflow ? ` — ${metadata.workflow} workflow` : ""}`;
     default:
       return metadata.label || "Activity update";
   }

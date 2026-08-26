@@ -75,7 +75,7 @@ Add one entry to `WRITE_TOOLS` in `api/_lib/ai/tools/writeTools.js` with **three
 
 Then seed its `ai_tools` row with `tool_type: 'write'`, and decide whether it needs its own Skill (`ai_skills`) governing how the model should reason about proposing it.
 
-**Do not** wrap `create_track_rpc` or `complete_stage_and_advance` yet — both are flagged in the Copilot Blueprint as needing prerequisite work (extracting the opaque RPC / unifying the two pipeline-advance code paths) before they're safe to expose.
+`create_track_rpc` was extracted and confirmed simple (see `supabase-core-workflow-rpcs.sql`) and now backs the `create_project` WRITE tool. **Do not** wrap `complete_stage_and_advance` into an `advance_stage` tool yet — it's flagged in the Copilot Blueprint as needing the Kanban drag-and-drop path (`ProjectsPage.jsx`'s `handleMoveProject`) unified with it first; that RPC's body is documented too, but the two-divergent-paths problem is unrelated to whether the RPC is visible.
 
 ## Why the browser can't just send the plan back
 

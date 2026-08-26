@@ -20,6 +20,21 @@ async function resolveAssignee(supabase, assigneeName) {
   return { id: null, name: null, warning: `"${assigneeName}" matches more than one team member — left unassigned. Please assign manually.` };
 }
 
+// Unlike assignee (nullable), a project's owner_user_id is NOT NULL in the
+// schema — so this always resolves to *someone*, defaulting to whoever is
+// having the conversation rather than leaving a gap create_track_rpc can't accept.
+async function resolveOwner(supabase, ownerName, requestingUserId) {
+  const requester = async () => {
+    const { data } = await supabase.from("profiles").select("full_name").eq("id", requestingUserId).maybeSingle();
+    return data?.full_name || "you";
+  };
+  if (!ownerName?.trim()) return { id: requestingUserId, name: await requester(), warning: null };
+  const { data } = await supabase.from("profiles").select("id, full_name").ilike("full_name", `%${ownerName.trim()}%`);
+  if (data?.length === 1) return { id: data[0].id, name: data[0].full_name, warning: null };
+  if (!data?.length) return { id: requestingUserId, name: await requester(), warning: `No team member matching "${ownerName}" — defaulted owner to you.` };
+  return { id: requestingUserId, name: await requester(), warning: `"${ownerName}" matches more than one team member — defaulted owner to you. Please reassign manually if needed.` };
+}
+
 export const WRITE_TOOLS = [
   {
     key: "create_task",
@@ -88,6 +103,69 @@ export const WRITE_TOOLS = [
         await createProjectActivityServer(supabase, trackId, "ai_task_created", { title: resolvedArgs.title, due_date: resolvedArgs.due_date }, { trackStageId: resolvedArgs.track_stage_id, userId });
       }
       return { title: resolvedArgs.title, due_date: resolvedArgs.due_date };
+    },
+  },
+
+  {
+    key: "create_project",
+    description: "Propose creating a new project for a client. Always a proposal — never executes directly. Resolve client_id via search_clients/get_client first — never invent one.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_id: { type: "string", description: "The client this project is for — resolve via search_clients first" },
+        name: { type: "string", description: "Project name" },
+        remarks: { type: "string", description: "Optional notes about the project" },
+        workflow: { type: "string", enum: ["Service", "Product"], description: "'Service' (7-day default SLA per stage, 4 stages) or 'Product' (30-day default SLA, 8 stages) — infer from context; ask the user if genuinely unclear" },
+        owner_name: { type: "string", description: "Only if a specific team member was clearly named as owner; omit to default to the requesting user" },
+      },
+      required: ["client_id", "name", "workflow"],
+    },
+    async validate(args, { supabase, userId }) {
+      const errors = [];
+      const warnings = [];
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) errors.push("Project name is required.");
+      if (!["Service", "Product"].includes(args.workflow)) errors.push(`Workflow must be "Service" or "Product", got "${args.workflow}".`);
+
+      let clientName = null;
+      if (!args.client_id) {
+        errors.push("client_id is required — search for the client first.");
+      } else {
+        const { data: client } = await supabase.from("clients").select("company_name").eq("id", args.client_id).maybeSingle();
+        if (!client) errors.push("Client not found or not accessible.");
+        else clientName = client.company_name;
+      }
+
+      const owner = await resolveOwner(supabase, args.owner_name, userId);
+      if (owner.warning) warnings.push(owner.warning);
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+        target: { entity: "tracks", client_id: args.client_id },
+        current_state: null,
+        proposed_state: { name, client: clientName, workflow: args.workflow, owner: owner.name, remarks: args.remarks || null },
+        label: `Create project: ${name || "(untitled)"}`,
+        resolvedArgs: { client_id: args.client_id, name, remarks: args.remarks || null, workflow: args.workflow, owner_id: owner.id },
+      };
+    },
+    async execute(resolvedArgs, { supabase, userId }) {
+      // The exact same RPC the "New Project" UI calls — no AI-specific
+      // project semantics, matching create_task's precedent (Copilot §38/§59).
+      const { data: trackId, error } = await supabase.rpc("create_track_rpc", {
+        p_client_id: resolvedArgs.client_id,
+        p_name: resolvedArgs.name,
+        p_remarks: resolvedArgs.remarks,
+        p_workflow: resolvedArgs.workflow,
+        p_owner_id: resolvedArgs.owner_id,
+      });
+      if (error) throw new Error(error.message);
+
+      if (trackId) {
+        await createProjectActivityServer(supabase, trackId, "ai_project_created", { name: resolvedArgs.name, workflow: resolvedArgs.workflow }, { userId });
+      }
+      return { track_id: trackId, name: resolvedArgs.name };
     },
   },
 
