@@ -35,6 +35,25 @@ async function resolveOwner(supabase, ownerName, requestingUserId) {
   return { id: requestingUserId, name: await requester(), warning: `"${ownerName}" matches more than one team member — defaulted owner to you. Please reassign manually if needed.` };
 }
 
+// Only include fields the caller actually provided — used by update_client/
+// update_supplier so an unset field never overwrites an existing value.
+function patchFrom(args, fields) {
+  const patch = {};
+  for (const f of fields) {
+    if (args[f] !== undefined && args[f] !== null) patch[f] = typeof args[f] === "string" ? args[f].trim() : args[f];
+  }
+  return patch;
+}
+
+// Duplicates aren't blocked — flagged as a warning so the model/user can
+// still decide it's genuinely a different entity (Client/Supplier
+// Management skills: "search for duplicates", not "refuse to create").
+async function findLikelyDuplicates(supabase, table, nameColumn, name) {
+  if (!name) return [];
+  const { data } = await supabase.from(table).select(`id, ${nameColumn}`).ilike(nameColumn, `%${name}%`).limit(5);
+  return data || [];
+}
+
 export const WRITE_TOOLS = [
   {
     key: "create_task",
@@ -166,6 +185,209 @@ export const WRITE_TOOLS = [
         await createProjectActivityServer(supabase, trackId, "ai_project_created", { name: resolvedArgs.name, workflow: resolvedArgs.workflow }, { userId });
       }
       return { track_id: trackId, name: resolvedArgs.name };
+    },
+  },
+
+  {
+    key: "create_client",
+    description: "Propose creating a new client. Always a proposal — never executes directly. Search for likely duplicates with search_clients first.",
+    parameters: {
+      type: "object",
+      properties: {
+        company_name: { type: "string" },
+        contact_person: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        website: { type: "string" },
+        address: { type: "string" },
+        country: { type: "string" },
+        city: { type: "string" },
+        state: { type: "string" },
+        remark: { type: "string" },
+      },
+      required: ["company_name"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const warnings = [];
+      const companyName = typeof args.company_name === "string" ? args.company_name.trim() : "";
+      if (!companyName) errors.push("Company name is required.");
+
+      const duplicates = await findLikelyDuplicates(supabase, "clients", "company_name", companyName);
+      if (duplicates.length) warnings.push(`Possible existing match: ${duplicates.map((d) => d.company_name).join(", ")}. Confirm this is genuinely a new client.`);
+
+      const patch = patchFrom(args, ["contact_person", "email", "phone", "website", "address", "country", "city", "state", "remark"]);
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+        target: { entity: "clients" },
+        current_state: null,
+        proposed_state: { company_name: companyName, ...patch },
+        label: `Create client: ${companyName || "(untitled)"}`,
+        resolvedArgs: { company_name: companyName, ...patch },
+      };
+    },
+    async execute(resolvedArgs, { supabase }) {
+      // Same raw insert ClientsPage.jsx's "New Client" modal does — this
+      // table has no dedicated RPC to defer to.
+      const { data, error } = await supabase.from("clients").insert(resolvedArgs).select("id, company_name").single();
+      if (error) throw new Error(error.message);
+      return { client_id: data.id, company_name: data.company_name };
+    },
+  },
+
+  {
+    key: "update_client",
+    description: "Propose updating an existing client's fields. Always a proposal — never executes directly. Only include fields that should change.",
+    parameters: {
+      type: "object",
+      properties: {
+        client_id: { type: "string" },
+        company_name: { type: "string" },
+        contact_person: { type: "string" },
+        email: { type: "string" },
+        phone: { type: "string" },
+        website: { type: "string" },
+        address: { type: "string" },
+        country: { type: "string" },
+        city: { type: "string" },
+        state: { type: "string" },
+        remark: { type: "string" },
+      },
+      required: ["client_id"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const { data: client } = await supabase.from("clients").select("*").eq("id", args.client_id).maybeSingle();
+      if (!client) errors.push("Client not found or not accessible.");
+
+      const patch = patchFrom(args, ["company_name", "contact_person", "email", "phone", "website", "address", "country", "city", "state", "remark"]);
+      if (!Object.keys(patch).length) errors.push("No fields to update were provided.");
+
+      const currentState = {};
+      const proposedState = {};
+      for (const key of Object.keys(patch)) {
+        currentState[key] = client?.[key] ?? null;
+        proposedState[key] = patch[key];
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings: [],
+        target: { entity: "clients", client_id: args.client_id },
+        current_state: currentState,
+        proposed_state: proposedState,
+        label: `Update client: ${client?.company_name || "(unknown)"}`,
+        resolvedArgs: { client_id: args.client_id, patch },
+      };
+    },
+    async execute(resolvedArgs, { supabase }) {
+      const { data, error } = await supabase.from("clients").update(resolvedArgs.patch).eq("id", resolvedArgs.client_id).select("id, company_name").single();
+      if (error) throw new Error(error.message);
+      return { client_id: data.id, company_name: data.company_name };
+    },
+  },
+
+  {
+    key: "create_supplier",
+    description: "Propose creating a new supplier. Always a proposal — never executes directly. Search for likely duplicates with search_suppliers first.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string" },
+        sales_person: { type: "string" },
+        email: { type: "string" },
+        wechat_or_whatsapp: { type: "string" },
+        website: { type: "string" },
+        address: { type: "string" },
+        country: { type: "string" },
+        city: { type: "string" },
+        state: { type: "string" },
+      },
+      required: ["name"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const warnings = [];
+      const name = typeof args.name === "string" ? args.name.trim() : "";
+      if (!name) errors.push("Supplier name is required.");
+
+      const duplicates = await findLikelyDuplicates(supabase, "suppliers", "name", name);
+      if (duplicates.length) warnings.push(`Possible existing match: ${duplicates.map((d) => d.name).join(", ")}. Confirm this is genuinely a new supplier.`);
+
+      const patch = patchFrom(args, ["sales_person", "email", "wechat_or_whatsapp", "website", "address", "country", "city", "state"]);
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings,
+        target: { entity: "suppliers" },
+        current_state: null,
+        proposed_state: { name, ...patch },
+        label: `Create supplier: ${name || "(untitled)"}`,
+        resolvedArgs: { name, ...patch },
+      };
+    },
+    async execute(resolvedArgs, { supabase }) {
+      // Same raw insert SuppliersPage.jsx's "New Supplier" modal does.
+      const { data, error } = await supabase.from("suppliers").insert(resolvedArgs).select("id, name").single();
+      if (error) throw new Error(error.message);
+      return { supplier_id: data.id, name: data.name };
+    },
+  },
+
+  {
+    key: "update_supplier",
+    description: "Propose updating an existing supplier's fields. Always a proposal — never executes directly. Only include fields that should change.",
+    parameters: {
+      type: "object",
+      properties: {
+        supplier_id: { type: "string" },
+        name: { type: "string" },
+        sales_person: { type: "string" },
+        email: { type: "string" },
+        wechat_or_whatsapp: { type: "string" },
+        website: { type: "string" },
+        address: { type: "string" },
+        country: { type: "string" },
+        city: { type: "string" },
+        state: { type: "string" },
+      },
+      required: ["supplier_id"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const { data: supplier } = await supabase.from("suppliers").select("*").eq("id", args.supplier_id).maybeSingle();
+      if (!supplier) errors.push("Supplier not found or not accessible.");
+
+      const patch = patchFrom(args, ["name", "sales_person", "email", "wechat_or_whatsapp", "website", "address", "country", "city", "state"]);
+      if (!Object.keys(patch).length) errors.push("No fields to update were provided.");
+
+      const currentState = {};
+      const proposedState = {};
+      for (const key of Object.keys(patch)) {
+        currentState[key] = supplier?.[key] ?? null;
+        proposedState[key] = patch[key];
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings: [],
+        target: { entity: "suppliers", supplier_id: args.supplier_id },
+        current_state: currentState,
+        proposed_state: proposedState,
+        label: `Update supplier: ${supplier?.name || "(unknown)"}`,
+        resolvedArgs: { supplier_id: args.supplier_id, patch },
+      };
+    },
+    async execute(resolvedArgs, { supabase }) {
+      const { data, error } = await supabase.from("suppliers").update(resolvedArgs.patch).eq("id", resolvedArgs.supplier_id).select("id, name").single();
+      if (error) throw new Error(error.message);
+      return { supplier_id: data.id, name: data.name };
     },
   },
 
