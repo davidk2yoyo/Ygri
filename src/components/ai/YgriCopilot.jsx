@@ -4,6 +4,7 @@ import { useCopilotPageContext } from "../../contexts/CopilotPageContext";
 import { sendCopilotMessage } from "../../lib/ai/copilotClient";
 import { listConversations, loadConversationMessages } from "../../lib/ai/conversationsClient";
 import CopilotMessage from "./CopilotMessage";
+import VoiceInputButton from "./VoiceInputButton";
 
 const SUGGESTIONS = ["How are we doing?", "What needs attention?", "What did the client originally request?", "Are there overdue tasks?"];
 
@@ -168,7 +169,7 @@ export default function YgriCopilot() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.5v15m7.5-7.5h-15" /></svg>
               </button>
               <button onClick={() => navigate("/copilot", { state: { conversationId, pageContext } })} className="p-1.5 rounded-lg hover:bg-white/15 transition" title="Open full page">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" /></svg>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
               </button>
               <button
                 onClick={() => setIsExpanded((v) => !v)}
@@ -231,6 +232,7 @@ export default function YgriCopilot() {
           {error && <p className="px-3 pb-1 text-xs text-red-500">{error}</p>}
 
           <div className="border-t border-bgray-100 dark:border-darkblack-400 p-2.5 flex items-end gap-2 shrink-0">
+            <VoiceInputButton onTranscript={(text) => setDraft((prev) => (prev ? `${prev} ${text}` : text))} size="w-9 h-9" />
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

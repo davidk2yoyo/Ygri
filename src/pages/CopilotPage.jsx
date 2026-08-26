@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useLocation } from "react-router-dom";
 import { sileo } from "sileo";
 import CopilotMessage from "../components/ai/CopilotMessage";
+import VoiceInputButton from "../components/ai/VoiceInputButton";
 import { sendCopilotMessage } from "../lib/ai/copilotClient";
 import { listConversations, loadConversationMessages, deleteConversation } from "../lib/ai/conversationsClient";
 
@@ -193,6 +194,7 @@ export default function CopilotPage() {
 
         <div className="border-t border-bgray-100 dark:border-darkblack-400 p-4">
           <div className="max-w-3xl mx-auto flex items-end gap-2">
+            <VoiceInputButton onTranscript={(text) => setDraft((prev) => (prev ? `${prev} ${text}` : text))} size="w-11 h-11" />
             <textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}

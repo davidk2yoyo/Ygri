@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { supabase } from "../supabaseClient";
+import VoiceInputButton from "../components/ai/VoiceInputButton";
 
 // ─── Animated Counter ────────────────────────────────────────────
 function useCounter(target, duration = 1200) {
@@ -539,6 +540,7 @@ function CopilotDashboardSection({ navigate }) {
         <h3 className="text-sm font-bold text-darkblack-700 dark:text-white">Ask Ygri Copilot</h3>
       </div>
       <div className="flex items-center gap-2 mb-3">
+        <VoiceInputButton onTranscript={(text) => setDraft((prev) => (prev ? `${prev} ${text}` : text))} size="w-10 h-10" />
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
