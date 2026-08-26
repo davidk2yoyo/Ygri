@@ -9,7 +9,18 @@ const writeToolByKey = Object.fromEntries(WRITE_TOOLS.map((t) => [t.key, t]));
 // canonical, server-validated Action Plan. The model NEVER gets to assert
 // current_state/validation itself — every field here comes from actually
 // querying the database (Copilot Blueprint §G).
-export async function buildActionPlan({ supabase, userId, pageContext, writeCalls, assistantMessage }) {
+//
+// modelMessage is whatever text content the model included alongside its
+// tool call, if any — the final assistant_message is composed from that
+// PLUS a clear statement of any validation failures, computed after
+// building `actions`. This matters beyond the current turn: assistant_message
+// is what gets saved into conversation history (see conversations.js), so
+// if a proposed action was invalid, the model needs to actually see why on
+// its next turn — otherwise it has no way to self-correct and will retry
+// the identical mistake (observed in testing: the model reused a client's
+// id as track_id twice in a row because the failure reason never made it
+// back into its own context).
+export async function buildActionPlan({ supabase, userId, pageContext, writeCalls, modelMessage }) {
   const actions = [];
   let sequence = 1;
 
@@ -67,7 +78,7 @@ export async function buildActionPlan({ supabase, userId, pageContext, writeCall
     .insert({
       user_id: userId,
       page_context: pageContext || {},
-      assistant_message: assistantMessage,
+      assistant_message: composeAssistantMessage(modelMessage, actions),
       actions,
       status: "proposed",
       expires_at: expiresAt,
@@ -77,6 +88,23 @@ export async function buildActionPlan({ supabase, userId, pageContext, writeCall
 
   if (error) throw new Error(`Could not persist action plan: ${error.message}`);
   return plan;
+}
+
+function composeAssistantMessage(modelMessage, actions) {
+  const valid = actions.filter((a) => a.validation.status === "valid");
+  const invalid = actions.filter((a) => a.validation.status === "invalid");
+
+  const parts = [];
+  if (modelMessage) {
+    parts.push(modelMessage);
+  } else if (valid.length) {
+    parts.push(`I can do the following: ${valid.map((a) => a.label).join(", ")}. Please review and confirm.`);
+  }
+  if (invalid.length) {
+    parts.push(invalid.map((a) => `I couldn't prepare "${a.label}" — ${a.validation.errors.join(" ")}`).join(" "));
+  }
+
+  return parts.filter(Boolean).join("\n\n") || "I couldn't prepare any of the requested actions.";
 }
 
 // Strips internal fields before an action plan goes to the browser — the

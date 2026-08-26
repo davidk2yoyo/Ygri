@@ -114,8 +114,7 @@ export async function runOrchestratorTurn({ supabase, userId, pageContext, userM
 
   let plan = null;
   if (writeCalls?.length) {
-    const fallbackMessage = defaultPlanMessage(writeCalls.map((c) => c.tool).join(", "));
-    const rawPlan = await buildActionPlan({ supabase, userId, pageContext, writeCalls, assistantMessage: assistantMessageForPlan || fallbackMessage });
+    const rawPlan = await buildActionPlan({ supabase, userId, pageContext, writeCalls, modelMessage: assistantMessageForPlan });
     plan = planForClient(rawPlan);
   }
 
@@ -147,8 +146,4 @@ function safeParseArgs(raw) {
   } catch {
     return {};
   }
-}
-
-function defaultPlanMessage(toolList) {
-  return `I can do the following: ${toolList}. Please review and confirm.`;
 }

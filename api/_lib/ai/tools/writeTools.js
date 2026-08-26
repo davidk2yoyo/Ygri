@@ -80,7 +80,18 @@ export const WRITE_TOOLS = [
       let trackStageId = null;
       if (args.track_id) {
         ctx = await buildProjectContext(supabase, args.track_id);
-        if (!ctx) errors.push("Project not found or not accessible.");
+        if (!ctx) {
+          // Common model mistake: reusing a client's id (from search_clients)
+          // as if it were a project id. Diagnose it precisely instead of a
+          // dead-end "not found" — this also lands in conversation history,
+          // so the model can self-correct on its next turn.
+          const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
+          errors.push(
+            clientMatch
+              ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
+              : "Project not found or not accessible."
+          );
+        }
         trackStageId = ctx?.pipeline?.current_track_stage_id || null;
         if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
       }

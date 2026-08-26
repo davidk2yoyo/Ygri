@@ -10,7 +10,7 @@ import { getEmailThreads } from "../context/emailContext.js";
 export const READ_TOOLS = [
   {
     key: "search_clients",
-    description: "Search clients by company name.",
+    description: "Search clients by company name. Returns each client's own id — this is a CLIENT id, never usable as track_id/a project. To create a task or take any project-scoped action for a client, call get_client with this id afterward to see their actual projects, and use one of THOSE ids as track_id.",
     parameters: { type: "object", properties: { query: { type: "string", description: "Partial company name" } }, required: ["query"] },
     handler: async ({ query }, { supabase }) => {
       const { data } = await supabase.from("clients").select("id, company_name, country, city, contact_person").ilike("company_name", `%${query}%`).limit(10);
