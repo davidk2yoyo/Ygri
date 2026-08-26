@@ -57,16 +57,16 @@ async function findLikelyDuplicates(supabase, table, nameColumn, name) {
 export const WRITE_TOOLS = [
   {
     key: "create_task",
-    description: "Propose creating a task on a project's current (or a specified) stage. Always a proposal — never executes directly.",
+    description: "Propose creating a task — on a project's current stage if track_id is given, or as a standalone internal task if omitted. Always a proposal — never executes directly.",
     parameters: {
       type: "object",
       properties: {
-        track_id: { type: "string", description: "The project this task belongs to" },
+        track_id: { type: "string", description: "The project this task belongs to. Omit for a genuine internal/team task not tied to any project." },
         title: { type: "string" },
         due_date: { type: "string", description: "ISO date (YYYY-MM-DD), resolved from the user's relative date against the current date given in context" },
         assignee_name: { type: "string", description: "Only if a specific person was clearly named; omit if ambiguous or unspecified" },
       },
-      required: ["track_id", "title"],
+      required: ["title"],
     },
     async validate(args, { supabase }) {
       const errors = [];
@@ -74,11 +74,16 @@ export const WRITE_TOOLS = [
       const title = typeof args.title === "string" ? args.title.trim() : "";
       if (!title) errors.push("Task title is required.");
 
-      const ctx = await buildProjectContext(supabase, args.track_id);
-      if (!ctx) errors.push("Project not found or not accessible.");
-
-      const trackStageId = ctx?.pipeline?.current_track_stage_id || null;
-      if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
+      // track_id is optional — omitted means a genuine internal task, not
+      // an omission to flag. Only resolve project context when one was given.
+      let ctx = null;
+      let trackStageId = null;
+      if (args.track_id) {
+        ctx = await buildProjectContext(supabase, args.track_id);
+        if (!ctx) errors.push("Project not found or not accessible.");
+        trackStageId = ctx?.pipeline?.current_track_stage_id || null;
+        if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
+      }
 
       if (args.due_date && !/^\d{4}-\d{2}-\d{2}$/.test(args.due_date)) errors.push(`Invalid due date "${args.due_date}" — expected YYYY-MM-DD.`);
 
@@ -91,15 +96,18 @@ export const WRITE_TOOLS = [
         if (resolved.warning) warnings.push(resolved.warning);
       }
 
+      const proposedState = { title, due_date: args.due_date || null, assignee: assigneeName };
+      if (ctx) proposedState.project = ctx.project.name;
+
       return {
         valid: errors.length === 0,
         errors,
         warnings,
-        target: { entity: "stage_todos", track_id: args.track_id, track_stage_id: trackStageId },
+        target: { entity: "stage_todos", track_id: args.track_id || null, track_stage_id: trackStageId },
         current_state: null,
-        proposed_state: { title, due_date: args.due_date || null, assignee: assigneeName, project: ctx?.project?.name },
+        proposed_state: proposedState,
         label: `Create task: ${title || "(untitled)"}`,
-        resolvedArgs: { track_id: args.track_id, track_stage_id: trackStageId, title, due_date: args.due_date || null, assignee_id: assigneeId, project_name: ctx?.project?.name },
+        resolvedArgs: { track_id: args.track_id || null, track_stage_id: trackStageId, title, due_date: args.due_date || null, assignee_id: assigneeId, project_name: ctx?.project?.name || null },
       };
     },
     async execute(resolvedArgs, { supabase, userId }) {
