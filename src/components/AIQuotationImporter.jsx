@@ -26,33 +26,33 @@ const STOPWORDS = new Set([
 function fuzzyMatch(detected, suppliers) {
   if (!detected) return null;
   const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
-  const detectedNorm = normalize(detected);
   // Only keep words that are meaningful (length > 3 and not stopwords)
   const meaningful = (words) => words.filter(w => w.length > 3 && !STOPWORDS.has(w));
-  const detectedWords = meaningful(detectedNorm.split(/\s+/));
+  const detectedWords = new Set(meaningful(normalize(detected).split(/\s+/)));
 
-  if (detectedWords.length === 0) return null;
+  if (detectedWords.size === 0) return null;
 
   let best = null;
   let bestScore = 0;
 
   for (const sup of suppliers) {
-    const supNorm = normalize(sup.name || "");
-    const supWords = meaningful(supNorm.split(/\s+/));
+    const supWords = new Set(meaningful(normalize(sup.name || "").split(/\s+/)));
+    // Count each distinct meaningful word shared by both names ONCE — the
+    // previous version looped both directions and summed both counts, so a
+    // single shared generic-but-not-stopworded word (e.g. "power",
+    // "industry") alone produced a score of 2 and crossed the match
+    // threshold, silently linking unrelated suppliers.
     let score = 0;
-    for (const word of detectedWords) {
-      if (supNorm.includes(word)) score++;
-    }
-    for (const word of supWords) {
-      if (detectedNorm.includes(word)) score++;
-    }
+    for (const word of detectedWords) if (supWords.has(word)) score++;
     if (score > bestScore) {
       bestScore = score;
       best = sup;
     }
   }
-  // Require at least 2 meaningful word matches to avoid false positives
-  return bestScore >= 2 ? best : null;
+  // Require at least 2 distinct shared words, AND that they cover a real
+  // share of the detected name — not just 2 generic words coincidentally
+  // present in an otherwise unrelated, longer name.
+  return bestScore >= 2 && bestScore / detectedWords.size >= 0.5 ? best : null;
 }
 
 export default function AIQuotationImporter({ currency, suppliers = [], supabase, onSupplierCreated, onImport, onClose }) {
@@ -192,6 +192,18 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
   const filteredSuppliers = suppliers.filter(s =>
     s.name.toLowerCase().includes(supplierSearchText.toLowerCase())
   );
+
+  const updateSupplierField = (field, value) => setSupplierInfo(prev => ({ ...prev, [field]: value }));
+
+  // Re-run matching once the user finishes correcting a name the AI got
+  // wrong — a manual "Pick existing"/"Don't link"/"Create new" already
+  // moved past auto-matching, so only re-match while still in that state.
+  const handleNameBlur = () => {
+    if (!supplierInfo?.name || !["matched", "no_match"].includes(supplierStatus)) return;
+    const match = fuzzyMatch(supplierInfo.name, suppliers);
+    setResolvedSupplier(match);
+    setSupplierStatus(match ? "matched" : "no_match");
+  };
 
   const handleImport = () => {
     const items = editItems
@@ -345,19 +357,43 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
                     className="w-20 h-20 object-cover rounded-xl border border-gray-200 dark:border-darkblack-400 shrink-0"
                   />
                 )}
-                {supplierInfo?.name && (
+                {supplierInfo && (
+                  // Gate on the object, not on .name being truthy — the name
+                  // is now an editable input, and momentarily clearing it
+                  // (e.g. select-all to retype a wrong AI-detected name)
+                  // must not collapse this whole panel out from under the user.
                   <div className="flex-1 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 rounded-xl p-3 space-y-2">
                     <div>
-                      <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-0.5">Supplier Detected</p>
-                      <p className="font-semibold text-sm text-darkblack-700 dark:text-white leading-tight">{supplierInfo.name}</p>
+                      <p className="text-[10px] font-semibold text-blue-500 uppercase tracking-wide mb-0.5">Supplier Detected — edit if the AI got it wrong</p>
+                      <input
+                        type="text"
+                        value={supplierInfo.name || ""}
+                        onChange={e => updateSupplierField("name", e.target.value)}
+                        onBlur={handleNameBlur}
+                        placeholder="Supplier name"
+                        className="w-full font-semibold text-sm text-darkblack-700 dark:text-white leading-tight bg-transparent border-0 border-b border-dashed border-blue-200 dark:border-blue-800 focus:border-primary outline-none px-0 py-0.5 transition"
+                      />
                       <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                        {supplierInfo.contact_person && <span className="text-xs text-bgray-500 dark:text-bgray-400">👤 {supplierInfo.contact_person}</span>}
-                        {supplierInfo.phone && <span className="text-xs text-bgray-500 dark:text-bgray-400">📞 {supplierInfo.phone}</span>}
-                        {supplierInfo.email && <span className="text-xs text-bgray-500 dark:text-bgray-400">✉️ {supplierInfo.email}</span>}
+                        <span className="flex items-center gap-1 text-xs text-bgray-500 dark:text-bgray-400">
+                          👤
+                          <input type="text" value={supplierInfo.contact_person || ""} onChange={e => updateSupplierField("contact_person", e.target.value)} placeholder="Contact" className="w-24 bg-transparent border-0 border-b border-dashed border-transparent hover:border-blue-200 focus:border-primary outline-none" />
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-bgray-500 dark:text-bgray-400">
+                          📞
+                          <input type="text" value={supplierInfo.phone || ""} onChange={e => updateSupplierField("phone", e.target.value)} placeholder="Phone" className="w-28 bg-transparent border-0 border-b border-dashed border-transparent hover:border-blue-200 focus:border-primary outline-none" />
+                        </span>
+                        <span className="flex items-center gap-1 text-xs text-bgray-500 dark:text-bgray-400">
+                          ✉️
+                          <input type="text" value={supplierInfo.email || ""} onChange={e => updateSupplierField("email", e.target.value)} placeholder="Email" className="w-36 bg-transparent border-0 border-b border-dashed border-transparent hover:border-blue-200 focus:border-primary outline-none" />
+                        </span>
                       </div>
-                      {supplierInfo.address && (
-                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-0.5 leading-tight">{supplierInfo.address}</p>
-                      )}
+                      <input
+                        type="text"
+                        value={supplierInfo.address || ""}
+                        onChange={e => updateSupplierField("address", e.target.value)}
+                        placeholder="Address"
+                        className="w-full text-xs text-bgray-400 dark:text-bgray-500 leading-tight mt-0.5 bg-transparent border-0 border-b border-dashed border-transparent hover:border-blue-200 focus:border-primary outline-none"
+                      />
                     </div>
 
                     {/* Supplier resolution widget */}
@@ -402,7 +438,8 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             onClick={handleCreateSupplier}
-                            className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 transition"
+                            disabled={!supplierInfo?.name?.trim()}
+                            className="flex items-center gap-1 px-2.5 py-1 bg-primary text-white text-xs font-semibold rounded-lg hover:bg-primary/90 transition disabled:opacity-40 disabled:cursor-not-allowed"
                           >
                             + Create new
                           </button>
