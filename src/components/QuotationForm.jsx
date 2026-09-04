@@ -5,6 +5,7 @@ import { supabase } from "../supabaseClient";
 import { createProjectActivity } from "../lib/projectActivity";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
+import QuotationItemImporter from "./QuotationItemImporter";
 import QuotationPaymentsSection from "./QuotationPaymentsSection";
 import AIClientScanner from "./AIClientScanner";
 import ConversationTab from "./conversation/ConversationTab";
@@ -56,6 +57,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showCatalogDropdown, setShowCatalogDropdown] = useState(null);
   const [showPDF, setShowPDF] = useState(false);
   const [showAIImporter, setShowAIImporter] = useState(false);
+  const [showQuoteImporter, setShowQuoteImporter] = useState(false);
   const [savedQuotation, setSavedQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quoteNumber, setQuoteNumber] = useState("");
@@ -354,6 +356,19 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       return existing.length > 0 ? [...existing, ...importedItems] : importedItems;
     });
     setShowAIImporter(false);
+  };
+
+  // Appends items copied from another quotation — never replaces the
+  // current ones (§ user: "sin modificar la cotización... sin modificar el
+  // invoice existente con otros productos, solamente sea agregar").
+  const handleQuoteImport = (importedItems) => {
+    setItems(prev => {
+      const existing = prev.filter(it => it.description || it.item_number);
+      return [...existing, ...importedItems];
+    });
+    const uniqueIds = [...new Set(importedItems.map(it => it.supplier_id).filter(Boolean))];
+    uniqueIds.forEach(id => fetchSupplierProducts(id));
+    setShowQuoteImporter(false);
   };
 
   const handleItemPicture = async (idx, file) => {
@@ -1016,6 +1031,16 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
               className="flex items-center gap-1.5 text-sm border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-semibold rounded-lg px-4 py-2 transition"
             >
               Import with AI
+            </button>
+            <button
+              onClick={() => setShowQuoteImporter(true)}
+              title="Copy items from another quotation — the source is never changed"
+              className="flex items-center gap-1.5 text-sm border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-semibold rounded-lg px-4 py-2 transition"
+            >
+              <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              From Another Quote
             </button>
             <button
               onClick={addItem}
@@ -1777,6 +1802,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           onSupplierCreated={(newSup) => setSuppliers(prev => [...prev, newSup])}
           onImport={handleAIImport}
           onClose={() => setShowAIImporter(false)}
+        />
+      )}
+
+      {showQuoteImporter && (
+        <QuotationItemImporter
+          currentQuotationId={savedQuotation?.id || quotationId}
+          onImport={handleQuoteImport}
+          onClose={() => setShowQuoteImporter(false)}
         />
       )}
 
