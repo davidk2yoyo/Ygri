@@ -248,7 +248,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         .maybeSingle();
       if (existingErr) throw existingErr;
       if (existingPO) {
-        navigate(`/purchase-orders/${existingPO.id}`);
+        navigate(`/purchase-orders/${existingPO.id}`, { state: { from: "/projects", activeTrackId: trackId } });
         return;
       }
 
@@ -285,7 +285,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       const { error: poItemsErr } = await supabase.from("purchase_order_items").insert(poItems);
       if (poItemsErr) throw poItemsErr;
 
-      navigate(`/purchase-orders/${po.id}`);
+      navigate(`/purchase-orders/${po.id}`, { state: { from: "/projects", activeTrackId: trackId } });
     } catch (e) {
       sileo.error({ title: "Could not open supplier payment", description: e.message });
     } finally {
@@ -763,7 +763,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           {savedQuotation && (
             <>
               <button
-                onClick={() => navigate(`/quotations/${savedQuotation.id}/annex`, { state: { from: window.location.pathname + window.location.search } })}
+                onClick={() => navigate(`/quotations/${savedQuotation.id}/annex`, { state: { from: "/projects", activeTrackId: trackId } })}
                 title="Technical Annex"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-bgray-200 text-darkblack-700 rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition whitespace-nowrap"
               >
@@ -773,7 +773,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                 Annex
               </button>
               <button
-                onClick={() => navigate(`/quotations/${savedQuotation.id}/packing-list`, { state: { from: window.location.pathname + window.location.search } })}
+                onClick={() => navigate(`/quotations/${savedQuotation.id}/packing-list`, { state: { from: "/projects", activeTrackId: trackId } })}
                 title="Packing List"
                 className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-bgray-200 text-darkblack-700 rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition whitespace-nowrap"
               >
@@ -784,7 +784,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
               </button>
               {type === "product" && (
                 <button
-                  onClick={() => navigate(`/purchase-orders/new?quotationId=${savedQuotation.id}`)}
+                  onClick={() => navigate(`/purchase-orders/new?quotationId=${savedQuotation.id}`, { state: { from: "/projects", activeTrackId: trackId } })}
                   title="Purchase Order"
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-bgray-200 text-darkblack-700 rounded-lg text-sm font-medium hover:border-primary hover:text-primary transition whitespace-nowrap"
                 >

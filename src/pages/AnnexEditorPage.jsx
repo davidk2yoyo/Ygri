@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import RichTextEditor from "../components/RichTextEditor";
+import { goBack } from "../lib/navigateBack";
 
 // ─── AI helpers ────────────────────────────────────────────────────────────────
 const toBase64 = (file) =>
@@ -677,7 +678,7 @@ export default function AnnexEditorPage() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => location.state?.from ? navigate(location.state.from) : navigate(-1)} className="text-gray-400 hover:text-gray-600 transition">
+            <button onClick={() => goBack(navigate, location)} className="text-gray-400 hover:text-gray-600 transition">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
             <div>

@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabaseClient";
 import PackingListPDF from "../components/PackingListPDF";
+import { goBack } from "../lib/navigateBack";
 
 const emptyRow = () => ({
   _localId: Math.random().toString(36).slice(2),
@@ -278,7 +279,7 @@ export default function PackingListEditorPage() {
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-6 py-3 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-3">
-            <button onClick={() => location.state?.from ? navigate(location.state.from) : navigate(-1)} className="text-gray-400 hover:text-gray-600 transition">
+            <button onClick={() => goBack(navigate, location)} className="text-gray-400 hover:text-gray-600 transition">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
             </button>
             <div>

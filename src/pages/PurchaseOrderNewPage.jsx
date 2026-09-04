@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
+import { goBack } from "../lib/navigateBack";
 
 export default function PurchaseOrderNewPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const preselectedQuotationId = searchParams.get("quotationId");
 
@@ -149,7 +151,10 @@ export default function PurchaseOrderNewPage() {
 
       sileo.success({ title: `${createdPOs.length} purchase order${createdPOs.length !== 1 ? "s" : ""} created` });
       if (createdPOs.length === 1) {
-        navigate(`/purchase-orders/${createdPOs[0].id}`);
+        // Forward the same from/activeTrackId this page itself arrived
+        // with, so "back" from the new PO still returns to the project —
+        // not just to this now-gone "new PO" form.
+        navigate(`/purchase-orders/${createdPOs[0].id}`, location.state?.from ? { state: location.state } : undefined);
       } else {
         navigate("/purchase-orders");
       }
@@ -169,7 +174,7 @@ export default function PurchaseOrderNewPage() {
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => navigate("/purchase-orders")} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
+        <button onClick={() => goBack(navigate, location)} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
         </button>
         <div>

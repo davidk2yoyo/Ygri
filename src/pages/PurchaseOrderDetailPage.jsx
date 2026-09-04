@@ -1,13 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
 import PurchaseOrderPaymentsSection from "../components/PurchaseOrderPaymentsSection";
 import PurchaseOrderPDF from "../components/PurchaseOrderPDF";
+import { goBack } from "../lib/navigateBack";
 
 export default function PurchaseOrderDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [po, setPo] = useState(null);
   const [items, setItems] = useState([]);
@@ -110,7 +112,7 @@ export default function PurchaseOrderDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate("/purchase-orders")} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
+          <button onClick={() => goBack(navigate, location)} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-bgray-200 transition">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
           <div>
