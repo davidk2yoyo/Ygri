@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildMessageExtensions } from "./messageEditorExtensions";
 import MessageEditorToolbar from "./MessageEditorToolbar";
+import VoiceInputButton from "../ai/VoiceInputButton";
 
 export default function MessageComposer({ onSend, disabled, profiles = [] }) {
   const [files, setFiles] = useState([]);
   const [sending, setSending] = useState(false);
+  const [retouching, setRetouching] = useState(false);
+  const [retouchError, setRetouchError] = useState("");
   const fileRef = useRef(null);
   const composerRef = useRef(null);
   const profilesRef = useRef(profiles);
@@ -66,6 +69,41 @@ export default function MessageComposer({ onSend, disabled, profiles = [] }) {
   };
   handleSendRef.current = handleSend;
 
+  // Polishes whatever's currently in the composer into a clean, professional
+  // sentence — same /api/ai-scan "retouch" prompt already used for report
+  // and annex text (Retouch with AI) — meant for a comment spoken via the
+  // mic button and transcribed as a rough run-on, not for formatting a
+  // message you already typed carefully.
+  const handleRetouch = async () => {
+    if (!editor || editor.isEmpty) return;
+    const plainText = editor.getText().trim();
+    if (!plainText) return;
+    setRetouching(true);
+    setRetouchError("");
+    try {
+      const res = await fetch("/api/ai-scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "retouch", text: plainText, language: "es" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+      if (data.content) {
+        const html = data.content
+          .replace(/\\n/g, "\n")
+          .split(/\n{2,}/)
+          .map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`)
+          .join("");
+        editor.commands.setContent(html);
+        editor.commands.focus("end");
+      }
+    } catch (e) {
+      setRetouchError(e.message);
+    } finally {
+      setRetouching(false);
+    }
+  };
+
   if (!editor) return null;
 
   const canSend = !sending && !disabled && (!editor.isEmpty || files.length > 0);
@@ -103,6 +141,28 @@ export default function MessageComposer({ onSend, disabled, profiles = [] }) {
         <div className="flex-1 min-w-0 max-h-40 overflow-y-auto message-composer-editor">
           <EditorContent editor={editor} />
         </div>
+        {!editor.isEmpty && (
+          <button
+            type="button"
+            onClick={handleRetouch}
+            disabled={disabled || retouching}
+            title="Improve wording with AI — for a rough comment spoken via the mic"
+            className="shrink-0 p-1.5 text-bgray-400 hover:text-purple-500 transition disabled:opacity-40"
+          >
+            {retouching ? (
+              <span className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin inline-block" />
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+              </svg>
+            )}
+          </button>
+        )}
+        <VoiceInputButton
+          continuous
+          size="w-8 h-8"
+          onTranscript={(text) => editor.chain().focus().insertContent(`${text} `).run()}
+        />
         <input ref={fileRef} type="file" multiple className="hidden" onChange={e => { addFiles(e.target.files); e.target.value = ""; }} />
         <button
           type="button"
@@ -131,6 +191,7 @@ export default function MessageComposer({ onSend, disabled, profiles = [] }) {
           )}
         </button>
       </div>
+      {retouchError && <p className="text-xs text-red-500 mt-1">{retouchError}</p>}
     </div>
   );
 }

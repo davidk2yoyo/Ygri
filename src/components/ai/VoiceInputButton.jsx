@@ -3,8 +3,10 @@ import { useSpeechToText } from "../../lib/ai/useSpeechToText";
 
 // Mic button + ES/EN toggle, feeding transcribed speech into onTranscript.
 // Renders nothing if the browser doesn't support SpeechRecognition (Firefox/Safari).
-export default function VoiceInputButton({ onTranscript, size = "w-9 h-9" }) {
-  const { supported, listening, lang, setLang, start, stop } = useSpeechToText(onTranscript);
+// `continuous`: keep listening across pauses instead of stopping after the
+// first one — for narrating something longer than a single short message.
+export default function VoiceInputButton({ onTranscript, size = "w-9 h-9", continuous = false }) {
+  const { supported, listening, lang, setLang, start, stop } = useSpeechToText(onTranscript, { continuous });
 
   if (!supported) return null;
 

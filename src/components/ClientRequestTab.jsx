@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
+import VoiceInputButton from "./ai/VoiceInputButton";
 
 const markdownComponents = {
   p: (props) => <p className="text-sm text-darkblack-700 dark:text-white mb-2 last:mb-0" {...props} />,
@@ -606,14 +607,24 @@ export default function ClientRequestTab({ trackId, clientName, projectName }) {
       {/* Raw capture */}
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1">
-            Client Conversation (paste WhatsApp text, emails, etc.) <span className="font-normal text-bgray-400">— or Ctrl+V a screenshot anywhere on this page, it's read automatically</span>
-          </label>
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300">
+              Client Conversation (paste WhatsApp text, emails, etc.) <span className="font-normal text-bgray-400">— or Ctrl+V a screenshot anywhere on this page, it's read automatically</span>
+            </label>
+            <VoiceInputButton
+              continuous
+              size="w-8 h-8"
+              onTranscript={(text) => setRawText(prev => (prev.trim() ? `${prev.trim()} ${text}` : text))}
+            />
+          </div>
+          <p className="text-xs text-bgray-400 mb-1.5 -mt-0.5">
+            Just came out of a call or meeting? Click the mic and narrate what the client wants instead of typing it — then Generate Summary as usual.
+          </p>
           <textarea
             rows={8}
             value={rawText}
             onChange={e => setRawText(e.target.value)}
-            placeholder="Paste the raw conversation with the client here, or Ctrl+V a screenshot..."
+            placeholder="Paste the raw conversation with the client here, Ctrl+V a screenshot, or use the mic to narrate it..."
             className={`${inputCls} resize-y`}
           />
         </div>

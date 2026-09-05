@@ -14,7 +14,16 @@ function readStoredLang() {
 // Thin wrapper around the browser's native SpeechRecognition (Chrome/Edge —
 // not available in Firefox/Safari, hence `supported`). No backend involved;
 // transcription happens entirely in the browser.
-export function useSpeechToText(onResult) {
+//
+// `continuous: true` keeps listening across natural pauses in speech
+// instead of stopping after the first one — needed for narrating something
+// longer (a meeting recap, a multi-sentence comment) rather than a single
+// short utterance. In that mode `e.results` accumulates for the whole
+// session, so only the segments from `e.resultIndex` onward (and only the
+// ones marked `isFinal`) are new since the last event — without that,
+// every pause would re-emit everything said so far, duplicating text for
+// a caller that appends each result.
+export function useSpeechToText(onResult, { continuous = false } = {}) {
   const [listening, setListening] = useState(false);
   const [lang, setLangState] = useState(readStoredLang);
   const recognitionRef = useRef(null);
@@ -37,8 +46,13 @@ export function useSpeechToText(onResult) {
     recognition.lang = lang;
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
+    recognition.continuous = continuous;
     recognition.onresult = (e) => {
-      const transcript = Array.from(e.results).map((r) => r[0].transcript).join(" ").trim();
+      let transcript = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) transcript += e.results[i][0].transcript + " ";
+      }
+      transcript = transcript.trim();
       if (transcript) onResult(transcript);
     };
     recognition.onerror = () => setListening(false);
@@ -46,7 +60,7 @@ export function useSpeechToText(onResult) {
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
-  }, [SpeechRecognitionCtor, listening, lang, onResult]);
+  }, [SpeechRecognitionCtor, listening, lang, onResult, continuous]);
 
   return { supported, listening, lang, setLang, start, stop };
 }
