@@ -2,7 +2,15 @@ import React from "react";
 
 const TOOL_TITLES = {
   create_task: "CREATE TASK",
+  create_project: "CREATE PROJECT",
+  create_client: "CREATE CLIENT",
+  update_client: "UPDATE CLIENT",
+  create_supplier: "CREATE SUPPLIER",
+  update_supplier: "UPDATE SUPPLIER",
   add_project_message: "ADD PROJECT COMMENT",
+  update_project: "UPDATE PROJECT",
+  create_shipment: "CREATE SHIPMENT",
+  advance_stage: "ADVANCE STAGE",
 };
 
 const FIELD_LABELS = {
@@ -12,6 +20,18 @@ const FIELD_LABELS = {
   project: "Project",
   client: "Client",
   body: "Comment",
+  name: "Name",
+  remarks: "Remarks",
+  tracking_number: "Tracking #",
+  carrier: "Carrier",
+  status: "Status",
+  origin: "Origin",
+  destination: "Destination",
+  estimated_delivery: "ETA",
+  from_stage: "From",
+  to_stage: "To",
+  workflow: "Workflow",
+  owner: "Owner",
 };
 
 // Which editable field a given select/date control stands in for — so its

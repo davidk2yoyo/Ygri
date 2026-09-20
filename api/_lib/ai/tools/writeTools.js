@@ -54,15 +54,65 @@ async function findLikelyDuplicates(supabase, table, nameColumn, name) {
   return data || [];
 }
 
-// Builds create_task's editable project dropdown — every one of this
-// client's own projects, plus an explicit "no project" option. Lets the
-// Action Card offer a real choice instead of the model's single silent
-// guess (the model picking the wrong project, with no way to see or
-// change it, was the exact gap reported in testing).
-async function resolveClientProjects(supabase, clientId) {
+// Builds a project-scoped tool's editable project dropdown — every one of
+// this client's own projects. `allowNone` adds an explicit "no project"
+// option, only meaningful for tools where track_id is genuinely optional
+// (create_task's internal-task case) — every other project-scoped tool
+// requires a real project, so offering "none" there would just be another
+// way to submit an invalid action.
+async function resolveClientProjects(supabase, clientId, { allowNone = false } = {}) {
   const { data } = await supabase.from("tracks").select("id, name, status").eq("client_id", clientId).order("created_at", { ascending: false }).limit(20);
   const options = (data || []).map((t) => ({ value: t.id, label: t.status === "active" ? t.name : `${t.name} (${t.status})` }));
-  return [{ value: null, label: "No project (internal task)" }, ...options];
+  return allowNone ? [{ value: null, label: "No project (internal task)" }, ...options] : options;
+}
+
+// Resolves a project-scoped tool's track_id into full project context,
+// defensively handling the single most common model mistake — reusing a
+// client's own id (from search_clients) as if it were a project id — and
+// builds the `editable.track_id` dropdown so the Action Card lets the user
+// pick the right project (or fix a wrong one) directly, instead of a dead
+// end. Shared by every write tool that targets a project: create_task,
+// add_project_message, update_project, create_shipment, advance_stage.
+//
+// `existingClientId` is normalizedArgs.client_id carried forward from a
+// prior validate() pass (see amendAction in actionPlan.js) — it keeps the
+// dropdown scoped to the right client even after track_id is cleared, for
+// tools where that's possible (currently only create_task).
+async function resolveProjectField(supabase, trackId, { allowNone = false, existingClientId = null } = {}) {
+  const errors = [];
+  let ctx = null;
+  let clientId = existingClientId || null;
+  let clientName = null;
+
+  if (trackId) {
+    ctx = await buildProjectContext(supabase, trackId);
+    if (!ctx) {
+      const { data: clientMatch } = await supabase.from("clients").select("id, company_name").eq("id", trackId).maybeSingle();
+      if (clientMatch) {
+        clientId = clientMatch.id;
+        clientName = clientMatch.company_name;
+        errors.push(
+          `"${trackId}" is the client "${clientMatch.company_name}", not a project — pick one of their projects below${allowNone ? ', or leave it as "No project"' : ""}.`
+        );
+      } else {
+        errors.push("Project not found or not accessible.");
+      }
+    } else {
+      clientId = ctx.project.client.id;
+      clientName = ctx.project.client.name;
+    }
+  } else if (clientId) {
+    const { data: client } = await supabase.from("clients").select("company_name").eq("id", clientId).maybeSingle();
+    clientName = client?.company_name || null;
+  } else if (!allowNone) {
+    errors.push("A project is required.");
+  }
+
+  const editable = clientId
+    ? { track_id: { type: "select", value: ctx ? trackId : null, options: await resolveClientProjects(supabase, clientId, { allowNone }) } }
+    : null;
+
+  return { ctx, clientId, clientName, errors, editable };
 }
 
 export const WRITE_TOOLS = [
@@ -85,44 +135,14 @@ export const WRITE_TOOLS = [
       const title = typeof args.title === "string" ? args.title.trim() : "";
       if (!title) errors.push("Task title is required.");
 
-      // track_id is optional — omitted means a genuine internal task, not
-      // an omission to flag. Only resolve project context when one was given.
-      let ctx = null;
-      let trackStageId = null;
-      // client_id may already be known from a previous validate() pass —
-      // amendAction persists it forward via normalizedArgs below, so the
-      // project dropdown stays scoped to the right client even after the
-      // user clears track_id back to "No project" and wants to browse
-      // other projects again, rather than the dropdown just disappearing.
-      let clientId = args.client_id || null;
-      let clientName = null;
-      if (args.track_id) {
-        ctx = await buildProjectContext(supabase, args.track_id);
-        if (!ctx) {
-          // Common model mistake: reusing a client's id (from search_clients)
-          // as if it were a project id. Diagnose it precisely instead of a
-          // dead-end "not found" — this also lands in conversation history,
-          // so the model can self-correct on its next turn — and, since we
-          // now know which client was meant, still offer their real
-          // projects as an editable choice below rather than a dead end.
-          const { data: clientMatch } = await supabase.from("clients").select("id, company_name").eq("id", args.track_id).maybeSingle();
-          if (clientMatch) {
-            clientId = clientMatch.id;
-            clientName = clientMatch.company_name;
-            errors.push(`"${args.track_id}" is the client "${clientMatch.company_name}", not a project — pick one of their projects below, or leave it as "No project" for an internal task.`);
-          } else {
-            errors.push("Project not found or not accessible.");
-          }
-        } else {
-          clientId = ctx.project.client.id;
-          clientName = ctx.project.client.name;
-        }
-        trackStageId = ctx?.pipeline?.current_track_stage_id || null;
-        if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
-      } else if (clientId) {
-        const { data: client } = await supabase.from("clients").select("company_name").eq("id", clientId).maybeSingle();
-        clientName = client?.company_name || null;
-      }
+      // track_id is optional here (allowNone) — omitted means a genuine
+      // internal task, not an omission to flag.
+      const { ctx, clientId, clientName, errors: projectErrors, editable: editableTrackId } =
+        await resolveProjectField(supabase, args.track_id, { allowNone: true, existingClientId: args.client_id });
+      errors.push(...projectErrors);
+
+      const trackStageId = ctx?.pipeline?.current_track_stage_id || null;
+      if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
 
       if (args.due_date && !/^\d{4}-\d{2}-\d{2}$/.test(args.due_date)) errors.push(`Invalid due date "${args.due_date}" — expected YYYY-MM-DD.`);
 
@@ -144,8 +164,7 @@ export const WRITE_TOOLS = [
       // directly on the card instead of going back to the chat (§ user
       // feedback: the model silently picked a project and never asked
       // about a due date at all).
-      const editable = { due_date: { type: "date", value: args.due_date || null } };
-      if (clientId) editable.track_id = { type: "select", value: ctx ? args.track_id : null, options: await resolveClientProjects(supabase, clientId) };
+      const editable = { due_date: { type: "date", value: args.due_date || null }, ...editableTrackId };
 
       return {
         valid: errors.length === 0,
@@ -464,8 +483,10 @@ export const WRITE_TOOLS = [
       const errors = [];
       const body = typeof args.body === "string" ? args.body.trim() : "";
       if (!body) errors.push("Comment body cannot be empty.");
-      const ctx = await buildProjectContext(supabase, args.track_id);
-      if (!ctx) errors.push("Project not found or not accessible.");
+
+      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+        await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
+      errors.push(...projectErrors);
 
       return {
         valid: errors.length === 0,
@@ -473,7 +494,9 @@ export const WRITE_TOOLS = [
         warnings: [],
         target: { entity: "project_messages", track_id: args.track_id },
         current_state: null,
-        proposed_state: { body, project: ctx?.project?.name },
+        proposed_state: { client: clientName, body, project: ctx?.project?.name },
+        editable,
+        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
         label: "Add project comment",
         resolvedArgs: { track_id: args.track_id, body, project_name: ctx?.project?.name },
       };
@@ -514,32 +537,26 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const { data: track } = await supabase.from("tracks").select("id, name, remarks, status").eq("id", args.track_id).maybeSingle();
-      if (!track) {
-        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
-        errors.push(
-          clientMatch
-            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
-            : "Project not found or not accessible."
-        );
-        return { valid: false, errors, warnings: [], target: null, current_state: null, proposed_state: null, label: "Update project", resolvedArgs: null };
-      }
+      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+        await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
+      errors.push(...projectErrors);
 
       // Cancelled projects encode that via a coupled status + "[CANCELLED] "
       // name prefix (see ProjectsPage.jsx's cancelProject/reactivateProject) —
       // editing name/remarks here without touching that pairing could leave
       // the three places that detect "cancelled" disagreeing with each other.
-      if (track.status === "cancelled") errors.push("This project is cancelled — reactivate it from the Projects board before editing it.");
+      if (ctx && ctx.project.status === "cancelled") errors.push("This project is cancelled — reactivate it from the Projects board before editing it.");
 
       const patch = {};
       if (typeof args.name === "string" && args.name.trim()) patch.name = args.name.trim();
       if (args.remarks !== undefined) patch.remarks = (args.remarks || "").trim() || null;
-      if (!Object.keys(patch).length) errors.push("No fields to update were provided.");
+      if (ctx && !Object.keys(patch).length) errors.push("No fields to update were provided.");
 
       const currentState = {};
       const proposedState = {};
+      if (clientName) proposedState.client = clientName;
       for (const key of Object.keys(patch)) {
-        currentState[key] = track[key] ?? null;
+        currentState[key] = ctx?.project?.[key] ?? null;
         proposedState[key] = patch[key];
       }
 
@@ -550,7 +567,9 @@ export const WRITE_TOOLS = [
         target: { entity: "tracks", track_id: args.track_id },
         current_state: currentState,
         proposed_state: proposedState,
-        label: `Update project: ${track.name}`,
+        editable,
+        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        label: `Update project: ${ctx?.project?.name || "(unknown)"}`,
         resolvedArgs: { track_id: args.track_id, patch },
       };
     },
@@ -581,15 +600,9 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const ctx = await buildProjectContext(supabase, args.track_id);
-      if (!ctx) {
-        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
-        errors.push(
-          clientMatch
-            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
-            : "Project not found or not accessible."
-        );
-      }
+      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+        await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
+      errors.push(...projectErrors);
 
       const trackingNumber = typeof args.tracking_number === "string" ? args.tracking_number.trim() : "";
       if (!trackingNumber) errors.push("Tracking number is required.");
@@ -601,7 +614,7 @@ export const WRITE_TOOLS = [
       // Same defaults BLANK_FORM uses in ProjectShipmentsSection.jsx, so an
       // AI-created shipment starts out identical to a manually-created one.
       const resolved = {
-        track_id: args.track_id,
+        track_id: args.track_id || null,
         tracking_number: trackingNumber,
         carrier: (args.carrier || "").trim() || "DHL Express",
         description: (args.description || "").trim(),
@@ -619,6 +632,7 @@ export const WRITE_TOOLS = [
         target: { entity: "shipments", track_id: args.track_id },
         current_state: null,
         proposed_state: {
+          client: clientName,
           project: ctx?.project?.name,
           tracking_number: resolved.tracking_number,
           carrier: resolved.carrier,
@@ -627,6 +641,8 @@ export const WRITE_TOOLS = [
           destination: resolved.destination || null,
           estimated_delivery: resolved.estimated_delivery,
         },
+        editable,
+        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
         label: `Create shipment: ${trackingNumber || "(no tracking number)"}`,
         resolvedArgs: resolved,
       };
@@ -656,35 +672,33 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const ctx = await buildProjectContext(supabase, args.track_id);
-      if (!ctx) {
-        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
-        errors.push(
-          clientMatch
-            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
-            : "Project not found or not accessible."
-        );
-        return { valid: false, errors, warnings: [], target: null, current_state: null, proposed_state: null, label: "Advance stage", resolvedArgs: null };
-      }
+      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+        await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
+      errors.push(...projectErrors);
 
-      const currentStage = ctx.pipeline?.current_stage;
-      const nextStage = ctx.pipeline?.next_stage;
-      const trackStageId = ctx.pipeline?.current_track_stage_id;
-      if (!trackStageId || !currentStage) errors.push("This project has no current in-progress stage to advance.");
+      const currentStage = ctx?.pipeline?.current_stage;
+      const nextStage = ctx?.pipeline?.next_stage;
+      const trackStageId = ctx?.pipeline?.current_track_stage_id;
+      if (ctx && (!trackStageId || !currentStage)) errors.push("This project has no current in-progress stage to advance.");
+
+      const proposedState = { client: clientName };
+      if (ctx) {
+        proposedState.project = ctx.project.name;
+        proposedState.from_stage = currentStage?.name || null;
+        proposedState.to_stage = nextStage ? nextStage.name : "Completed (this was the last stage)";
+      }
 
       return {
         valid: errors.length === 0,
         errors,
         warnings: [],
-        target: { entity: "track_stages", track_id: args.track_id, track_stage_id: trackStageId },
-        current_state: { stage: currentStage?.name || null },
-        proposed_state: {
-          project: ctx.project.name,
-          from_stage: currentStage?.name || null,
-          to_stage: nextStage ? nextStage.name : "Completed (this was the last stage)",
-        },
-        label: `Advance stage: ${currentStage?.name || "?"} → ${nextStage ? nextStage.name : "Completed"}`,
-        resolvedArgs: { track_stage_id: trackStageId, track_id: args.track_id, stage_name: currentStage?.name || null },
+        target: { entity: "track_stages", track_id: args.track_id, track_stage_id: trackStageId || null },
+        current_state: ctx ? { stage: currentStage?.name || null } : null,
+        proposed_state: proposedState,
+        editable,
+        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        label: ctx ? `Advance stage: ${currentStage?.name || "?"} → ${nextStage ? nextStage.name : "Completed"}` : "Advance stage",
+        resolvedArgs: { track_stage_id: trackStageId || null, track_id: args.track_id, stage_name: currentStage?.name || null },
       };
     },
     async execute(resolvedArgs, { supabase, userId }) {
