@@ -499,6 +499,208 @@ export const WRITE_TOOLS = [
       return { message_id: data.id };
     },
   },
+
+  {
+    key: "update_project",
+    description: "Propose renaming a project or editing its internal remarks. Always a proposal — never executes directly. Does NOT change project status — cancelling/reactivating a project is a separate, deliberate action done from the Projects board, not exposed here.",
+    parameters: {
+      type: "object",
+      properties: {
+        track_id: { type: "string" },
+        name: { type: "string", description: "New project name" },
+        remarks: { type: "string", description: "Internal notes/remarks for the project — send an empty string to clear it" },
+      },
+      required: ["track_id"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const { data: track } = await supabase.from("tracks").select("id, name, remarks, status").eq("id", args.track_id).maybeSingle();
+      if (!track) {
+        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
+        errors.push(
+          clientMatch
+            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
+            : "Project not found or not accessible."
+        );
+        return { valid: false, errors, warnings: [], target: null, current_state: null, proposed_state: null, label: "Update project", resolvedArgs: null };
+      }
+
+      // Cancelled projects encode that via a coupled status + "[CANCELLED] "
+      // name prefix (see ProjectsPage.jsx's cancelProject/reactivateProject) —
+      // editing name/remarks here without touching that pairing could leave
+      // the three places that detect "cancelled" disagreeing with each other.
+      if (track.status === "cancelled") errors.push("This project is cancelled — reactivate it from the Projects board before editing it.");
+
+      const patch = {};
+      if (typeof args.name === "string" && args.name.trim()) patch.name = args.name.trim();
+      if (args.remarks !== undefined) patch.remarks = (args.remarks || "").trim() || null;
+      if (!Object.keys(patch).length) errors.push("No fields to update were provided.");
+
+      const currentState = {};
+      const proposedState = {};
+      for (const key of Object.keys(patch)) {
+        currentState[key] = track[key] ?? null;
+        proposedState[key] = patch[key];
+      }
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings: [],
+        target: { entity: "tracks", track_id: args.track_id },
+        current_state: currentState,
+        proposed_state: proposedState,
+        label: `Update project: ${track.name}`,
+        resolvedArgs: { track_id: args.track_id, patch },
+      };
+    },
+    async execute(resolvedArgs, { supabase }) {
+      const { data, error } = await supabase.from("tracks").update(resolvedArgs.patch).eq("id", resolvedArgs.track_id).select("id, name").single();
+      if (error) throw new Error(error.message);
+      return { track_id: data.id, name: data.name };
+    },
+  },
+
+  {
+    key: "create_shipment",
+    description: "Propose registering a new shipment for a project. Always a proposal — never executes directly. carrier and status are free text but should be one of the values shown to you; leave fields you don't know empty rather than guessing.",
+    parameters: {
+      type: "object",
+      properties: {
+        track_id: { type: "string" },
+        tracking_number: { type: "string" },
+        carrier: { type: "string", description: "e.g. DHL Express, FedEx, UPS, SF Express, Maersk, COSCO, Other — default 'DHL Express' if genuinely unknown" },
+        description: { type: "string", description: "What's in this shipment" },
+        status: { type: "string", enum: ["pending", "in_transit", "customs", "delivered", "exception"], description: "Default 'pending' for a new shipment unless told otherwise" },
+        status_detail: { type: "string" },
+        origin: { type: "string" },
+        destination: { type: "string" },
+        estimated_delivery: { type: "string", description: "ISO date (YYYY-MM-DD)" },
+      },
+      required: ["track_id", "tracking_number"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const ctx = await buildProjectContext(supabase, args.track_id);
+      if (!ctx) {
+        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
+        errors.push(
+          clientMatch
+            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
+            : "Project not found or not accessible."
+        );
+      }
+
+      const trackingNumber = typeof args.tracking_number === "string" ? args.tracking_number.trim() : "";
+      if (!trackingNumber) errors.push("Tracking number is required.");
+
+      if (args.estimated_delivery && !/^\d{4}-\d{2}-\d{2}$/.test(args.estimated_delivery)) {
+        errors.push(`Invalid estimated delivery date "${args.estimated_delivery}" — expected YYYY-MM-DD.`);
+      }
+
+      // Same defaults BLANK_FORM uses in ProjectShipmentsSection.jsx, so an
+      // AI-created shipment starts out identical to a manually-created one.
+      const resolved = {
+        track_id: args.track_id,
+        tracking_number: trackingNumber,
+        carrier: (args.carrier || "").trim() || "DHL Express",
+        description: (args.description || "").trim(),
+        status: args.status || "pending",
+        status_detail: (args.status_detail || "").trim(),
+        origin: (args.origin || "").trim(),
+        destination: (args.destination || "").trim(),
+        estimated_delivery: args.estimated_delivery || null,
+      };
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings: [],
+        target: { entity: "shipments", track_id: args.track_id },
+        current_state: null,
+        proposed_state: {
+          project: ctx?.project?.name,
+          tracking_number: resolved.tracking_number,
+          carrier: resolved.carrier,
+          status: resolved.status,
+          origin: resolved.origin || null,
+          destination: resolved.destination || null,
+          estimated_delivery: resolved.estimated_delivery,
+        },
+        label: `Create shipment: ${trackingNumber || "(no tracking number)"}`,
+        resolvedArgs: resolved,
+      };
+    },
+    async execute(resolvedArgs, { supabase, userId }) {
+      // Same raw insert ProjectShipmentsSection.jsx's "New Shipment" modal
+      // does. Not replicated here: that modal also fires a best-effort,
+      // errors-swallowed 17Track registration call — a background nicety,
+      // not core to creating the shipment record itself.
+      const { data, error } = await supabase.from("shipments").insert(resolvedArgs).select("id, tracking_number").single();
+      if (error) throw new Error(error.message);
+
+      await createProjectActivityServer(supabase, resolvedArgs.track_id, "ai_shipment_created", { tracking_number: data.tracking_number, carrier: resolvedArgs.carrier }, { userId });
+      return { shipment_id: data.id, tracking_number: data.tracking_number };
+    },
+  },
+
+  {
+    key: "advance_stage",
+    description: "Propose advancing a project's current in-progress stage to the next one in its pipeline — the same operation as the 'Complete Stage' button. If the current stage is the last one, this marks the whole project completed instead. Always a proposal — never executes directly.",
+    parameters: {
+      type: "object",
+      properties: {
+        track_id: { type: "string", description: "The project whose current stage should be advanced." },
+      },
+      required: ["track_id"],
+    },
+    async validate(args, { supabase }) {
+      const errors = [];
+      const ctx = await buildProjectContext(supabase, args.track_id);
+      if (!ctx) {
+        const { data: clientMatch } = await supabase.from("clients").select("company_name").eq("id", args.track_id).maybeSingle();
+        errors.push(
+          clientMatch
+            ? `"${args.track_id}" is the client "${clientMatch.company_name}", not a project — call get_client with this id to see their actual projects, then use one of those ids as track_id.`
+            : "Project not found or not accessible."
+        );
+        return { valid: false, errors, warnings: [], target: null, current_state: null, proposed_state: null, label: "Advance stage", resolvedArgs: null };
+      }
+
+      const currentStage = ctx.pipeline?.current_stage;
+      const nextStage = ctx.pipeline?.next_stage;
+      const trackStageId = ctx.pipeline?.current_track_stage_id;
+      if (!trackStageId || !currentStage) errors.push("This project has no current in-progress stage to advance.");
+
+      return {
+        valid: errors.length === 0,
+        errors,
+        warnings: [],
+        target: { entity: "track_stages", track_id: args.track_id, track_stage_id: trackStageId },
+        current_state: { stage: currentStage?.name || null },
+        proposed_state: {
+          project: ctx.project.name,
+          from_stage: currentStage?.name || null,
+          to_stage: nextStage ? nextStage.name : "Completed (this was the last stage)",
+        },
+        label: `Advance stage: ${currentStage?.name || "?"} → ${nextStage ? nextStage.name : "Completed"}`,
+        resolvedArgs: { track_stage_id: trackStageId, track_id: args.track_id, stage_name: currentStage?.name || null },
+      };
+    },
+    async execute(resolvedArgs, { supabase, userId }) {
+      // The exact same RPC StageDrawer.jsx's "Complete Stage" button calls
+      // (handleCompleteStage) — no AI-specific stage-transition semantics.
+      const { data, error } = await supabase.rpc("complete_stage_and_advance", { p_track_stage_id: resolvedArgs.track_stage_id });
+      if (error) throw new Error(error.message);
+
+      if (resolvedArgs.track_id && resolvedArgs.stage_name) {
+        await createProjectActivityServer(supabase, resolvedArgs.track_id, "ai_stage_advanced", { stage: resolvedArgs.stage_name }, { trackStageId: resolvedArgs.track_stage_id, userId });
+      }
+
+      const row = Array.isArray(data) ? data[0] : data;
+      return { track_status: row?.track_status || null };
+    },
+  },
 ];
 
 function escapeHtml(s) {

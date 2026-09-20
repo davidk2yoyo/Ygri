@@ -75,7 +75,7 @@ Add one entry to `WRITE_TOOLS` in `api/_lib/ai/tools/writeTools.js` with **three
 
 Then seed its `ai_tools` row with `tool_type: 'write'`, and decide whether it needs its own Skill (`ai_skills`) governing how the model should reason about proposing it.
 
-`create_track_rpc` was extracted and confirmed simple (see `supabase-core-workflow-rpcs.sql`) and now backs the `create_project` WRITE tool. **Do not** wrap `complete_stage_and_advance` into an `advance_stage` tool yet — it's flagged in the Copilot Blueprint as needing the Kanban drag-and-drop path (`ProjectsPage.jsx`'s `handleMoveProject`) unified with it first; that RPC's body is documented too, but the two-divergent-paths problem is unrelated to whether the RPC is visible.
+`create_track_rpc` was extracted and confirmed simple (see `supabase-core-workflow-rpcs.sql`) and now backs the `create_project` WRITE tool. `complete_stage_and_advance` now backs `advance_stage` too — the blocker (the Kanban drag-and-drop path in `ProjectsPage.jsx`'s `handleMoveProject` never updated `tracks.current_stage_template_id`, so a human dragging a card afterward could leave the AI's own context stale) is fixed: `handleMoveProject` now sets `current_stage_template_id`/`started_at`/`completed_at`/`due_date` the same way the RPC does, so the two paths agree on where a project's pipeline actually stands.
 
 ## Why the browser can't just send the plan back
 
@@ -100,4 +100,4 @@ The orchestrator never uses `SUPABASE_SERVICE_ROLE_KEY`. If you're tempted to ad
 
 ## What this phase deliberately does not do
 
-See the Copilot Blueprint and the implementation report for the full list — in short: no `create_project`, `advance_stage`, quotation writes, shipment/PO writes, proactive/background agents, or multi-agent orchestration. Two WRITE tools only: `create_task`, `add_project_message`.
+This list only shrinks as tools get built — check `api/_lib/ai/tools/writeTools.js`'s `WRITE_TOOLS` array for the current, authoritative set rather than trusting this doc's history of what was true at Phase 1. As of this writing: no quotation writes, purchase order writes, proactive/background agents, or multi-agent orchestration — an external channel (Telegram/WhatsApp) is also not wired to this orchestrator at all, that's still the separate, older Flowise-based bot.

@@ -734,7 +734,7 @@ export default function ProjectsPage() {
       // track_stages has no name — join stage_templates to get it
       const { data: stages, error } = await supabase
         .from("track_stages")
-        .select("id, order_index, status, stage_templates(name)")
+        .select("id, order_index, status, started_at, completed_at, due_date, stage_template_id, stage_templates(name, sla_days)")
         .eq("track_id", project.track_id)
         .order("order_index");
       if (error) throw error;
@@ -742,13 +742,33 @@ export default function ProjectsPage() {
       const targetStage = stages.find(s => s.stage_templates?.name === targetStageName);
       if (!targetStage) throw new Error(`Stage "${targetStageName}" not found for this project`);
 
+      const nowIso = new Date().toISOString();
+      const dueDateFromSla = (slaDays) =>
+        slaDays != null ? new Date(Date.now() + slaDays * 86400000).toISOString().slice(0, 10) : null;
+
+      // Drag-and-drop used to only flip track_stages.status — it never touched
+      // tracks.current_stage_template_id (or started_at/completed_at/due_date),
+      // so the Copilot's own context (which reads current_stage_template_id as
+      // the source of truth for "what stage is this project on") could go
+      // stale relative to what the Kanban board itself showed. Mirror what
+      // complete_stage_and_advance already does for a single-step advance,
+      // across however many stages this drag actually crosses.
       const updates = stages.map(s => {
         const newStatus = s.order_index < targetStage.order_index ? "done"
           : s.order_index === targetStage.order_index ? "in_progress"
           : "not_started";
-        if (s.status === newStatus) return null;
-        return supabase.from("track_stages").update({ status: newStatus }).eq("id", s.id);
+        const patch = {};
+        if (s.status !== newStatus) patch.status = newStatus;
+        if (newStatus === "done" && !s.completed_at) patch.completed_at = nowIso;
+        if (newStatus === "in_progress" && !s.started_at) patch.started_at = nowIso;
+        if (newStatus === "in_progress" && !s.due_date) patch.due_date = dueDateFromSla(s.stage_templates?.sla_days);
+        if (!Object.keys(patch).length) return null;
+        return supabase.from("track_stages").update(patch).eq("id", s.id);
       }).filter(Boolean);
+
+      updates.push(
+        supabase.from("tracks").update({ current_stage_template_id: targetStage.stage_template_id }).eq("id", project.track_id)
+      );
 
       await Promise.all(updates);
       if (project.current_stage_name && project.current_stage_name !== targetStageName) {
