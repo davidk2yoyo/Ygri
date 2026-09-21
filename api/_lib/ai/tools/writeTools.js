@@ -1,5 +1,8 @@
 import { buildProjectContext } from "../context/projectContext.js";
 import { createProjectActivityServer } from "../projectActivityServer.js";
+import { fuzzySearch } from "../textMatch.js";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // WRITE tools are never dispatched directly by the orchestrator — see
 // api/_lib/ai/actionPlan.js. Each tool exposes:
@@ -78,24 +81,51 @@ async function resolveClientProjects(supabase, clientId, { allowNone = false } =
 // prior validate() pass (see amendAction in actionPlan.js) — it keeps the
 // dropdown scoped to the right client even after track_id is cleared, for
 // tools where that's possible (currently only create_task).
+// Last-resort fallback when track_id doesn't even look like a real id (a
+// hallucinated value, or the model passing a project/client NAME instead
+// of the id search_projects/get_client actually returned) — fuzzy-search
+// projects by name (and their client's name) so the user still gets real
+// candidates to pick from, instead of a dead-end "not found" with no way
+// to recover short of cancelling and retyping the whole request.
+async function fuzzySearchProjects(supabase, query) {
+  const { data } = await supabase.from("tracks").select("id, name, status, clients(company_name)").limit(500);
+  const candidates = (data || []).map((t) => ({ ...t, _searchable: `${t.name} ${t.clients?.company_name || ""}`.trim() }));
+  const matches = fuzzySearch(query, candidates, { key: "_searchable", limit: 10 });
+  return matches.map((t) => ({
+    value: t.id,
+    label: t.clients?.company_name ? `${t.name} — ${t.clients.company_name}${t.status !== "active" ? ` (${t.status})` : ""}` : `${t.name}${t.status !== "active" ? ` (${t.status})` : ""}`,
+  }));
+}
+
 async function resolveProjectField(supabase, trackId, { allowNone = false, existingClientId = null } = {}) {
   const errors = [];
   let ctx = null;
   let clientId = existingClientId || null;
   let clientName = null;
+  let projectOptions = null; // set only by the fuzzy-name fallback below
 
   if (trackId) {
-    ctx = await buildProjectContext(supabase, trackId);
+    const looksLikeId = UUID_RE.test(trackId);
+    if (looksLikeId) ctx = await buildProjectContext(supabase, trackId);
     if (!ctx) {
-      const { data: clientMatch } = await supabase.from("clients").select("id, company_name").eq("id", trackId).maybeSingle();
-      if (clientMatch) {
-        clientId = clientMatch.id;
-        clientName = clientMatch.company_name;
-        errors.push(
-          `"${trackId}" is the client "${clientMatch.company_name}", not a project — pick one of their projects below${allowNone ? ', or leave it as "No project"' : ""}.`
-        );
+      if (looksLikeId) {
+        const { data: clientMatch } = await supabase.from("clients").select("id, company_name").eq("id", trackId).maybeSingle();
+        if (clientMatch) {
+          clientId = clientMatch.id;
+          clientName = clientMatch.company_name;
+          errors.push(
+            `"${trackId}" is the client "${clientMatch.company_name}", not a project — pick one of their projects below${allowNone ? ', or leave it as "No project"' : ""}.`
+          );
+        } else {
+          errors.push("Project not found or not accessible.");
+        }
       } else {
-        errors.push("Project not found or not accessible.");
+        projectOptions = await fuzzySearchProjects(supabase, trackId);
+        errors.push(
+          projectOptions.length
+            ? `Couldn't resolve "${trackId}" to a specific project — pick the right one below (always use the exact id a prior search/get tool returned, never a name, next time).`
+            : `Couldn't find any project matching "${trackId}".`
+        );
       }
     } else {
       clientId = ctx.project.client.id;
@@ -108,9 +138,12 @@ async function resolveProjectField(supabase, trackId, { allowNone = false, exist
     errors.push("A project is required.");
   }
 
-  const editable = clientId
-    ? { track_id: { type: "select", value: ctx ? trackId : null, options: await resolveClientProjects(supabase, clientId, { allowNone }) } }
-    : null;
+  let editable = null;
+  if (projectOptions?.length) {
+    editable = { track_id: { type: "select", value: null, options: allowNone ? [{ value: null, label: "No project" }, ...projectOptions] : projectOptions } };
+  } else if (clientId) {
+    editable = { track_id: { type: "select", value: ctx ? trackId : null, options: await resolveClientProjects(supabase, clientId, { allowNone }) } };
+  }
 
   return { ctx, clientId, clientName, errors, editable };
 }
