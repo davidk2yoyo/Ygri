@@ -35,6 +35,10 @@ function systemEventText(metadata = {}) {
       return `🤖 Ygri Copilot created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
     case "ai_project_created":
       return `🤖 Ygri Copilot created this project${metadata.workflow ? ` — ${metadata.workflow} workflow` : ""}`;
+    case "ai_shipment_created":
+      return `🤖 Ygri Copilot registered shipment: ${metadata.tracking_number || "—"}${metadata.carrier ? ` via ${metadata.carrier}` : ""}`;
+    case "ai_stage_advanced":
+      return `🤖 Ygri Copilot advanced the stage: ${metadata.stage || "—"}`;
     default:
       return metadata.label || "Activity update";
   }

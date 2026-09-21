@@ -99,10 +99,12 @@ async function fuzzySearchProjects(supabase, query) {
 
 async function resolveProjectField(supabase, trackId, { allowNone = false, existingClientId = null } = {}) {
   const errors = [];
+  const warnings = [];
   let ctx = null;
   let clientId = existingClientId || null;
   let clientName = null;
   let projectOptions = null; // set only by the fuzzy-name fallback below
+  let resolvedTrackId = trackId || null; // what the caller should actually use as track_id
 
   if (trackId) {
     const looksLikeId = UUID_RE.test(trackId);
@@ -120,12 +122,22 @@ async function resolveProjectField(supabase, trackId, { allowNone = false, exist
           errors.push("Project not found or not accessible.");
         }
       } else {
+        // Doesn't even look like an id (a hallucinated value, or the model
+        // passing a name instead of the id a prior tool actually returned).
+        // Auto-adopt the top fuzzy match as the working project rather than
+        // leaving this action invalid until the user manually re-picks —
+        // it's still fully visible and changeable via the dropdown below
+        // before anything executes, same safety net as everywhere else.
         projectOptions = await fuzzySearchProjects(supabase, trackId);
-        errors.push(
-          projectOptions.length
-            ? `Couldn't resolve "${trackId}" to a specific project — pick the right one below (always use the exact id a prior search/get tool returned, never a name, next time).`
-            : `Couldn't find any project matching "${trackId}".`
-        );
+        if (projectOptions.length) {
+          resolvedTrackId = projectOptions[0].value;
+          ctx = await buildProjectContext(supabase, resolvedTrackId);
+          clientId = ctx.project.client.id;
+          clientName = ctx.project.client.name;
+          warnings.push(`Resolved "${trackId}" to project "${projectOptions[0].label}" by name match — double-check this is the right one, or pick a different one below.`);
+        } else {
+          errors.push(`Couldn't find any project matching "${trackId}".`);
+        }
       }
     } else {
       clientId = ctx.project.client.id;
@@ -140,12 +152,12 @@ async function resolveProjectField(supabase, trackId, { allowNone = false, exist
 
   let editable = null;
   if (projectOptions?.length) {
-    editable = { track_id: { type: "select", value: null, options: allowNone ? [{ value: null, label: "No project" }, ...projectOptions] : projectOptions } };
+    editable = { track_id: { type: "select", value: resolvedTrackId, options: allowNone ? [{ value: null, label: "No project" }, ...projectOptions] : projectOptions } };
   } else if (clientId) {
-    editable = { track_id: { type: "select", value: ctx ? trackId : null, options: await resolveClientProjects(supabase, clientId, { allowNone }) } };
+    editable = { track_id: { type: "select", value: ctx ? resolvedTrackId : null, options: await resolveClientProjects(supabase, clientId, { allowNone }) } };
   }
 
-  return { ctx, clientId, clientName, errors, editable };
+  return { ctx, clientId, clientName, errors, warnings, editable, resolvedTrackId };
 }
 
 export const WRITE_TOOLS = [
@@ -170,9 +182,10 @@ export const WRITE_TOOLS = [
 
       // track_id is optional here (allowNone) — omitted means a genuine
       // internal task, not an omission to flag.
-      const { ctx, clientId, clientName, errors: projectErrors, editable: editableTrackId } =
+      const { ctx, clientId, clientName, errors: projectErrors, warnings: projectWarnings, editable: editableTrackId, resolvedTrackId } =
         await resolveProjectField(supabase, args.track_id, { allowNone: true, existingClientId: args.client_id });
       errors.push(...projectErrors);
+      warnings.push(...projectWarnings);
 
       const trackStageId = ctx?.pipeline?.current_track_stage_id || null;
       if (ctx && !trackStageId) errors.push("This project has no current stage to attach the task to.");
@@ -203,13 +216,13 @@ export const WRITE_TOOLS = [
         valid: errors.length === 0,
         errors,
         warnings,
-        target: { entity: "stage_todos", track_id: args.track_id || null, track_stage_id: trackStageId },
+        target: { entity: "stage_todos", track_id: resolvedTrackId, track_stage_id: trackStageId },
         current_state: null,
         proposed_state: proposedState,
         editable,
-        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        normalizedArgs: { ...args, track_id: resolvedTrackId, ...(clientId ? { client_id: clientId } : {}) },
         label: `Create task: ${title || "(untitled)"}`,
-        resolvedArgs: { track_id: args.track_id || null, track_stage_id: trackStageId, title, due_date: args.due_date || null, assignee_id: assigneeId, project_name: ctx?.project?.name || null },
+        resolvedArgs: { track_id: resolvedTrackId, track_stage_id: trackStageId, title, due_date: args.due_date || null, assignee_id: assigneeId, project_name: ctx?.project?.name || null },
       };
     },
     async execute(resolvedArgs, { supabase, userId }) {
@@ -517,21 +530,21 @@ export const WRITE_TOOLS = [
       const body = typeof args.body === "string" ? args.body.trim() : "";
       if (!body) errors.push("Comment body cannot be empty.");
 
-      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+      const { ctx, clientId, clientName, errors: projectErrors, warnings: projectWarnings, editable, resolvedTrackId } =
         await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
       errors.push(...projectErrors);
 
       return {
         valid: errors.length === 0,
         errors,
-        warnings: [],
-        target: { entity: "project_messages", track_id: args.track_id },
+        warnings: projectWarnings,
+        target: { entity: "project_messages", track_id: resolvedTrackId },
         current_state: null,
         proposed_state: { client: clientName, body, project: ctx?.project?.name },
         editable,
-        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        normalizedArgs: { ...args, track_id: resolvedTrackId, ...(clientId ? { client_id: clientId } : {}) },
         label: "Add project comment",
-        resolvedArgs: { track_id: args.track_id, body, project_name: ctx?.project?.name },
+        resolvedArgs: { track_id: resolvedTrackId, body, project_name: ctx?.project?.name },
       };
     },
     async execute(resolvedArgs, { supabase, userId, executionId }) {
@@ -570,7 +583,7 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+      const { ctx, clientId, clientName, errors: projectErrors, warnings: projectWarnings, editable, resolvedTrackId } =
         await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
       errors.push(...projectErrors);
 
@@ -596,14 +609,14 @@ export const WRITE_TOOLS = [
       return {
         valid: errors.length === 0,
         errors,
-        warnings: [],
-        target: { entity: "tracks", track_id: args.track_id },
+        warnings: projectWarnings,
+        target: { entity: "tracks", track_id: resolvedTrackId },
         current_state: currentState,
         proposed_state: proposedState,
         editable,
-        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        normalizedArgs: { ...args, track_id: resolvedTrackId, ...(clientId ? { client_id: clientId } : {}) },
         label: `Update project: ${ctx?.project?.name || "(unknown)"}`,
-        resolvedArgs: { track_id: args.track_id, patch },
+        resolvedArgs: { track_id: resolvedTrackId, patch },
       };
     },
     async execute(resolvedArgs, { supabase }) {
@@ -633,7 +646,7 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+      const { ctx, clientId, clientName, errors: projectErrors, warnings: projectWarnings, editable, resolvedTrackId } =
         await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
       errors.push(...projectErrors);
 
@@ -647,7 +660,7 @@ export const WRITE_TOOLS = [
       // Same defaults BLANK_FORM uses in ProjectShipmentsSection.jsx, so an
       // AI-created shipment starts out identical to a manually-created one.
       const resolved = {
-        track_id: args.track_id || null,
+        track_id: resolvedTrackId,
         tracking_number: trackingNumber,
         carrier: (args.carrier || "").trim() || "DHL Express",
         description: (args.description || "").trim(),
@@ -661,8 +674,8 @@ export const WRITE_TOOLS = [
       return {
         valid: errors.length === 0,
         errors,
-        warnings: [],
-        target: { entity: "shipments", track_id: args.track_id },
+        warnings: projectWarnings,
+        target: { entity: "shipments", track_id: resolvedTrackId },
         current_state: null,
         proposed_state: {
           client: clientName,
@@ -675,7 +688,7 @@ export const WRITE_TOOLS = [
           estimated_delivery: resolved.estimated_delivery,
         },
         editable,
-        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        normalizedArgs: { ...args, track_id: resolvedTrackId, ...(clientId ? { client_id: clientId } : {}) },
         label: `Create shipment: ${trackingNumber || "(no tracking number)"}`,
         resolvedArgs: resolved,
       };
@@ -705,7 +718,7 @@ export const WRITE_TOOLS = [
     },
     async validate(args, { supabase }) {
       const errors = [];
-      const { ctx, clientId, clientName, errors: projectErrors, editable } =
+      const { ctx, clientId, clientName, errors: projectErrors, warnings: projectWarnings, editable, resolvedTrackId } =
         await resolveProjectField(supabase, args.track_id, { existingClientId: args.client_id });
       errors.push(...projectErrors);
 
@@ -724,14 +737,14 @@ export const WRITE_TOOLS = [
       return {
         valid: errors.length === 0,
         errors,
-        warnings: [],
-        target: { entity: "track_stages", track_id: args.track_id, track_stage_id: trackStageId || null },
+        warnings: projectWarnings,
+        target: { entity: "track_stages", track_id: resolvedTrackId, track_stage_id: trackStageId || null },
         current_state: ctx ? { stage: currentStage?.name || null } : null,
         proposed_state: proposedState,
         editable,
-        normalizedArgs: clientId ? { ...args, client_id: clientId } : args,
+        normalizedArgs: { ...args, track_id: resolvedTrackId, ...(clientId ? { client_id: clientId } : {}) },
         label: ctx ? `Advance stage: ${currentStage?.name || "?"} → ${nextStage ? nextStage.name : "Completed"}` : "Advance stage",
-        resolvedArgs: { track_stage_id: trackStageId || null, track_id: args.track_id, stage_name: currentStage?.name || null },
+        resolvedArgs: { track_stage_id: trackStageId || null, track_id: resolvedTrackId, stage_name: currentStage?.name || null },
       };
     },
     async execute(resolvedArgs, { supabase, userId }) {
