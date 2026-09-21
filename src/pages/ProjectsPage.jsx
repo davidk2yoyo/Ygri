@@ -810,7 +810,7 @@ export default function ProjectsPage() {
     }
   }, [location.state, overview]);
 
-  // Publish page context so Ygri Copilot automatically knows which project
+  // Publish page context so HerubaAI automatically knows which project
   // (and stage) the user is looking at, without them having to name it.
   useEffect(() => {
     if (activeTrackId) {

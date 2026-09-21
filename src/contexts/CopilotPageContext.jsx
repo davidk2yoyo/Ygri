@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from "react";
 
-// The page context Ygri Copilot uses to resolve "this project" without the
+// The page context HerubaAI uses to resolve "this project" without the
 // user having to name it. It's a hint for conversational resolution only —
 // every id it carries is still validated server-side on every tool call
 // (Copilot Blueprint §43/§I). Scoped to the authenticated Layout only.

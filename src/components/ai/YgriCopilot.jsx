@@ -111,7 +111,7 @@ export default function YgriCopilot() {
       setMessages((prev) => [...prev, { role: "assistant", content: result.message, plan: result.plan }]);
     } catch (e) {
       setError(e.message);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Ygri Copilot is temporarily unavailable. Please try again." }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "HerubaAI is temporarily unavailable. Please try again." }]);
     } finally {
       setSending(false);
     }
@@ -136,7 +136,7 @@ export default function YgriCopilot() {
           style={{ bottom: 24, right: 24 }}
         >
           <CopilotIcon className="w-5 h-5" />
-          <span>Ygri Copilot</span>
+          <span>HerubaAI</span>
         </button>
       )}
 
@@ -156,7 +156,7 @@ export default function YgriCopilot() {
           <div className="flex items-center justify-between px-4 py-3 bg-primary text-white shrink-0 select-none">
             <div className="min-w-0">
               <p className="font-semibold text-sm leading-tight flex items-center gap-1.5">
-                <CopilotIcon className="w-4 h-4" /> Ygri Copilot
+                <CopilotIcon className="w-4 h-4" /> HerubaAI
               </p>
               {contextLabel ? (
                 <p className="text-xs text-white/75 leading-tight truncate mt-0.5">{contextLabel}</p>
@@ -237,7 +237,7 @@ export default function YgriCopilot() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Ask Ygri Copilot..."
+              placeholder="Ask HerubaAI..."
               rows={1}
               disabled={sending}
               className="flex-1 resize-none px-3 py-2 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-xl bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary outline-none max-h-24"

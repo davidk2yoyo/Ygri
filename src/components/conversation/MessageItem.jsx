@@ -32,13 +32,13 @@ function systemEventText(metadata = {}) {
     case "quotation_promoted":
       return `⬆️ ${metadata.quote_number || "Document"} promoted: ${metadata.from || "—"} → ${metadata.to || "—"}`;
     case "ai_task_created":
-      return `🤖 Ygri Copilot created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
+      return `🤖 HerubaAI created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
     case "ai_project_created":
-      return `🤖 Ygri Copilot created this project${metadata.workflow ? ` — ${metadata.workflow} workflow` : ""}`;
+      return `🤖 HerubaAI created this project${metadata.workflow ? ` — ${metadata.workflow} workflow` : ""}`;
     case "ai_shipment_created":
-      return `🤖 Ygri Copilot registered shipment: ${metadata.tracking_number || "—"}${metadata.carrier ? ` via ${metadata.carrier}` : ""}`;
+      return `🤖 HerubaAI registered shipment: ${metadata.tracking_number || "—"}${metadata.carrier ? ` via ${metadata.carrier}` : ""}`;
     case "ai_stage_advanced":
-      return `🤖 Ygri Copilot advanced the stage: ${metadata.stage || "—"}`;
+      return `🤖 HerubaAI advanced the stage: ${metadata.stage || "—"}`;
     default:
       return metadata.label || "Activity update";
   }

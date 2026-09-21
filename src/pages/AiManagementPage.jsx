@@ -293,7 +293,7 @@ export default function AiManagementPage() {
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <h1 className="text-xl font-bold text-darkblack-700 dark:text-white mb-1">AI Management</h1>
-      <p className="text-sm text-bgray-500 dark:text-bgray-400 mb-5">Ygri Copilot's prompts, skills, tools, and execution history.</p>
+      <p className="text-sm text-bgray-500 dark:text-bgray-400 mb-5">HerubaAI's prompts, skills, tools, and execution history.</p>
 
       <div className="flex gap-1 border-b border-bgray-200 dark:border-darkblack-400 mb-5">
         {TABS.map((tab) => (

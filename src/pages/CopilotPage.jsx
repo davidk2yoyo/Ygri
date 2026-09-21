@@ -108,7 +108,7 @@ export default function CopilotPage() {
       refreshConversations();
     } catch (e) {
       setError(e.message);
-      setMessages((prev) => [...prev, { role: "assistant", content: "Ygri Copilot is temporarily unavailable. Please try again." }]);
+      setMessages((prev) => [...prev, { role: "assistant", content: "HerubaAI is temporarily unavailable. Please try again." }]);
     } finally {
       setSending(false);
     }
@@ -163,7 +163,7 @@ export default function CopilotPage() {
               </div>
             ) : messages.length === 0 ? (
               <div className="text-center py-16">
-                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white mb-1">Ygri Copilot</h2>
+                <h2 className="text-lg font-semibold text-darkblack-700 dark:text-white mb-1">HerubaAI</h2>
                 <p className="text-sm text-bgray-400 mb-6">Ask about any project, client, or supplier across the whole CRM.</p>
                 <div className="flex flex-col gap-1.5 max-w-md mx-auto">
                   {SUGGESTIONS.map((s) => (
@@ -199,7 +199,7 @@ export default function CopilotPage() {
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-              placeholder="Ask Ygri Copilot..."
+              placeholder="Ask HerubaAI..."
               rows={1}
               disabled={sending}
               className="flex-1 resize-none px-4 py-3 text-sm border border-bgray-200 dark:border-darkblack-400 rounded-2xl bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary outline-none max-h-40"
