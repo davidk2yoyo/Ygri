@@ -34,7 +34,7 @@ Cada llamada a la base de datos en todo este camino — lectura o escritura — 
 
 | Ruta | Propósito |
 |---|---|
-| `supabase-ai-copilot.sql` | 5 tablas nuevas, RLS, grants, seed de prompt/skills/tools |
+| `supabase-migrations/2026-08-25_supabase-ai-copilot.sql` | 5 tablas nuevas, RLS, grants, seed de prompt/skills/tools |
 | `api/ai-orchestrator.js` | Ruta: un turno de chat del Copilot |
 | `api/ai-action-execute.js` | Ruta: confirmar/ejecutar un plan |
 | `api/_lib/ai/supabaseServer.js` | Verificación de auth + cliente de Supabase con sesión del usuario |
@@ -75,7 +75,7 @@ Cada llamada a la base de datos en todo este camino — lectura o escritura — 
 
 ## 4. Cambios en la base de datos
 
-Una sola migración, completamente aditiva — `supabase-ai-copilot.sql`. No se tocó nada existente.
+Una sola migración, completamente aditiva — `supabase-migrations/2026-08-25_supabase-ai-copilot.sql`. No se tocó nada existente.
 
 | Tabla | RLS |
 |---|---|
@@ -185,7 +185,7 @@ No existía framework de tests en este repo — no se introdujo ninguno. `script
 
 ## 12. Acciones manuales necesarias
 
-**🔴 1 — Correr la migración.** `supabase-ai-copilot.sql` en el editor SQL de Supabase. Nada funciona hasta que esto corra — las tablas todavía no existen.
+**🔴 1 — Correr la migración.** `supabase-migrations/2026-08-25_supabase-ai-copilot.sql` en el editor SQL de Supabase. Nada funciona hasta que esto corra — las tablas todavía no existen.
 
 **⏸️ 2 — Rotar la key service_role: decidido, en pausa por decisión tuya.** No se va a rotar por ahora — quieres probar primero qué funciona antes de arriesgar romper la automatización de n8n que ya está corriendo. Nota importante: el cambio que hice en los dos archivos JSON de workflow (reemplazar la key literal por `{{ $env.SUPABASE_SERVICE_ROLE_KEY }}`) **solo tocó los archivos en el repo de git** — son exports/backups, no están conectados en vivo a tu instancia real de n8n. Tu automatización sigue corriendo exactamente igual, sin cambios. Si en algún momento decides rotar, ese es el único paso pendiente (Supabase → Settings → API) más setear la variable de entorno nueva en n8n.
 

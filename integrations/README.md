@@ -73,7 +73,7 @@ proyectos@interasia.com.co
 - Action items
 - Relación con clients/suppliers
 
-**Migración:** Ver `../supabase-migration-email-threads.sql`
+**Migración:** Ver `../supabase-migrations/2026-03-01_supabase-migration-email-threads.sql`
 
 ### APIs Requeridas
 
@@ -87,7 +87,7 @@ proyectos@interasia.com.co
 ## Archivos Importantes
 
 - **SETUP_GUIDE.md** - Guía completa de configuración paso a paso
-- **supabase-migration-email-threads.sql** - Migración de base de datos
+- **supabase-migrations/2026-03-01_supabase-migration-email-threads.sql** - Migración de base de datos
 - **src/services/emailService.js** - Service para acceder a threads
 - **src/components/EmailHistoryTab.jsx** - Componente UI para historial
 

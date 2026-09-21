@@ -63,7 +63,7 @@ Add one entry to `READ_TOOLS` in `api/_lib/ai/tools/readTools.js`:
 }
 ```
 
-Then add a matching row to the `ai_tools` seed in `supabase-ai-copilot.sql` (or insert one via the AI Management → Tools tab) with `tool_type: 'read'`. The DB row only controls enabled/disabled — the `type` in code is authoritative and can't be downgraded from the database (see `orchestrate.js`'s `getEnabledToolKeys`, which only ever filters, never reclassifies).
+Then add a matching row to the `ai_tools` seed in `supabase-migrations/2026-08-25_supabase-ai-copilot.sql` (or insert one via the AI Management → Tools tab) with `tool_type: 'read'`. The DB row only controls enabled/disabled — the `type` in code is authoritative and can't be downgraded from the database (see `orchestrate.js`'s `getEnabledToolKeys`, which only ever filters, never reclassifies).
 
 ## Adding a WRITE tool
 
@@ -75,7 +75,7 @@ Add one entry to `WRITE_TOOLS` in `api/_lib/ai/tools/writeTools.js` with **three
 
 Then seed its `ai_tools` row with `tool_type: 'write'`, and decide whether it needs its own Skill (`ai_skills`) governing how the model should reason about proposing it.
 
-`create_track_rpc` was extracted and confirmed simple (see `supabase-core-workflow-rpcs.sql`) and now backs the `create_project` WRITE tool. `complete_stage_and_advance` now backs `advance_stage` too — the blocker (the Kanban drag-and-drop path in `ProjectsPage.jsx`'s `handleMoveProject` never updated `tracks.current_stage_template_id`, so a human dragging a card afterward could leave the AI's own context stale) is fixed: `handleMoveProject` now sets `current_stage_template_id`/`started_at`/`completed_at`/`due_date` the same way the RPC does, so the two paths agree on where a project's pipeline actually stands.
+`create_track_rpc` was extracted and confirmed simple (see `supabase-migrations/2026-08-25_supabase-core-workflow-rpcs.sql`) and now backs the `create_project` WRITE tool. `complete_stage_and_advance` now backs `advance_stage` too — the blocker (the Kanban drag-and-drop path in `ProjectsPage.jsx`'s `handleMoveProject` never updated `tracks.current_stage_template_id`, so a human dragging a card afterward could leave the AI's own context stale) is fixed: `handleMoveProject` now sets `current_stage_template_id`/`started_at`/`completed_at`/`due_date` the same way the RPC does, so the two paths agree on where a project's pipeline actually stands.
 
 ## Why the browser can't just send the plan back
 

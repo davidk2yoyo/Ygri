@@ -151,7 +151,7 @@ function VersionedEditor({ table, title, extraColumns }) {
           </Card>
         );
       })}
-      {!rows.length && <p className="text-sm text-bgray-400">No {title.toLowerCase()} yet — run supabase-ai-copilot.sql to seed the initial set.</p>}
+      {!rows.length && <p className="text-sm text-bgray-400">No {title.toLowerCase()} yet — run supabase-migrations/2026-08-25_supabase-ai-copilot.sql to seed the initial set.</p>}
     </div>
   );
 }

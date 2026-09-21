@@ -42,7 +42,7 @@ A complete document management system for suppliers with support for catalogs, q
 Go to your Supabase Dashboard → SQL Editor and run the migration file:
 
 ```bash
-supabase-migration-supplier-documents.sql
+supabase-migrations/2026-03-01_supabase-migration-supplier-documents.sql
 ```
 
 This will create:

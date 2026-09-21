@@ -10,7 +10,7 @@ Ahora el sistema registra **TANTO** los emails que recibes **COMO** los que env�
 
 ## 📝 Archivos Actualizados
 
-### 1. **supabase-rpc-match-email.sql** (NUEVO)
+### 1. **supabase-migrations/2026-03-01_supabase-rpc-match-email.sql** (NUEVO)
 
 Función RPC para matching bidireccional de emails.
 
@@ -24,7 +24,7 @@ Función RPC para matching bidireccional de emails.
 
 **Ejecutar en Supabase:**
 ```bash
-# Copiar contenido de supabase-rpc-match-email.sql
+# Copiar contenido de supabase-migrations/2026-03-01_supabase-rpc-match-email.sql
 # Ejecutar en Supabase SQL Editor
 ```
 
@@ -126,7 +126,7 @@ CREATE INDEX IF NOT EXISTS idx_email_threads_direction
 ON email_threads(direction);
 
 -- 2. Ejecutar función RPC
--- (Copiar todo el contenido de supabase-rpc-match-email.sql)
+-- (Copiar todo el contenido de supabase-migrations/2026-03-01_supabase-rpc-match-email.sql)
 ```
 
 ### **2. Actualizar N8N Workflow:**
@@ -276,7 +276,7 @@ GROUP BY direction;
 
 ## ✅ Checklist de Deployment
 
-- [ ] Ejecutar `supabase-rpc-match-email.sql` en Supabase
+- [ ] Ejecutar `supabase-migrations/2026-03-01_supabase-rpc-match-email.sql` en Supabase
 - [ ] Verificar que función `rpc_match_email_bidirectional` existe
 - [ ] Ejecutar test: `SELECT * FROM test_rpc_match_email();`
 - [ ] Importar workflow v2 en N8N
@@ -296,7 +296,7 @@ GROUP BY direction;
 
 ### **Problema: Función RPC no existe**
 ```
-Solution: Ejecutar supabase-rpc-match-email.sql completo
+Solution: Ejecutar supabase-migrations/2026-03-01_supabase-rpc-match-email.sql completo
 ```
 
 ### **Problema: Emails de INTERASIA se están guardando**

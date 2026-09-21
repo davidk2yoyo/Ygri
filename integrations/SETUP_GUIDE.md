@@ -92,7 +92,7 @@ Para: proyectos@interasia.com.co
 ### 3.1 Ejecutar migración SQL
 
 1. Ir a Supabase Dashboard → SQL Editor
-2. Copiar contenido de `supabase-migration-email-threads.sql`
+2. Copiar contenido de `supabase-migrations/2026-03-01_supabase-migration-email-threads.sql`
 3. Ejecutar
 4. Verificar tablas creadas:
    - `email_threads`
