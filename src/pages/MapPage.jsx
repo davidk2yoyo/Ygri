@@ -554,10 +554,10 @@ function MapPageInner() {
   // Render loading state
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="h-screen flex items-center justify-center bg-bgray-50 dark:bg-darkblack-700">
         <div className="flex items-center space-x-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="text-gray-600 dark:text-gray-300">{t("loadingCompanyMap")}</span>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <span className="text-bgray-600 dark:text-bgray-300">{t("loadingCompanyMap")}</span>
         </div>
       </div>
     );
@@ -566,43 +566,13 @@ function MapPageInner() {
   // Render error state
   if (error) {
     return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+      <div className="h-screen flex items-center justify-center bg-bgray-50 dark:bg-darkblack-700">
         <div className="text-center">
-          <div className="text-red-600 text-xl mb-4">⚠️ {t("errorLoadingMap")}</div>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
+          <div className="text-error-300 text-xl mb-4">⚠️ {t("errorLoadingMap")}</div>
+          <p className="text-bgray-600 dark:text-bgray-300 mb-4">{error}</p>
           <button
             onClick={loadMapData}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            {t("retry")}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Render loading state
-  if (loading) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="flex items-center space-x-4">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="text-gray-600 dark:text-gray-300">{t("loadingCompanyMap")}</span>
-        </div>
-      </div>
-    );
-  }
-
-  // Render error state
-  if (error) {
-    return (
-      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="text-center">
-          <div className="text-red-600 text-xl mb-4">⚠️ {t("errorLoadingMap")}</div>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">{error}</p>
-          <button
-            onClick={loadMapData}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:opacity-90 transition-opacity"
           >
             {t("retry")}
           </button>
@@ -619,7 +589,7 @@ function MapPageInner() {
   ) : [];
 
   return (
-    <div className="h-screen w-full relative bg-gray-50 dark:bg-gray-900 font-urbanist flex">
+    <div className="h-screen w-full relative bg-bgray-50 dark:bg-darkblack-700 font-urbanist flex">
       {/* Hierarchy Selector Sidebar - Only show in hierarchical mode */}
       {layoutMode === "hierarchical" && showHierarchySidebar && (
         <HierarchySelector
@@ -636,12 +606,19 @@ function MapPageInner() {
         {/* Empty State Message - shown when no client/supplier selected */}
         {layoutMode === "hierarchical" && !selectedHierarchyId && nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-            <div className="text-center p-8 bg-white/80 dark:bg-darkblack-600/80 backdrop-blur-sm rounded-2xl shadow-lg max-w-md">
-              <div className="text-6xl mb-4">👈</div>
-              <h3 className="text-xl font-semibold text-darkblack-700 dark:text-white mb-2">
+            <div className="text-center px-8 py-9 bg-white/90 dark:bg-darkblack-600/90 backdrop-blur-sm rounded-2xl shadow-lg max-w-xs border border-bgray-100 dark:border-darkblack-400">
+              <div className="w-14 h-14 mx-auto mb-4 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+                  <rect x="9" y="3" width="6" height="5" rx="1.2" />
+                  <rect x="3" y="16" width="6" height="5" rx="1.2" />
+                  <rect x="15" y="16" width="6" height="5" rx="1.2" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4M6 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v2" />
+                </svg>
+              </div>
+              <h3 className="text-base font-semibold text-darkblack-700 dark:text-white mb-1.5">
                 {viewMode === 'client' ? 'Select a Client' : 'Select a Supplier'}
               </h3>
-              <p className="text-bgray-600 dark:text-bgray-400">
+              <p className="text-sm text-bgray-500 dark:text-bgray-400">
                 Choose a {viewMode === 'client' ? 'client' : 'supplier'} from the list on the left to view their complete hierarchy
               </p>
             </div>
@@ -663,32 +640,33 @@ function MapPageInner() {
         onMoveEnd={(event, viewport) => handleZoomChange(viewport)}
         fitView
         attributionPosition="bottom-left"
-        className="bg-gray-50 dark:bg-gray-900"
+        className="bg-bgray-50 dark:bg-darkblack-700"
       >
         {/* Background */}
-        <Background 
-          variant="dots" 
-          gap={20} 
-          size={1} 
-          className="opacity-30"
+        <Background
+          variant="dots"
+          gap={20}
+          size={1}
+          className="opacity-40 dark:opacity-30"
+          color="#CBD5E0"
         />
-        
+
         {/* Controls */}
-        <Controls 
+        <Controls
           position="top-left"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
+          className="!bg-white dark:!bg-darkblack-600 !border !border-bgray-200 dark:!border-darkblack-400 !rounded-xl !shadow-md overflow-hidden"
         />
-        
+
         {/* Mini Map */}
-        <MiniMap 
+        <MiniMap
           position="bottom-right"
-          className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg"
-          nodeColor="#3B82F6"
-          maskColor="rgba(0, 0, 0, 0.1)"
+          className="!bg-white dark:!bg-darkblack-600 !border !border-bgray-200 dark:!border-darkblack-400 !rounded-xl !shadow-md"
+          nodeColor="#22C55E"
+          maskColor="rgba(35, 38, 43, 0.1)"
         />
 
         {/* Top Controls Panel - Slimmed */}
-        <Panel position="top-center" className="flex items-center bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md p-2 border border-gray-200 dark:border-gray-700">
+        <Panel position="top-center" className="flex items-center bg-white/95 dark:bg-darkblack-600/95 backdrop-blur-sm rounded-2xl shadow-md p-1.5 border border-bgray-200 dark:border-darkblack-400">
           <MapControls
             layoutMode={layoutMode}
             viewMode={viewMode}
@@ -709,10 +687,10 @@ function MapPageInner() {
         </Panel>
 
         {/* Legend Toggle Button */}
-        <Panel position="top-right" className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
+        <Panel position="top-right" className="bg-white/95 dark:bg-darkblack-600/95 backdrop-blur-sm rounded-xl shadow-md border border-bgray-200 dark:border-darkblack-400">
           <button
             onClick={() => setLegendCollapsed(!legendCollapsed)}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200"
+            className="p-2 text-bgray-500 dark:text-bgray-400 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-xl transition-all duration-200"
             title={legendCollapsed ? t("showLegend") : t("hideLegend")}
           >
             <svg className={`w-4 h-4 transition-transform duration-200 ${legendCollapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -722,7 +700,7 @@ function MapPageInner() {
         </Panel>
 
         {/* Saved Views Panel - Moved lower */}
-        <Panel position="bottom-right" className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-sm rounded-lg shadow-md border border-gray-200 dark:border-gray-700">
+        <Panel position="bottom-right" className="bg-white/95 dark:bg-darkblack-600/95 backdrop-blur-sm rounded-xl shadow-md border border-bgray-200 dark:border-darkblack-400">
           <SavedViews
             savedViews={savedViews}
             currentViewName={currentViewName}
@@ -738,15 +716,17 @@ function MapPageInner() {
       </ReactFlow>
 
       {/* Legend Rail */}
-      <div className={`absolute top-0 right-0 h-full bg-white/95 dark:bg-gray-800/95 backdrop-blur-sm border-l border-gray-200 dark:border-gray-700 transition-transform duration-220 ease-out ${
+      <div className={`absolute top-0 right-0 h-full bg-white/95 dark:bg-darkblack-600/95 backdrop-blur-sm border-l border-bgray-200 dark:border-darkblack-400 transition-transform duration-220 ease-out ${
         legendCollapsed ? 'translate-x-full' : 'translate-x-0'
       } w-64 z-10 shadow-lg`}>
         <div className="p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-medium text-gray-900 dark:text-gray-100">{t("legend")}</h3>
+            <span className="text-xs font-semibold uppercase tracking-wide text-bgray-500 dark:text-bgray-400">
+              {t("legend")}
+            </span>
             <button
               onClick={() => setLegendCollapsed(true)}
-              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors duration-200"
+              className="p-1 text-bgray-500 dark:text-bgray-400 hover:bg-bgray-100 dark:hover:bg-darkblack-500 rounded-lg transition-colors duration-200"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

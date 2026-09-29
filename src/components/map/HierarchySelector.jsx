@@ -44,8 +44,10 @@ export default function HierarchySelector({
     }
   };
 
-  const getItemIcon = (item) => {
-    return viewMode === 'client' ? '🏢' : '🏭';
+  const getItemInitials = (item) => {
+    const name = getItemName(item);
+    if (!name) return "?";
+    return name.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
   };
 
   return (
@@ -110,7 +112,13 @@ export default function HierarchySelector({
                   }`}
                 >
                   <div className="flex items-start gap-3">
-                    <span className="text-2xl flex-shrink-0">{getItemIcon(item)}</span>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                      isSelected
+                        ? 'bg-white/20 text-white'
+                        : 'bg-bgray-100 dark:bg-darkblack-400 text-bgray-500 dark:text-bgray-300'
+                    }`}>
+                      {getItemInitials(item)}
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className={`font-semibold text-sm truncate ${isSelected ? 'text-white' : ''}`}>
                         {getItemName(item)}
@@ -119,13 +127,21 @@ export default function HierarchySelector({
                         {count} {viewMode === 'client' ? 'project' : 'product'}{count !== 1 ? 's' : ''}
                       </div>
                       {viewMode === 'client' && item.contact_person && (
-                        <div className={`text-xs mt-0.5 ${isSelected ? 'text-white/70' : 'text-bgray-400'}`}>
-                          👤 {item.contact_person}
+                        <div className={`flex items-center gap-1 text-xs mt-0.5 ${isSelected ? 'text-white/70' : 'text-bgray-400'}`}>
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                            <circle cx="12" cy="8" r="3.5" />
+                            <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
+                          </svg>
+                          {item.contact_person}
                         </div>
                       )}
                       {viewMode === 'supplier' && item.sales_person && (
-                        <div className={`text-xs mt-0.5 ${isSelected ? 'text-white/70' : 'text-bgray-400'}`}>
-                          👤 {item.sales_person}
+                        <div className={`flex items-center gap-1 text-xs mt-0.5 ${isSelected ? 'text-white/70' : 'text-bgray-400'}`}>
+                          <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+                            <circle cx="12" cy="8" r="3.5" />
+                            <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" />
+                          </svg>
+                          {item.sales_person}
                         </div>
                       )}
                     </div>

@@ -1,26 +1,28 @@
 import { supabase } from "../supabaseClient";
 import { layoutRadialSpokes, getLayoutParamsFromUI, detectAndResolveCollisions, createCurvedEdges } from "./radialSpokesLayout";
 
-// Status color mapping with safe fallbacks
+// Status color mapping — aligned to the app's own design tokens (tailwind.config.js)
+// so the map's colors match every other screen instead of a separate ad-hoc palette.
 export const STATUS_COLORS = {
   // Common project statuses
-  active: "#3B82F6",      // blue-500
-  completed: "#10B981",   // green-500
-  on_hold: "#F59E0B",     // amber-500
-  cancelled: "#EF4444",   // red-500
-  planning: "#8B5CF6",    // purple-500
+  active: "#3B82F6",      // blue-500 (no semantic token for "in progress but not flagged")
+  completed: "#16A34A",   // success.400
+  on_hold: "#EAB308",     // warning.300
+  cancelled: "#DD3333",   // error.300
+  planning: "#936DFF",    // purple (app accent token)
   in_progress: "#06B6D4", // cyan-500
   blocked: "#DC2626",     // red-600
-  review: "#F97316",      // orange-500
+  review: "#FF784B",      // orange (app accent token)
   // Fallback for unknown statuses
-  default: "#6B7280",     // gray-500
+  default: "#718096",     // bgray.600
 };
 
-// Risk level colors
+// Risk level colors — same success/warning/error tokens as STATUS_COLORS above,
+// so a risk dot and a status dot never read as two different color systems.
 export const RISK_COLORS = {
-  low: "#E5E7EB",    // gray-200
-  medium: "#FCD34D", // yellow-300
-  high: "#F87171",   // red-400
+  low: "#16A34A",    // success.400
+  medium: "#EAB308", // warning.300
+  high: "#DD3333",   // error.300
 };
 
 /**
