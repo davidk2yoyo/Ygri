@@ -23,6 +23,13 @@ const emptyRow = () => ({
 
 const num = (v) => (v === "" || v == null ? 0 : parseFloat(v) || 0);
 
+const DOC_LABELS = {
+  quotation: { linked: "Linked to quotation", ref: "Quote Ref" },
+  proforma: { linked: "Linked to proforma invoice", ref: "Proforma Ref" },
+  invoice: { linked: "Linked to commercial invoice", ref: "Invoice Ref" },
+};
+const docLabels = (documentType) => DOC_LABELS[documentType] || DOC_LABELS.quotation;
+
 export default function PackingListEditorPage() {
   const { quotationId } = useParams();
   const navigate = useNavigate();
@@ -47,7 +54,7 @@ export default function PackingListEditorPage() {
     setLoading(true);
     try {
       const [{ data: quot }, { data: qItems }] = await Promise.all([
-        supabase.from("quotations").select("id, quote_number, client_name, project_name").eq("id", quotationId).single(),
+        supabase.from("quotations").select("id, quote_number, client_name, project_name, document_type").eq("id", quotationId).single(),
         supabase.from("quotation_items").select("id, item_number, description, quantity").eq("quotation_id", quotationId).order("sort_order"),
       ]);
       setQuotation(quot);
@@ -268,6 +275,8 @@ export default function PackingListEditorPage() {
         clientName={quotation?.client_name}
         projectName={quotation?.project_name}
         quoteNumber={quotation?.quote_number}
+        quoteRefLabel={docLabels(quotation?.document_type).ref}
+        notes={packingList?.notes}
         onClose={() => setShowPDF(false)}
       />
     );
@@ -327,7 +336,7 @@ export default function PackingListEditorPage() {
         {quotation && (
           <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center justify-between">
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Linked to quotation</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">{docLabels(quotation.document_type).linked}</p>
               <p className="font-bold text-gray-800 mt-0.5">{quotation.quote_number}</p>
               {(quotation.client_name || quotation.project_name) && (
                 <p className="text-sm text-gray-500">{[quotation.client_name, quotation.project_name].filter(Boolean).join(" · ")}</p>
