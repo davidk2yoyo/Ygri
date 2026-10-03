@@ -623,6 +623,7 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarViewMode, setSidebarViewMode] = useState("network"); // "network" or "list"
   const [compactKanban, setCompactKanban] = useState(false);
+  const [projectTab, setProjectTab] = useState("remarks");
   const [remarksDraft, setRemarksDraft] = useState("");
   const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [savingRemarks, setSavingRemarks] = useState(false);
@@ -1601,8 +1602,33 @@ export default function ProjectsPage() {
                   </div>
                 )}
 
-                {/* Project Remarks */}
+                {/* Project-level tabs: Remarks / Shipments / Emails / Comments */}
                 {detail && (
+                  <div className="flex gap-0 px-2 border-b border-bgray-200 dark:border-darkblack-400">
+                    {[
+                      { key: "remarks", label: "Remarks", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /> },
+                      { key: "shipments", label: "Shipments", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /> },
+                      { key: "emails", label: "Emails", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /> },
+                      { key: "comments", label: "Comments", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /> },
+                    ].map(tab => (
+                      <button
+                        key={tab.key}
+                        onClick={() => setProjectTab(tab.key)}
+                        className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                          projectTab === tab.key
+                            ? "border-primary text-primary"
+                            : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
+                        }`}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">{tab.icon}</svg>
+                        {tab.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Project Remarks */}
+                {detail && projectTab === "remarks" && (
                   <div className="card p-4">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("projectRemarks")}</h3>
@@ -1681,18 +1707,19 @@ export default function ProjectsPage() {
                 )}
 
                 {/* Shipments */}
-                {detail && activeTrackId && (
+                {detail && activeTrackId && projectTab === "shipments" && (
                   <div className="card p-4">
                     <ProjectShipmentsSection trackId={activeTrackId} />
                   </div>
                 )}
 
                 {/* Attached Email Threads */}
-                {detail && (
+                {detail && projectTab === "emails" && (
                   <div className="card p-4">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">
-                        📧 Attached Email Threads
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                        Attached Email Threads
                       </h3>
                       <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
                         {attachedEmails.length} {attachedEmails.length === 1 ? 'email' : 'emails'}
@@ -1788,11 +1815,12 @@ export default function ProjectsPage() {
                 )}
 
                 {/* Comments Timeline - All comments from all stages */}
-                {detail && (
+                {detail && projectTab === "comments" && (
                   <div className="card p-4">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">
-                        💬 Project Comments Timeline
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white flex items-center gap-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+                        Project Comments Timeline
                       </h3>
                       <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
                         {allComments.length} {allComments.length === 1 ? 'comment' : 'comments'}
