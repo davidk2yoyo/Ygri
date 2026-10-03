@@ -7,13 +7,11 @@ import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import { createProjectActivity } from "../lib/projectActivity";
 import { useCopilotPageContext } from "../contexts/CopilotPageContext";
-import { sanitizeMessageHtml, legacyBodyToHtml } from "../lib/sanitizeMessageHtml";
 import StageDrawer from "../StageDrawer";
 import NetworkGraphView from "../components/NetworkGraphView";
 import PipelineView from "../components/PipelineView";
 import { nodeTypes } from "../components/FlowNodes";
 import HorizontalWorkflow from "../components/HorizontalWorkflow";
-import ProjectShipmentsSection from "../components/ProjectShipmentsSection";
 
 // Vertical Stepper View Component
 function VerticalStepperView({ stages, onStageClick }) {
@@ -623,14 +621,11 @@ export default function ProjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sidebarViewMode, setSidebarViewMode] = useState("network"); // "network" or "list"
   const [compactKanban, setCompactKanban] = useState(false);
-  const [projectTab, setProjectTab] = useState("remarks");
   const [remarksDraft, setRemarksDraft] = useState("");
   const [isEditingRemarks, setIsEditingRemarks] = useState(false);
   const [savingRemarks, setSavingRemarks] = useState(false);
   const [attachedEmails, setAttachedEmails] = useState([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
-  const [allComments, setAllComments] = useState([]);
-  const [loadingComments, setLoadingComments] = useState(false);
   const [renamingTrackId, setRenamingTrackId] = useState(null);
   const [renameValue, setRenameValue] = useState("");
 
@@ -855,41 +850,6 @@ export default function ProjectsPage() {
     }
   };
 
-  // --- Load the project's conversation timeline (single query, no per-stage fan-out) ---
-  const loadAllComments = async () => {
-    if (!activeTrackId) {
-      setAllComments([]);
-      return;
-    }
-    setLoadingComments(true);
-    try {
-      const { data, error } = await supabase
-        .from("project_messages")
-        .select("*, profiles(full_name), track_stages(stage_templates(name, order_index))")
-        .eq("track_id", activeTrackId)
-        .eq("message_type", "message")
-        .is("deleted_at", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-
-      const mapped = (data || []).map(m => ({
-        id: m.id,
-        created_at: m.created_at,
-        body: m.body,
-        stage_name: m.track_stages?.stage_templates?.name || null,
-        stage_order: m.track_stages?.stage_templates?.order_index ?? null,
-        profile: { full_name: m.profiles?.full_name || "Unknown User", avatar_url: null },
-      }));
-
-      setAllComments(mapped);
-    } catch (err) {
-      console.error('Error loading comments:', err);
-      setAllComments([]);
-    } finally {
-      setLoadingComments(false);
-    }
-  };
-
   useEffect(() => {
     if (activeTrackId) {
       const timer = setTimeout(() => {
@@ -899,13 +859,6 @@ export default function ProjectsPage() {
       return () => clearTimeout(timer);
     }
   }, [activeTrackId]);
-
-  // Load comments when detail is loaded
-  useEffect(() => {
-    if (detail) {
-      loadAllComments();
-    }
-  }, [detail]);
 
   // Update remarks draft when detail changes
   useEffect(() => {
@@ -1503,132 +1456,8 @@ export default function ProjectsPage() {
               </div>
             </div>
 
-                {/* Stage details — inline, right under the workflow canvas */}
-                {selectedStageId && (
-                  <StageDrawer
-                    inline
-                    stageId={selectedStageId}
-                    trackId={activeTrackId}
-                    initialTab={drawerInitialTab}
-                    initialTabToken={drawerInitialTabToken}
-                    onClose={() => { setSelectedStageId(null); setDrawerInitialTab(null); }}
-                    onUpdate={() => {
-                      loadTrackDetail();
-                      loadAllComments();
-                    }}
-                    projectName={detail?.track?.track_name || detail?.track?.name}
-                    clientName={detail?.client?.company_name || detail?.client?.name}
-                  />
-                )}
-
-                {/* Quick Actions */}
+                {/* Project Remarks — directly below the pipeline, always visible */}
                 {detail && (
-                  <div className="card p-4">
-                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("quickActions")}</h3>
-                      <div className="flex items-center gap-2">
-                        <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full hidden sm:block">
-                          {detail.client?.company_name} • {detail.track.name}
-                        </div>
-                        {/* Portal visibility toggle */}
-                        <button
-                          onClick={async () => {
-                            const newVal = !detail.track.show_to_client;
-                            await supabase.rpc("admin_toggle_track_client_visibility", {
-                              p_track_id: detail.track.id, p_visible: newVal,
-                            });
-                            await loadTrackDetail();
-                          }}
-                          title={detail.track.show_to_client ? "Visible en portal cliente — click para ocultar" : "Oculto en portal cliente — click para mostrar"}
-                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
-                            detail.track.show_to_client
-                              ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
-                              : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-darkblack-500 dark:text-bgray-400 dark:border-darkblack-400"
-                          }`}
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            {detail.track.show_to_client
-                              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                            }
-                          </svg>
-                          Portal {detail.track.show_to_client ? "visible" : "oculto"}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex gap-3">
-                      <input
-                        value={commentDraft}
-                        onChange={(e) => setCommentDraft(e.target.value)}
-                        placeholder={t("addQuickComment")}
-                        className="input-field flex-1"
-                      />
-                      <button
-                        onClick={async () => {
-                          const active = detail.stages.find((s) => s.status === "in_progress");
-                          if (!active || !commentDraft.trim()) return;
-                          try {
-                            setBusy(true);
-                            // Get current user
-                            const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
-                            if (!user) throw new Error("User not authenticated");
-
-                            await supabase.rpc("add_stage_comment", {
-                              p_track_stage_id: active.track_stage_id,
-                              p_body: commentDraft,
-                              p_user: user.id
-                            });
-                            const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
-                            setDetail(data);
-                            setCommentDraft("");
-                            // Refresh comments timeline
-                            await loadAllComments();
-                          } catch (e) { setError(e.message); } finally { setBusy(false); }
-                        }}
-                        className="btn-primary"
-                        disabled={busy || !commentDraft.trim()}
-                      >
-                        {busy ? (
-                          <div className="flex items-center">
-                            <div className="spinner h-4 w-4 mr-2"></div>
-                            {t("adding")}
-                          </div>
-                        ) : (
-                          t("addComment")
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Project-level tabs: Remarks / Shipments / Emails / Comments */}
-                {detail && (
-                  <div className="flex gap-0 px-2 border-b border-bgray-200 dark:border-darkblack-400">
-                    {[
-                      { key: "remarks", label: "Remarks", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /> },
-                      { key: "shipments", label: "Shipments", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" /> },
-                      { key: "emails", label: "Emails", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /> },
-                      { key: "comments", label: "Comments", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /> },
-                    ].map(tab => (
-                      <button
-                        key={tab.key}
-                        onClick={() => setProjectTab(tab.key)}
-                        className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-                          projectTab === tab.key
-                            ? "border-primary text-primary"
-                            : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
-                        }`}
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">{tab.icon}</svg>
-                        {tab.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Project Remarks */}
-                {detail && projectTab === "remarks" && (
                   <div className="card p-4">
                     <div className="flex items-center justify-between mb-4">
                       <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("projectRemarks")}</h3>
@@ -1706,220 +1535,103 @@ export default function ProjectsPage() {
                   </div>
                 )}
 
-                {/* Shipments */}
-                {detail && activeTrackId && projectTab === "shipments" && (
-                  <div className="card p-4">
-                    <ProjectShipmentsSection trackId={activeTrackId} />
-                  </div>
+                {/* Stage details — inline, right under the workflow canvas */}
+                {selectedStageId && (
+                  <StageDrawer
+                    inline
+                    stageId={selectedStageId}
+                    trackId={activeTrackId}
+                    initialTab={drawerInitialTab}
+                    initialTabToken={drawerInitialTabToken}
+                    onClose={() => { setSelectedStageId(null); setDrawerInitialTab(null); }}
+                    onUpdate={loadTrackDetail}
+                    attachedEmails={attachedEmails}
+                    loadingEmails={loadingEmails}
+                    projectName={detail?.track?.track_name || detail?.track?.name}
+                    clientName={detail?.client?.company_name || detail?.client?.name}
+                  />
                 )}
 
-                {/* Attached Email Threads */}
-                {detail && projectTab === "emails" && (
+                {/* Quick Actions */}
+                {detail && (
                   <div className="card p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                        Attached Email Threads
-                      </h3>
-                      <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
-                        {attachedEmails.length} {attachedEmails.length === 1 ? 'email' : 'emails'}
-                      </span>
+                    <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white">{t("quickActions")}</h3>
+                      <div className="flex items-center gap-2">
+                        <div className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full hidden sm:block">
+                          {detail.client?.company_name} • {detail.track.name}
+                        </div>
+                        {/* Portal visibility toggle */}
+                        <button
+                          onClick={async () => {
+                            const newVal = !detail.track.show_to_client;
+                            await supabase.rpc("admin_toggle_track_client_visibility", {
+                              p_track_id: detail.track.id, p_visible: newVal,
+                            });
+                            await loadTrackDetail();
+                          }}
+                          title={detail.track.show_to_client ? "Visible en portal cliente — click para ocultar" : "Oculto en portal cliente — click para mostrar"}
+                          className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition ${
+                            detail.track.show_to_client
+                              ? "bg-green-50 text-green-700 border-green-200 dark:bg-green-900/20 dark:text-green-400 dark:border-green-800"
+                              : "bg-gray-50 text-gray-500 border-gray-200 dark:bg-darkblack-500 dark:text-bgray-400 dark:border-darkblack-400"
+                          }`}
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            {detail.track.show_to_client
+                              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            }
+                          </svg>
+                          Portal {detail.track.show_to_client ? "visible" : "oculto"}
+                        </button>
+                      </div>
                     </div>
 
-                    {loadingEmails ? (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-                        <span className="text-sm text-bgray-600 dark:text-bgray-300">Loading emails...</span>
-                      </div>
-                    ) : attachedEmails.length === 0 ? (
-                      <div className="text-center py-8">
-                        <div className="text-bgray-400 dark:text-bgray-500 mb-2">
-                          <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                          </svg>
-                        </div>
-                        <p className="text-sm text-bgray-500 dark:text-bgray-400">
-                          No emails attached to this project yet
-                        </p>
-                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
-                          Go to Email Timeline to attach emails
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {attachedEmails.map((email) => (
-                          <div
-                            key={email.id}
-                            className="p-4 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:shadow-sm transition-shadow bg-white dark:bg-darkblack-600"
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <h4 className="font-medium text-darkblack-700 dark:text-white truncate">
-                                    {email.subject}
-                                  </h4>
-                                  {email.priority === 'urgent' && (
-                                    <span className="px-2 py-0.5 bg-red-100 text-red-700 text-xs font-medium rounded-full">
-                                      URGENT
-                                    </span>
-                                  )}
-                                  {email.priority === 'high' && (
-                                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 text-xs font-medium rounded-full">
-                                      HIGH
-                                    </span>
-                                  )}
-                                </div>
-                                <div className="flex items-center gap-3 text-xs text-bgray-600 dark:text-bgray-300 mb-2">
-                                  <span className="flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                    </svg>
-                                    {email.from_name || email.from_email}
-                                  </span>
-                                  <span className="text-bgray-400">•</span>
-                                  <span className="flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    {new Date(email.last_received_at).toLocaleDateString()}
-                                  </span>
-                                  <span className="text-bgray-400">•</span>
-                                  <span className="flex items-center gap-1">
-                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                                    </svg>
-                                    {email.message_count} message{email.message_count > 1 ? 's' : ''}
-                                  </span>
-                                </div>
-                                {email.last_message && (
-                                  <p className="text-sm text-bgray-600 dark:text-bgray-300 line-clamp-2">
-                                    {email.last_message}
-                                  </p>
-                                )}
-                              </div>
-                              <div className="ml-4">
-                                <span className={`inline-block px-2 py-1 text-xs font-medium rounded-full ${
-                                  email.type === 'client'
-                                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                                    : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'
-                                }`}>
-                                  {email.type === 'client' ? 'Client' : 'Supplier'}
-                                </span>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                    <div className="flex gap-3">
+                      <input
+                        value={commentDraft}
+                        onChange={(e) => setCommentDraft(e.target.value)}
+                        placeholder={t("addQuickComment")}
+                        className="input-field flex-1"
+                      />
+                      <button
+                        onClick={async () => {
+                          const active = detail.stages.find((s) => s.status === "in_progress");
+                          if (!active || !commentDraft.trim()) return;
+                          try {
+                            setBusy(true);
+                            // Get current user
+                            const { data: { session: _s } } = await supabase.auth.getSession(); const user = _s?.user;
+                            if (!user) throw new Error("User not authenticated");
 
-                {/* Comments Timeline - All comments from all stages */}
-                {detail && projectTab === "comments" && (
-                  <div className="card p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-lg font-semibold text-darkblack-700 dark:text-white flex items-center gap-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                        Project Comments Timeline
-                      </h3>
-                      <span className="text-xs text-bgray-500 dark:text-bgray-400 bg-bgray-100 dark:bg-darkblack-500 px-3 py-1 rounded-full">
-                        {allComments.length} {allComments.length === 1 ? 'comment' : 'comments'}
-                      </span>
+                            await supabase.rpc("add_stage_comment", {
+                              p_track_stage_id: active.track_stage_id,
+                              p_body: commentDraft,
+                              p_user: user.id
+                            });
+                            const { data } = await supabase.rpc("get_track_detail", { p_track_id: detail.track.id });
+                            setDetail(data);
+                            setCommentDraft("");
+                          } catch (e) { setError(e.message); } finally { setBusy(false); }
+                        }}
+                        className="btn-primary"
+                        disabled={busy || !commentDraft.trim()}
+                      >
+                        {busy ? (
+                          <div className="flex items-center">
+                            <div className="spinner h-4 w-4 mr-2"></div>
+                            {t("adding")}
+                          </div>
+                        ) : (
+                          t("addComment")
+                        )}
+                      </button>
                     </div>
-
-                    {loadingComments ? (
-                      <div className="flex items-center justify-center py-8">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mr-2"></div>
-                        <span className="text-sm text-bgray-600 dark:text-bgray-300">Loading comments...</span>
-                      </div>
-                    ) : allComments.length === 0 ? (
-                      <div className="text-center py-8">
-                        <div className="text-bgray-400 dark:text-bgray-500 mb-2">
-                          <svg className="w-12 h-12 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                        </div>
-                        <p className="text-sm text-bgray-500 dark:text-bgray-400">
-                          No comments yet
-                        </p>
-                        <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
-                          Click on a stage to add comments
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        {allComments.map((comment) => (
-                          <div
-                            key={comment.id}
-                            className="flex gap-4 p-4 border border-bgray-200 dark:border-darkblack-400 rounded-lg hover:shadow-sm transition-shadow bg-white dark:bg-darkblack-600"
-                          >
-                            {/* Avatar */}
-                            <div className="flex-shrink-0">
-                              {comment.profile?.avatar_url ? (
-                                <img
-                                  src={comment.profile.avatar_url}
-                                  alt={comment.profile.full_name}
-                                  className="w-10 h-10 rounded-full"
-                                />
-                              ) : (
-                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center text-white font-semibold">
-                                  {comment.profile?.full_name?.charAt(0) || 'U'}
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Comment Content */}
-                            <div className="flex-1 min-w-0">
-                              {/* Header */}
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="font-medium text-darkblack-700 dark:text-white">
-                                  {comment.profile?.full_name || 'Unknown User'}
-                                </span>
-                                <span className="text-xs text-bgray-500 dark:text-bgray-400">
-                                  {new Date(comment.created_at).toLocaleString()}
-                                </span>
-                                {/* Stage badge — only present for messages tagged to a specific stage */}
-                                {comment.stage_name && (
-                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300 text-xs font-medium rounded-full">
-                                    {comment.stage_order}. {comment.stage_name}
-                                  </span>
-                                )}
-                              </div>
-
-                              {/* Comment body */}
-                              <div
-                                className="message-body text-sm text-bgray-700 dark:text-bgray-200 leading-relaxed [&_p]:mb-1.5 [&_p:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-darkblack-700 dark:[&_strong]:text-white [&_ul]:list-disc [&_ul]:list-outside [&_ul]:pl-5 [&_ul]:mb-1.5 [&_ol]:list-decimal [&_ol]:list-outside [&_ol]:pl-5 [&_ol]:mb-1.5 [&_li]:mb-0.5 [&_a]:text-primary [&_a]:hover:underline [&_span[data-type=mention]]:bg-primary/10 [&_span[data-type=mention]]:text-primary [&_span[data-type=mention]]:font-medium [&_span[data-type=mention]]:px-1 [&_span[data-type=mention]]:rounded"
-                                dangerouslySetInnerHTML={{ __html: sanitizeMessageHtml(legacyBodyToHtml(comment.body)) }}
-                              />
-
-                              {/* Metadata */}
-                              {(comment.mentioned_files?.length > 0 || comment.reply_to) && (
-                                <div className="mt-2 flex items-center gap-3 text-xs text-bgray-500">
-                                  {comment.mentioned_files?.length > 0 && (
-                                    <span className="flex items-center gap-1">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                      </svg>
-                                      {comment.mentioned_files.length} file{comment.mentioned_files.length > 1 ? 's' : ''}
-                                    </span>
-                                  )}
-                                  {comment.reply_to && (
-                                    <span className="flex items-center gap-1">
-                                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
-                                      </svg>
-                                      Reply
-                                    </span>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 )}
+
+                {/* Project Remarks — moved right under the Workflow Canvas, see above */}
               </>
             </main>
           )}
