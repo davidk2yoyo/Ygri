@@ -173,8 +173,9 @@ export default function Layout() {
   };
 
   const navItems = [
-    { 
-      path: "/dashboard", 
+    {
+      section: "Overview",
+      path: "/dashboard",
       label: t("dashboard"),
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -184,15 +185,7 @@ export default function Layout() {
       )
     },
     {
-      path: "/copilot",
-      label: "HerubaAI",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-        </svg>
-      )
-    },
-    {
+      section: "Overview",
       path: "/map",
       label: t("map"),
       icon: (
@@ -201,8 +194,9 @@ export default function Layout() {
         </svg>
       )
     },
-    { 
-      path: "/projects", 
+    {
+      section: "Pipeline",
+      path: "/projects",
       label: t("projects"),
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -210,8 +204,9 @@ export default function Layout() {
         </svg>
       )
     },
-    { 
-      path: "/clients", 
+    {
+      section: "Pipeline",
+      path: "/clients",
       label: t("clients"),
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -219,16 +214,8 @@ export default function Layout() {
         </svg>
       )
     },
-    { 
-      path: "/files", 
-      label: t("files"),
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-        </svg>
-      )
-    },
     {
+      section: "Pipeline",
       path: "/invoices",
       label: "Invoices",
       icon: (
@@ -238,15 +225,7 @@ export default function Layout() {
       )
     },
     {
-      path: "/purchase-orders",
-      label: "Purchase Orders",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375C2.754 3.75 2.25 4.254 2.25 4.875v1.5c0 .621.504 1.125 1.125 1.125z" />
-        </svg>
-      )
-    },
-    {
+      section: "Sourcing",
       path: "/items",
       label: "Items",
       icon: (
@@ -256,24 +235,17 @@ export default function Layout() {
       )
     },
     {
-      path: "/reports",
-      label: "Reports",
+      section: "Sourcing",
+      path: "/purchase-orders",
+      label: "Purchase Orders",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375C2.754 3.75 2.25 4.254 2.25 4.875v1.5c0 .621.504 1.125 1.125 1.125z" />
         </svg>
       )
     },
     {
-      path: "/shipments",
-      label: "Shipments",
-      icon: (
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
-        </svg>
-      )
-    },
-    {
+      section: "Sourcing",
       path: "/suppliers",
       label: "Suppliers",
       icon: (
@@ -283,6 +255,37 @@ export default function Layout() {
       )
     },
     {
+      section: "Sourcing",
+      path: "/shipments",
+      label: "Shipments",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+        </svg>
+      )
+    },
+    {
+      section: "Workspace",
+      path: "/files",
+      label: t("files"),
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+        </svg>
+      )
+    },
+    {
+      section: "Workspace",
+      path: "/reports",
+      label: "Reports",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+        </svg>
+      )
+    },
+    {
+      section: "Workspace",
       path: "/tasks",
       label: "Tasks",
       icon: (
@@ -292,6 +295,7 @@ export default function Layout() {
       )
     },
     {
+      section: "Workspace",
       path: "/calendar",
       label: "Calendar",
       icon: (
@@ -301,6 +305,7 @@ export default function Layout() {
       )
     },
     {
+      section: "Workspace",
       path: "/emails",
       label: "Emails",
       icon: (
@@ -310,16 +315,17 @@ export default function Layout() {
       )
     },
     {
-      path: "/settings",
-      label: t("settings"),
+      section: "AI",
+      path: "/copilot",
+      label: "HerubaAI",
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
         </svg>
       )
     },
     {
+      section: "AI",
       path: "/ai-management",
       label: "AI Management",
       icon: (
@@ -329,6 +335,19 @@ export default function Layout() {
       )
     }
   ];
+
+  const settingsItem = {
+    path: "/settings",
+    label: t("settings"),
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+      </svg>
+    )
+  };
+
+  const navSections = ["Overview", "Pipeline", "Sourcing", "Workspace", "AI"];
 
   return (
     <CopilotPageProvider>
@@ -355,33 +374,52 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* Navigation - Scrollable */}
-        <nav className="flex-1 overflow-y-auto px-3 py-5">
-          <div className="mb-2">
-            <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-widest px-4 mb-2">
-              {t("menu")}
-            </p>
-            <ul className="space-y-0.5">
-              {navItems.map((item) => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <li key={item.path}>
-                    <Link
-                      to={item.path}
-                      className={isActive ? 'nav-item-active' : 'nav-item'}
-                    >
-                      {item.icon}
-                      <span>{item.label}</span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+        {/* Navigation - Scrollable, grouped by section */}
+        <nav className="flex-1 overflow-y-auto px-3 py-5 space-y-4">
+          {navSections.map((section) => (
+            <div key={section}>
+              <p className="text-[10px] font-semibold text-gray-400 dark:text-gray-600 uppercase tracking-widest px-4 mb-1.5">
+                {section}
+              </p>
+              <ul className="space-y-0.5">
+                {navItems.filter(item => item.section === section).map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <li key={item.path}>
+                      <Link
+                        to={item.path}
+                        className={`relative flex items-center space-x-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm ${
+                          isActive
+                            ? "text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 font-semibold"
+                            : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5 font-medium"
+                        }`}
+                      >
+                        {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-green-600 dark:bg-green-400" />}
+                        {item.icon}
+                        <span>{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </nav>
 
-        {/* User Section */}
-        <div className="flex-shrink-0 p-3 border-t border-gray-100 dark:border-white/5">
+        {/* User Section — Settings pinned here, separate from the grouped nav above */}
+        <div className="flex-shrink-0 p-3 border-t border-gray-100 dark:border-white/5 space-y-0.5">
+          <Link
+            to={settingsItem.path}
+            className={`relative flex items-center space-x-3 px-4 py-2.5 rounded-xl transition-all duration-200 text-sm ${
+              location.pathname === settingsItem.path
+                ? "text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-500/10 font-semibold"
+                : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100/80 dark:hover:bg-white/5 font-medium"
+            }`}
+          >
+            {location.pathname === settingsItem.path && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-green-600 dark:bg-green-400" />}
+            {settingsItem.icon}
+            <span>{settingsItem.label}</span>
+          </Link>
           <button
             onClick={handleSignOut}
             className="w-full flex items-center space-x-3 px-4 py-2.5 text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 rounded-xl transition-all duration-200 text-sm font-medium"
