@@ -629,6 +629,23 @@ export default function ItemsPage() {
               </button>
             </div>
 
+            {editingItem.catalog_item_id ? (
+              <button
+                onClick={() => {
+                  const id = editingItem.catalog_item_id;
+                  setEditingItem(null);
+                  openProductModal({ id, item_number: editingItem.item_number, description: editingItem.description });
+                }}
+                className="w-full text-left px-6 py-2.5 bg-primary/5 hover:bg-primary/10 border-b border-bgray-100 dark:border-darkblack-400 text-xs text-primary font-medium transition"
+              >
+                ⚙️ Manage packaging / color / logo options and price history for this product →
+              </button>
+            ) : (
+              <div className="px-6 py-2.5 bg-bgray-50 dark:bg-darkblack-500 border-b border-bgray-100 dark:border-darkblack-400 text-xs text-bgray-400">
+                This line isn't linked to a catalog product yet — options and price history aren't available until it's saved to the catalog.
+              </div>
+            )}
+
             <div className="p-6 space-y-4">
               {/* Picture */}
               <div className="flex items-start gap-4">
