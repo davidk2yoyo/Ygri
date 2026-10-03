@@ -1502,6 +1502,24 @@ export default function ProjectsPage() {
               </div>
             </div>
 
+                {/* Stage details — inline, right under the workflow canvas */}
+                {selectedStageId && (
+                  <StageDrawer
+                    inline
+                    stageId={selectedStageId}
+                    trackId={activeTrackId}
+                    initialTab={drawerInitialTab}
+                    initialTabToken={drawerInitialTabToken}
+                    onClose={() => { setSelectedStageId(null); setDrawerInitialTab(null); }}
+                    onUpdate={() => {
+                      loadTrackDetail();
+                      loadAllComments();
+                    }}
+                    projectName={detail?.track?.track_name || detail?.track?.name}
+                    clientName={detail?.client?.company_name || detail?.client?.name}
+                  />
+                )}
+
                 {/* Quick Actions */}
                 {detail && (
                   <div className="card p-4">
@@ -1917,20 +1935,6 @@ export default function ProjectsPage() {
           </div>
         )}
 
-        {/* Stage Drawer */}
-        <StageDrawer
-          stageId={selectedStageId}
-          trackId={activeTrackId}
-          initialTab={drawerInitialTab}
-          initialTabToken={drawerInitialTabToken}
-          onClose={() => { setSelectedStageId(null); setDrawerInitialTab(null); }}
-          onUpdate={() => {
-            loadTrackDetail(); // Refresh track detail when stage is updated
-            loadAllComments(); // Refresh comments timeline
-          }}
-          projectName={detail?.track?.track_name || detail?.track?.name}
-          clientName={detail?.client?.company_name || detail?.client?.name}
-        />
       </div>
     </div>
   );

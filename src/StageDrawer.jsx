@@ -395,7 +395,7 @@ function ReportTab({ trackId, projectName, clientName, onClose }) {
   );
 }
 
-export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId, initialTab, initialTabToken }) {
+export default function StageDrawer({ stageId, onClose, onUpdate, projectName, clientName, trackId, initialTab, initialTabToken, inline = false }) {
   const [stageDetail, setStageDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -664,9 +664,16 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
 
   if (!stageId) return null;
 
+  const outerCls = inline
+    ? "font-urbanist"
+    : "fixed inset-0 bg-black/50 flex items-center justify-end z-50 font-urbanist";
+  const panelCls = inline
+    ? "bg-white dark:bg-darkblack-600 rounded-xl border border-bgray-200 dark:border-darkblack-400 flex flex-col"
+    : "w-[1200px] max-w-[95vw] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400";
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-end z-50 font-urbanist">
-      <div className="w-[1200px] max-w-[95vw] h-full bg-white dark:bg-darkblack-600 shadow-xl flex flex-col border-l border-bgray-200 dark:border-darkblack-400">
+    <div className={outerCls}>
+      <div className={panelCls}>
         {/* Header */}
         <div className="border-b border-bgray-200 dark:border-darkblack-400">
           <div className="flex items-center justify-between px-6 pt-5 pb-3">
@@ -708,22 +715,23 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
           {stageDetail && trackId && (
             <div className="flex gap-0 px-6">
               {[
-                { key: "details",      label: "Stage Details" },
-                { key: "conversation", label: "💬 Conversation" },
-                { key: "request",      label: "🧾 Request" },
-                { key: "quotation",    label: "📋 Quotation" },
-                { key: "report",       label: "📄 Report" },
-                { key: "documents",    label: "📁 Documents" },
+                { key: "details",      label: "Stage Details", icon: null },
+                { key: "conversation", label: "Conversation", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /> },
+                { key: "request",      label: "Request", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
+                { key: "quotation",    label: "Quotation", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /> },
+                { key: "report",       label: "Report", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /> },
+                { key: "documents",    label: "Documents", icon: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" /> },
               ].map(tab => (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                  className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
                     activeTab === tab.key
                       ? "border-primary text-primary"
                       : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-darkblack-700 dark:hover:text-white"
                   }`}
                 >
+                  {tab.icon && <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">{tab.icon}</svg>}
                   {tab.label}
                 </button>
               ))}
@@ -732,7 +740,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto scrollbar-thin">
+        <div className={inline ? "max-h-[70vh] overflow-y-auto scrollbar-thin" : "flex-1 overflow-y-auto scrollbar-thin"}>
           {loading && (
             <div className="flex items-center justify-center py-8">
               <div className="spinner h-6 w-6 mr-3"></div>
