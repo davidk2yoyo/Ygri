@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { sileo } from "sileo";
 import { supabase } from "../supabaseClient";
 import { createProjectActivity } from "../lib/projectActivity";
+import { resolveOrCreateCatalogItem } from "../lib/catalogItems";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
 import QuotationItemImporter from "./QuotationItemImporter";
@@ -29,6 +30,9 @@ const emptyItem = () => ({
   priceTiers: [],
   pictureFile: null,
   picturePreview: "",
+  selectedOptions: [],
+  availableOptions: [],
+  all_inclusive: false,
 });
 
 export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved, quotationId }) {
@@ -55,6 +59,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showSupplierScanner, setShowSupplierScanner] = useState(false);
   const [supplierItemIndex, setSupplierItemIndex] = useState(null);
   const [showCatalogDropdown, setShowCatalogDropdown] = useState(null);
+  const [showDescCatalogDropdown, setShowDescCatalogDropdown] = useState(null);
   const [showPDF, setShowPDF] = useState(false);
   const [showAIImporter, setShowAIImporter] = useState(false);
   const [showQuoteImporter, setShowQuoteImporter] = useState(false);
@@ -108,7 +113,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       setSuppliers(suppData || []);
 
       // Load catalog items
-      const { data: catData } = await supabase.from("catalog_items").select("*").order("description");
+      const { data: catData } = await supabase.from("catalog_items").select("*").eq("is_active", true).order("description");
       setCatalogItems(catData || []);
 
       // Only load if a specific quotation ID is provided — null means new blank form
@@ -172,12 +177,40 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             });
           });
 
+          // Load chosen options per item, and the menu of available options per catalog product
+          const { data: optionsData } = await supabase
+            .from("quotation_item_options")
+            .select("*")
+            .in("quotation_item_id", itemIds)
+            .order("sort_order");
+          const optionsByItem = {};
+          (optionsData || []).forEach(o => {
+            if (!optionsByItem[o.quotation_item_id]) optionsByItem[o.quotation_item_id] = [];
+            optionsByItem[o.quotation_item_id].push(o);
+          });
+
+          const catalogIds = [...new Set(quotData.quotation_items.map(qi => qi.catalog_item_id).filter(Boolean))];
+          let availableByCatalogId = {};
+          if (catalogIds.length > 0) {
+            const { data: catOptions } = await supabase
+              .from("catalog_item_options")
+              .select("*")
+              .in("catalog_item_id", catalogIds)
+              .order("sort_order");
+            (catOptions || []).forEach(o => {
+              if (!availableByCatalogId[o.catalog_item_id]) availableByCatalogId[o.catalog_item_id] = [];
+              availableByCatalogId[o.catalog_item_id].push(o);
+            });
+          }
+
           setItems(quotData.quotation_items.map(qi => ({
             ...emptyItem(),
             ...qi,
             tempId: qi.id,
             picturePreview: qi.picture_url || "",
             priceTiers: tiersByItem[qi.id] || [],
+            selectedOptions: optionsByItem[qi.id] || [],
+            availableOptions: availableByCatalogId[qi.catalog_item_id] || [],
           })));
           // Pre-cache supplier products for existing items
           const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
@@ -196,7 +229,10 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const totalAmount = items.reduce((sum, it) => {
     const p = parseFloat(it.price) || 0;
     const q = parseInt(it.quantity) || 1;
-    return sum + p * q;
+    const optionsExtra = it.all_inclusive
+      ? 0
+      : (it.selectedOptions || []).reduce((s, o) => s + (parseFloat(o.extra_price) || 0), 0);
+    return sum + (p + optionsExtra) * q;
   }, 0);
 
   const commissionAmount = totalAmount * (parseFloat(commissionPct) || 0) / 100;
@@ -340,6 +376,25 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
     } : it));
   };
 
+  const toggleItemOption = (idx, option) => {
+    setItems(prev => prev.map((it, i) => {
+      if (i !== idx) return it;
+      const isSelected = (it.selectedOptions || []).some(o =>
+        (o.catalog_item_option_id || o.id) === option.id
+      );
+      const selectedOptions = isSelected
+        ? it.selectedOptions.filter(o => (o.catalog_item_option_id || o.id) !== option.id)
+        : [...(it.selectedOptions || []), {
+            catalog_item_option_id: option.id,
+            option_type: option.option_type,
+            label: option.label,
+            extra_price: option.extra_price,
+            sort_order: (it.selectedOptions || []).length,
+          }];
+      return { ...it, selectedOptions };
+    }));
+  };
+
   const moveItem = (idx, dir) => {
     setItems(prev => {
       const to = idx + dir;
@@ -387,7 +442,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       price: catItem.default_price?.toString() || it.price,
       picturePreview: catItem.picture_url || it.picturePreview,
       picture_url: catItem.picture_url || it.picture_url,
+      availableOptions: [],
+      selectedOptions: [],
     } : it));
+
+    supabase.from("catalog_item_options").select("*").eq("catalog_item_id", catItem.id).order("sort_order")
+      .then(({ data }) => {
+        setItems(prev => prev.map((it, i) => i === idx ? { ...it, availableOptions: data || [] } : it));
+      });
     setShowCatalogDropdown(null);
 
     // The catalog only stores number/description/price/photo. Pull supplier,
@@ -577,22 +639,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           pictureUrl = await uploadItemPicture(it.pictureFile, `item-${idx}`);
         }
 
-        // Save to catalog if it has a description and no catalog_id yet
+        // Resolve to an existing catalog item (by item_number, or by
+        // description when there's no item_number) before ever creating a
+        // new one — this is the single choke point that prevents the same
+        // product from accumulating duplicate catalog_items rows/IDs.
         let catalogId = it.catalog_item_id;
         if (!catalogId && it.description.trim()) {
-          const { data: catData } = await supabase
-            .from("catalog_items")
-            .insert({
-              item_number: it.item_number,
-              description: it.description,
-              picture_url: pictureUrl,
-              default_price: parseFloat(it.price) || null,
-            })
-            .select()
-            .single();
+          const catData = await resolveOrCreateCatalogItem(supabase, {
+            item_number: it.item_number,
+            description: it.description,
+            picture_url: pictureUrl,
+            default_price: parseFloat(it.price) || null,
+          }, catalogItems);
           if (catData) {
             catalogId = catData.id;
-            setCatalogItems(prev => [...prev, catData]);
+            if (!catalogItems.some(c => c.id === catData.id)) {
+              setCatalogItems(prev => [...prev, catData]);
+            }
           }
         } else if (catalogId && pictureUrl) {
           // Backfill the catalog photo when it was replaced here or missing there
@@ -620,6 +683,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             ? (parseFloat(supplierExchangeRate) || null)
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
+          all_inclusive: !!it.all_inclusive,
           sort_order: idx,
         };
       }));
@@ -680,6 +744,27 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             const { error: tiersError } = await supabase.from("quotation_item_price_tiers").insert(tierRows);
             if (tiersError) throw tiersError;
           }
+        }
+
+        // 5. Re-create selected options against the freshly inserted item ids
+        // (old items — and their cascade-linked options — were just deleted above)
+        const optionRows = [];
+        (insertedRows || []).forEach(row => {
+          const originalItem = items[row.sort_order];
+          (originalItem?.selectedOptions || []).forEach((o, oi) => {
+            optionRows.push({
+              quotation_item_id: row.id,
+              catalog_item_option_id: o.catalog_item_option_id || null,
+              option_type: o.option_type,
+              label: o.label,
+              extra_price: parseFloat(o.extra_price) || 0,
+              sort_order: oi,
+            });
+          });
+        });
+        if (optionRows.length > 0) {
+          const { error: optionsError } = await supabase.from("quotation_item_options").insert(optionRows);
+          if (optionsError) throw optionsError;
         }
       }
 
@@ -1211,16 +1296,45 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     </div>
                   </div>
 
-                  {/* Description — full width textarea */}
-                  <div>
+                  {/* Description — full width textarea with catalog search dropdown */}
+                  <div className="relative">
                     <label className="block text-xs text-bgray-500 mb-1">Description</label>
                     <textarea
                       rows={4}
                       value={item.description}
-                      onChange={e => updateItem(idx, "description", e.target.value)}
+                      onChange={e => {
+                        updateItem(idx, "description", e.target.value);
+                        setShowDescCatalogDropdown(idx);
+                      }}
+                      onFocus={() => setShowDescCatalogDropdown(idx)}
+                      onBlur={() => setTimeout(() => setShowDescCatalogDropdown(null), 150)}
                       placeholder="Product / service description"
                       className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400 resize-y"
                     />
+                    {showDescCatalogDropdown === idx && item.description.trim().length >= 2 && !item.catalog_item_id && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl max-h-48 overflow-y-auto">
+                        {catalogItems
+                          .filter(c => c.description.toLowerCase().includes(item.description.trim().toLowerCase()))
+                          .slice(0, 8)
+                          .map(c => (
+                            <button
+                              key={c.id}
+                              onMouseDown={() => selectCatalogItem(idx, c)}
+                              className="w-full text-left px-3 py-2 hover:bg-bgray-50 dark:hover:bg-darkblack-400 text-sm flex items-center gap-2"
+                            >
+                              {c.picture_url && <img src={c.picture_url} alt="" className="w-6 h-6 rounded object-cover shrink-0" />}
+                              <div className="flex-1 min-w-0">
+                                {c.item_number && <span className="font-mono text-xs text-bgray-500 mr-2">{c.item_number}</span>}
+                                <span className="truncate">{c.description}</span>
+                              </div>
+                              {c.default_price && <span className="ml-auto text-xs text-bgray-400 shrink-0">${c.default_price}</span>}
+                            </button>
+                          ))}
+                        {catalogItems.filter(c => c.description.toLowerCase().includes(item.description.trim().toLowerCase())).length === 0 && (
+                          <p className="px-3 py-2 text-xs text-bgray-400">No matches — new item will be saved to catalog</p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Price + MOQ row */}
@@ -1253,6 +1367,44 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       </div>
                     )}
                   </div>
+
+                  {/* Customization options (packaging/box/color/logo) — defined per product in the Catalog */}
+                  {item.availableOptions?.length > 0 && (
+                    <div className="bg-bgray-50 dark:bg-darkblack-500 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-xs text-bgray-500">Options</label>
+                        <label className="flex items-center gap-1.5 text-xs text-bgray-500 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={!!item.all_inclusive}
+                            onChange={e => updateItem(idx, "all_inclusive", e.target.checked)}
+                          />
+                          Todo incluido (bundle into one price)
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.availableOptions.map(o => {
+                          const isSelected = (item.selectedOptions || []).some(s => (s.catalog_item_option_id || s.id) === o.id);
+                          return (
+                            <button
+                              type="button"
+                              key={o.id}
+                              onClick={() => toggleItemOption(idx, o)}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs border transition ${
+                                isSelected
+                                  ? "bg-primary text-white border-primary"
+                                  : "bg-white dark:bg-darkblack-600 text-bgray-600 dark:text-bgray-300 border-bgray-300 dark:border-darkblack-400 hover:border-primary"
+                              }`}
+                            >
+                              <span className="uppercase text-[10px] opacity-70 mr-1">{o.option_type}</span>
+                              {o.label}
+                              {!item.all_inclusive && o.extra_price > 0 && ` (+$${Number(o.extra_price).toFixed(2)})`}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Price Tiers — quotations only, editable per item, saved with this quotation */}
                   {documentType === "quotation" && (

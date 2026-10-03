@@ -552,8 +552,11 @@ export default function QuotationPDF({
         </thead>
         <tbody>
           {items.map((item, idx) => {
-            const price = parseFloat(item.price) || 0;
+            const basePrice = parseFloat(item.price) || 0;
             const qty = parseInt(item.quantity) || 1;
+            const options = item.selectedOptions || [];
+            const optionsExtra = item.all_inclusive ? 0 : options.reduce((s, o) => s + (parseFloat(o.extra_price) || 0), 0);
+            const price = basePrice + optionsExtra;
             const amount = price * qty;
             const tiers = item.priceTiers || [];
             const hasTiers = tiers.length > 0;
@@ -586,6 +589,27 @@ export default function QuotationPDF({
                 </td>
                 <td style={{ padding: "12px", fontSize: "12px", color: "#1a1a1a", verticalAlign: "top" }}>
                   <div style={{ fontWeight: "700" }}>{item.description || "—"}</div>
+                  {options.length > 0 && (
+                    <div style={{ marginTop: "6px", borderTop: "1px dashed #e0e4ea", paddingTop: "6px" }}>
+                      {item.all_inclusive && (
+                        <span style={{ display: "inline-block", fontSize: "10px", fontWeight: "700", color: "#1e3a5f", backgroundColor: "#eef2f7", borderRadius: "4px", padding: "2px 6px", marginBottom: "4px" }}>
+                          ALL-INCLUSIVE PRICE
+                        </span>
+                      )}
+                      {options.map((o, oi) => (
+                        <div key={o.catalog_item_option_id || oi} style={{ fontSize: "11px", color: "#555", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span style={{ textTransform: "uppercase", fontSize: "9px", color: "#999" }}>{o.option_type}:</span>
+                          <span>{o.label}</span>
+                          {!item.all_inclusive && parseFloat(o.extra_price) > 0 && (
+                            <span style={{ color: "#999" }}>(+${formatMoney(o.extra_price)})</span>
+                          )}
+                          {o.option_type === "logo" && clientDetails?.logo_url && (
+                            <img src={clientDetails.logo_url} alt="" crossOrigin="anonymous" style={{ height: "16px", maxWidth: "50px", objectFit: "contain" }} />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   {hasTiers && (
                     <div style={{ marginTop: "6px", borderTop: "1px dashed #e0e4ea", paddingTop: "6px" }}>
                       <div style={{ fontSize: "10px", color: "#999", fontWeight: "600", marginBottom: "2px", textTransform: "uppercase" }}>

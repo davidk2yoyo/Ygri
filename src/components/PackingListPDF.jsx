@@ -1,6 +1,7 @@
-import React, { useRef } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
+import { supabase } from "../supabaseClient";
 
 const COMPANY_INFO = {
   name: "INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED",
@@ -11,6 +12,16 @@ const COMPANY_INFO = {
 
 export default function PackingListPDF({ packingList, items, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, onClose }) {
   const printRef = useRef(null);
+  const [clientLogo, setClientLogo] = useState("");
+
+  useEffect(() => {
+    if (!clientName) { setClientLogo(""); return; }
+    let cancelled = false;
+    supabase.from("clients").select("logo_url").eq("company_name", clientName).maybeSingle().then(({ data }) => {
+      if (!cancelled) setClientLogo(data?.logo_url || "");
+    });
+    return () => { cancelled = true; };
+  }, [clientName]);
 
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -151,7 +162,10 @@ export default function PackingListPDF({ packingList, items, clientName, project
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "28px", gap: "24px" }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: "10px", color: "#888", textTransform: "uppercase", letterSpacing: "1px", marginBottom: "6px" }}>SHIP TO</div>
-          <div style={{ fontWeight: "700", fontSize: "14px", color: "#1a1a1a", marginBottom: "2px" }}>{clientName?.toUpperCase() || "CLIENT NAME"}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "2px" }}>
+            {clientLogo && <img src={clientLogo} alt="" style={{ height: "28px", maxWidth: "90px", objectFit: "contain" }} />}
+            <div style={{ fontWeight: "700", fontSize: "14px", color: "#1a1a1a" }}>{clientName?.toUpperCase() || "CLIENT NAME"}</div>
+          </div>
           <div style={{ fontSize: "11px", color: "#555" }}>{projectName}</div>
         </div>
         <div style={{ backgroundColor: "#f7f8fa", border: "1px solid #e0e4ea", borderRadius: "8px", padding: "16px 20px", minWidth: "220px" }}>
@@ -194,7 +208,18 @@ export default function PackingListPDF({ packingList, items, clientName, project
           {items.map((it, idx) => (
             <tr key={it.id || it._localId || idx} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9fafb", borderBottom: "1px solid #e8eaed" }}>
               <td style={{ padding: "8px", fontSize: "11px", color: "#555" }}>{it.item_number || "—"}</td>
-              <td style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a" }}>{it.description || "—"}</td>
+              <td style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a" }}>
+                {it.description || "—"}
+                {it.options?.length > 0 && (
+                  <div style={{ marginTop: "3px" }}>
+                    {it.options.map((o, oi) => (
+                      <div key={o.id || oi} style={{ fontSize: "10px", color: "#777" }}>
+                        <span style={{ textTransform: "uppercase", fontSize: "9px", color: "#aaa" }}>{o.option_type}:</span> {o.label}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </td>
               <td style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "center" }}>{it.carton_qty || "—"}</td>
               <td style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "center" }}>{it.qty || "—"}</td>
               <td style={{ padding: "8px", fontSize: "11px", color: "#555", textAlign: "center" }}>

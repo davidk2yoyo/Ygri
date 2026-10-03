@@ -64,7 +64,22 @@ export default function PackingListEditorPage() {
       if (existing) {
         setPackingList(existing);
         const { data: rows } = await supabase.from("packing_list_items").select("*").eq("packing_list_id", existing.id).order("sort_order");
-        setItems((rows || []).map(r => ({ ...r, _localId: Math.random().toString(36).slice(2) })));
+
+        const qiIds = [...new Set((rows || []).map(r => r.quotation_item_id).filter(Boolean))];
+        let optionsByQiId = {};
+        if (qiIds.length > 0) {
+          const { data: opts } = await supabase.from("quotation_item_options").select("*").in("quotation_item_id", qiIds).order("sort_order");
+          (opts || []).forEach(o => {
+            if (!optionsByQiId[o.quotation_item_id]) optionsByQiId[o.quotation_item_id] = [];
+            optionsByQiId[o.quotation_item_id].push(o);
+          });
+        }
+
+        setItems((rows || []).map(r => ({
+          ...r,
+          _localId: Math.random().toString(36).slice(2),
+          options: optionsByQiId[r.quotation_item_id] || [],
+        })));
       } else {
         const { data: newPL, error } = await supabase.from("packing_lists").insert({ quotation_id: quotationId }).select().single();
         if (error) { setSaveError(`Could not create packing list: ${error.message}`); }

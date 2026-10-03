@@ -31,6 +31,16 @@ export default function ItemsPage() {
 
   const [previewImage, setPreviewImage] = useState(null);
 
+  // Product details modal (price history + customization options)
+  const [productModal, setProductModal] = useState(null);
+  const [productHistory, setProductHistory] = useState([]);
+  const [productHistoryLoading, setProductHistoryLoading] = useState(false);
+  const [productOptions, setProductOptions] = useState([]);
+  const [productOptionsLoading, setProductOptionsLoading] = useState(false);
+  const [productOptionsSaving, setProductOptionsSaving] = useState(false);
+  const [productOptionsError, setProductOptionsError] = useState("");
+  const [newOption, setNewOption] = useState({ option_type: "packaging", label: "", extra_price: "" });
+
   // Edit modal state
   const [editingItem, setEditingItem] = useState(null);
   const [editForm, setEditForm] = useState({ item_number: "", description: "", quantity: "1", price: "", supplier_price: "", supplier_id: "" });
@@ -101,6 +111,7 @@ export default function ItemsPage() {
       const { data, error } = await supabase
         .from("catalog_items")
         .select("id, item_number, description, picture_url, default_price, quotation_items(id)")
+        .eq("is_active", true)
         .order("item_number");
       if (error) throw error;
       setCatalogItems(data || []);
@@ -151,6 +162,64 @@ export default function ItemsPage() {
     if (pct >= 20) return "text-green-600 dark:text-green-400";
     if (pct >= 10) return "text-amber-600 dark:text-amber-400";
     return "text-red-600 dark:text-red-400";
+  };
+
+  const openProductModal = async (it) => {
+    setProductModal(it);
+    setProductOptionsError("");
+    setNewOption({ option_type: "packaging", label: "", extra_price: "" });
+
+    setProductHistoryLoading(true);
+    supabase
+      .from("v_catalog_item_price_history")
+      .select("*")
+      .eq("catalog_item_id", it.id)
+      .then(({ data }) => { setProductHistory(data || []); setProductHistoryLoading(false); });
+
+    setProductOptionsLoading(true);
+    supabase
+      .from("catalog_item_options")
+      .select("*")
+      .eq("catalog_item_id", it.id)
+      .order("sort_order")
+      .then(({ data }) => { setProductOptions(data || []); setProductOptionsLoading(false); });
+  };
+
+  const addProductOption = async () => {
+    if (!productModal || !newOption.label.trim()) return;
+    setProductOptionsSaving(true);
+    setProductOptionsError("");
+    try {
+      const { data, error } = await supabase
+        .from("catalog_item_options")
+        .insert({
+          catalog_item_id: productModal.id,
+          option_type: newOption.option_type,
+          label: newOption.label.trim(),
+          extra_price: parseFloat(newOption.extra_price) || 0,
+          sort_order: productOptions.length,
+        })
+        .select()
+        .single();
+      if (error) throw error;
+      setProductOptions(prev => [...prev, data]);
+      setNewOption({ option_type: "packaging", label: "", extra_price: "" });
+    } catch (e) {
+      setProductOptionsError(e.message);
+    } finally {
+      setProductOptionsSaving(false);
+    }
+  };
+
+  const removeProductOption = async (optionId) => {
+    setProductOptionsError("");
+    try {
+      const { error } = await supabase.from("catalog_item_options").delete().eq("id", optionId);
+      if (error) throw error;
+      setProductOptions(prev => prev.filter(o => o.id !== optionId));
+    } catch (e) {
+      setProductOptionsError(e.message);
+    }
   };
 
   const openEdit = (it) => {
@@ -446,12 +515,13 @@ export default function ItemsPage() {
                     <th className="text-left px-4 py-3.5 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Item</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Default Price</th>
                     <th className="text-right px-4 py-3.5 text-xs font-semibold text-bgray-500 dark:text-bgray-400 uppercase tracking-wide">Times Quoted</th>
+                    <th className="px-4 py-3.5" />
                   </tr>
                 </thead>
                 <tbody>
                   {catalogLoading ? (
                     <tr>
-                      <td colSpan={3} className="text-center py-12">
+                      <td colSpan={4} className="text-center py-12">
                         <div className="flex items-center justify-center gap-2 text-bgray-500">
                           <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
                           <span className="text-sm">Loading catalog...</span>
@@ -460,7 +530,7 @@ export default function ItemsPage() {
                     </tr>
                   ) : filteredCatalog.length === 0 ? (
                     <tr>
-                      <td colSpan={3} className="text-center py-12 text-bgray-400 text-sm">
+                      <td colSpan={4} className="text-center py-12 text-bgray-400 text-sm">
                         {catalogItems.length === 0
                           ? "No catalog items yet. Items are added automatically when you save quotations."
                           : "No results match your search."}
@@ -511,6 +581,14 @@ export default function ItemsPage() {
                         <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-semibold">
                           {it.quotation_items?.length ?? 0}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => openProductModal(it)}
+                          className="text-xs text-primary hover:underline whitespace-nowrap"
+                        >
+                          Details →
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -686,6 +764,121 @@ export default function ItemsPage() {
                   {editSaving && <span className="animate-spin rounded-full h-3.5 w-3.5 border-b-2 border-white inline-block" />}
                   {editSaving ? "Saving..." : "Save Changes"}
                 </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Product details modal — price history + customization options */}
+      {productModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setProductModal(null)}>
+          <div
+            className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-100 dark:border-darkblack-400">
+              <div>
+                {productModal.item_number && (
+                  <p className="text-xs font-mono text-bgray-500 dark:text-bgray-400">{productModal.item_number}</p>
+                )}
+                <h3 className="font-semibold text-darkblack-700 dark:text-white line-clamp-1">{productModal.description}</h3>
+              </div>
+              <button onClick={() => setProductModal(null)} className="text-bgray-400 hover:text-bgray-600 dark:hover:text-white transition">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Price history */}
+              <div>
+                <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">Price history</p>
+                {productHistoryLoading ? (
+                  <p className="text-sm text-bgray-400">Loading…</p>
+                ) : productHistory.length === 0 ? (
+                  <p className="text-sm text-bgray-400">No quotes yet for this product.</p>
+                ) : (
+                  <div className="border border-bgray-200 dark:border-darkblack-400 rounded-lg overflow-hidden">
+                    {productHistory.map((h, i) => (
+                      <div
+                        key={h.quotation_item_id}
+                        className={`flex items-center justify-between px-3 py-2 text-sm ${i > 0 ? "border-t border-bgray-100 dark:border-darkblack-400" : ""}`}
+                      >
+                        <span className="text-bgray-500 dark:text-bgray-400">
+                          {h.quote_number} · {new Date(h.quoted_at).toLocaleDateString()}
+                        </span>
+                        <span className="font-semibold text-darkblack-700 dark:text-white">
+                          {formatMoney(h.price, h.currency)} <span className="text-bgray-400 font-normal">× {h.quantity}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Customization options */}
+              <div>
+                <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">Options (packaging, color, logo, box…)</p>
+                {productOptionsError && (
+                  <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 mb-2">{productOptionsError}</p>
+                )}
+                {productOptionsLoading ? (
+                  <p className="text-sm text-bgray-400">Loading…</p>
+                ) : (
+                  <div className="space-y-1.5 mb-3">
+                    {productOptions.length === 0 && <p className="text-sm text-bgray-400">No options defined yet.</p>}
+                    {productOptions.map(o => (
+                      <div key={o.id} className="flex items-center gap-2 px-3 py-2 bg-bgray-50 dark:bg-darkblack-500 rounded-lg text-sm">
+                        <span className="text-xs uppercase text-bgray-400 w-20 shrink-0">{o.option_type}</span>
+                        <span className="flex-1 text-darkblack-700 dark:text-white truncate">{o.label}</span>
+                        <span className="text-bgray-500 dark:text-bgray-400 shrink-0">
+                          {o.extra_price > 0 ? `+$${Number(o.extra_price).toFixed(2)}` : "Included"}
+                        </span>
+                        <button onClick={() => removeProductOption(o.id)} className="text-bgray-300 hover:text-red-500 transition shrink-0">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex gap-2">
+                  <select
+                    value={newOption.option_type}
+                    onChange={e => setNewOption(o => ({ ...o, option_type: e.target.value }))}
+                    className="px-2 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                  >
+                    <option value="packaging">Packaging</option>
+                    <option value="box_type">Box type</option>
+                    <option value="color">Color</option>
+                    <option value="logo">Logo</option>
+                    <option value="other">Other</option>
+                  </select>
+                  <input
+                    type="text"
+                    value={newOption.label}
+                    onChange={e => setNewOption(o => ({ ...o, label: e.target.value }))}
+                    placeholder="e.g. Reinforced export box"
+                    className="flex-1 min-w-0 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-400"
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={newOption.extra_price}
+                    onChange={e => setNewOption(o => ({ ...o, extra_price: e.target.value }))}
+                    onWheel={e => e.target.blur()}
+                    placeholder="+$"
+                    className="w-20 px-2 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white placeholder-bgray-400"
+                  />
+                  <button
+                    onClick={addProductOption}
+                    disabled={productOptionsSaving || !newOption.label.trim()}
+                    className="px-3 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition shrink-0"
+                  >
+                    +
+                  </button>
+                </div>
+                <p className="text-[11px] text-bgray-400 mt-1.5">Leave +$ at 0 for an option that's included at no extra cost.</p>
               </div>
             </div>
           </div>

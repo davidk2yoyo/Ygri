@@ -15,6 +15,7 @@ const EMPTY_CLIENT = {
   country: "",
   rut_nit: "",
   website: "",
+  logo_url: "",
   tags: []
 };
 
@@ -62,14 +63,35 @@ function ClientDrawer({ client, onClose, onSaved }) {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState("details");
   const [showScanner, setShowScanner] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(client?.logo_url || "");
 
   const isNew = !client?.id;
+
+  const handleLogoChange = (file) => {
+    if (!file) return;
+    setLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+  };
+
+  const uploadLogo = async () => {
+    const ext = logoFile.name.split(".").pop();
+    const path = `logos/${client?.id || "new"}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from("client-logos").upload(path, logoFile, { upsert: true });
+    if (error) throw error;
+    const { data } = supabase.storage.from("client-logos").getPublicUrl(path);
+    return data.publicUrl;
+  };
 
   const handleSave = async () => {
     if (!form.company_name.trim()) { setError("Company name is required."); return; }
     setBusy(true);
     setError("");
     try {
+      let logoUrl = form.logo_url;
+      if (logoFile) logoUrl = await uploadLogo();
+      const formWithLogo = { ...form, logo_url: logoUrl };
+
       const tryUpsert = async (payload) => {
         if (isNew) {
           const { data, error } = await supabase.from("clients").insert(payload).select().single();
@@ -83,11 +105,11 @@ function ClientDrawer({ client, onClose, onSaved }) {
       };
       let data;
       try {
-        data = await tryUpsert(form);
+        data = await tryUpsert(formWithLogo);
       } catch (e) {
         // If schema cache error on optional columns, retry without them
         if (e.message?.includes("schema cache") || e.message?.includes("Could not find")) {
-          const { tags, rut_nit, website, address, ...safe } = form;
+          const { tags, rut_nit, website, logo_url, address, ...safe } = formWithLogo;
           data = await tryUpsert(safe);
         } else {
           throw e;
@@ -195,6 +217,22 @@ function ClientDrawer({ client, onClose, onSaved }) {
               {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
 
               <div className="grid grid-cols-2 gap-4">
+                {/* Logo */}
+                <div className="col-span-2 flex items-center gap-3">
+                  <label className="w-16 h-16 rounded-xl border border-dashed border-bgray-300 dark:border-darkblack-400 flex items-center justify-center overflow-hidden cursor-pointer shrink-0 bg-bgray-50 dark:bg-darkblack-500">
+                    {logoPreview ? (
+                      <img src={logoPreview} alt="Logo" className="w-full h-full object-contain" />
+                    ) : (
+                      <svg className="w-5 h-5 text-bgray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                    )}
+                    <input type="file" accept="image/*" className="hidden" onChange={e => handleLogoChange(e.target.files[0])} />
+                  </label>
+                  <div>
+                    <p className={labelCls}>Client Logo</p>
+                    <p className="text-xs text-bgray-400">Shown on documents for this client's private-label branding.</p>
+                  </div>
+                </div>
+
                 {/* Company Name */}
                 <div className="col-span-2">
                   <label className={labelCls}>Company Name *</label>
