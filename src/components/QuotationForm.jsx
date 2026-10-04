@@ -33,6 +33,12 @@ const emptyItem = () => ({
   selectedOptions: [],
   availableOptions: [],
   all_inclusive: false,
+  expanded: true,
+  addingOption: false,
+  draftType: "packaging",
+  draftLabel: "",
+  draftPrice: "",
+  saveToCatalog: true,
 });
 
 export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved, quotationId }) {
@@ -211,6 +217,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             priceTiers: tiersByItem[qi.id] || [],
             selectedOptions: optionsByItem[qi.id] || [],
             availableOptions: availableByCatalogId[qi.catalog_item_id] || [],
+            expanded: false,
           })));
           // Pre-cache supplier products for existing items
           const uniqueIds = [...new Set(quotData.quotation_items.map(qi => qi.supplier_id).filter(Boolean))];
@@ -392,6 +399,50 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             sort_order: (it.selectedOptions || []).length,
           }];
       return { ...it, selectedOptions };
+    }));
+  };
+
+  const removeSelectedOption = (idx, key) => {
+    setItems(prev => prev.map((it, i) => i !== idx ? it : {
+      ...it,
+      selectedOptions: (it.selectedOptions || []).filter(o => (o.catalog_item_option_id || o.id || o.tempOptId) !== key),
+    }));
+  };
+
+  const addItemOption = async (idx) => {
+    const it = items[idx];
+    const label = (it.draftLabel || "").trim();
+    if (!label) return;
+    const extra = parseFloat(it.draftPrice) || 0;
+    let catalogOptionId = null;
+    let created = null;
+    if (it.saveToCatalog && it.catalog_item_id) {
+      const { data, error } = await supabase
+        .from("catalog_item_options")
+        .insert({
+          catalog_item_id: it.catalog_item_id,
+          option_type: it.draftType || "packaging",
+          label,
+          extra_price: extra,
+          sort_order: (it.availableOptions || []).length,
+        })
+        .select()
+        .single();
+      if (!error && data) { created = data; catalogOptionId = data.id; }
+    }
+    setItems(prev => prev.map((row, i) => i !== idx ? row : {
+      ...row,
+      availableOptions: created ? [...(row.availableOptions || []), created] : row.availableOptions,
+      selectedOptions: [...(row.selectedOptions || []), {
+        catalog_item_option_id: catalogOptionId,
+        tempOptId: catalogOptionId ? undefined : Math.random().toString(36).slice(2),
+        option_type: it.draftType || "packaging",
+        label,
+        extra_price: extra,
+        sort_order: (row.selectedOptions || []).length,
+      }],
+      draftLabel: "",
+      draftPrice: "",
     }));
   };
 
@@ -1142,41 +1193,94 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         <div className="space-y-4">
           {items.map((item, idx) => (
             <div key={item.tempId} className="border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4 bg-bgray-50 dark:bg-darkblack-500 relative">
-              {/* Item controls: move up/down + remove */}
-              <div className="absolute top-3 right-3 flex items-center gap-1">
-                <button
-                  onClick={() => moveItem(idx, -1)}
-                  disabled={idx === 0}
-                  title="Move up"
-                  className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-                  </svg>
-                </button>
-                <button
-                  onClick={() => moveItem(idx, 1)}
-                  disabled={idx === items.length - 1}
-                  title="Move down"
-                  className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </button>
-                {items.length > 1 && (
-                  <button
-                    onClick={() => removeItem(idx)}
-                    title="Remove item"
-                    className="p-1 rounded text-bgray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                )}
-              </div>
-
+              {/* Compact row: always visible. Expand for the full editor. */}
+              {(() => {
+                const basePrice = parseFloat(item.price) || 0;
+                const optExtra = item.all_inclusive ? 0 : (item.selectedOptions || []).reduce((s, o) => s + (parseFloat(o.extra_price) || 0), 0);
+                const unit = basePrice + optExtra;
+                const sc = item.supplier_currency || "";
+                const fx = sc && sc !== currency;
+                const rate = parseFloat(supplierExchangeRate) || 0;
+                const costRaw = parseFloat(item.supplier_price) || 0;
+                const cost = fx && rate > 0 ? costRaw / rate : costRaw;
+                const mPct = unit > 0 && cost > 0 && (!fx || rate > 0) ? ((unit - cost) / unit) * 100 : null;
+                const mCls = mPct == null ? "" : mPct >= 20 ? "bg-green-100 text-green-700" : mPct >= 10 ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600";
+                const optCount = (item.selectedOptions || []).length;
+                return (
+                  <div className={`flex items-center gap-2 ${item.expanded ? "mb-3 pb-3 border-b border-bgray-200 dark:border-darkblack-400" : ""}`}>
+                    <button
+                      type="button"
+                      onClick={() => updateItem(idx, "expanded", !item.expanded)}
+                      title={item.expanded ? "Collapse" : "Expand"}
+                      className="p-1 rounded text-bgray-500 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 transition shrink-0"
+                    >
+                      <svg className={`w-4 h-4 transition-transform ${item.expanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+                    {(item.picturePreview || item.picture_url) ? (
+                      <img src={item.picturePreview || item.picture_url} alt="" className="w-9 h-9 rounded-md object-cover border border-bgray-200 shrink-0" />
+                    ) : (
+                      <div className="w-9 h-9 rounded-md bg-bgray-100 dark:bg-darkblack-400 shrink-0" />
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => updateItem(idx, "expanded", !item.expanded)}
+                      className="flex-1 min-w-0 text-left"
+                    >
+                      <span className="block text-[11px] font-mono text-bgray-500 truncate">{item.item_number || "No item #"}</span>
+                      <span className="block text-sm text-darkblack-700 dark:text-white truncate">{item.description || <span className="text-bgray-400">New item — click to edit</span>}</span>
+                    </button>
+                    {optCount > 0 && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 shrink-0">{optCount} opt.</span>
+                    )}
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={e => updateItem(idx, "quantity", e.target.value)}
+                      onWheel={e => e.target.blur()}
+                      title="Qty"
+                      className="w-16 px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-center bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white shrink-0"
+                    />
+                    <div className="relative w-24 shrink-0">
+                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-bgray-400">$</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={item.price}
+                        onChange={e => updateItem(idx, "price", e.target.value)}
+                        onWheel={e => e.target.blur()}
+                        title={`Price (${currency})`}
+                        placeholder="0.00"
+                        className="w-full pl-5 pr-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm text-right font-semibold bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                      />
+                    </div>
+                    <div className="w-24 text-right shrink-0" title="Unit price incl. options × qty">
+                      <div className="text-xs font-semibold text-primary">{currency} {(unit * (parseInt(item.quantity) || 1)).toLocaleString("en-US", { minimumFractionDigits: 2 })}</div>
+                      {optExtra > 0 && <div className="text-[10px] text-bgray-400">= {unit.toLocaleString("en-US", { minimumFractionDigits: 2 })} ea</div>}
+                    </div>
+                    {mPct != null && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0 ${mCls}`} title="Margin">{Math.round(mPct)}%</span>
+                    )}
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button onClick={() => moveItem(idx, -1)} disabled={idx === 0} title="Move up" className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" /></svg>
+                      </button>
+                      <button onClick={() => moveItem(idx, 1)} disabled={idx === items.length - 1} title="Move down" className="p-1 rounded text-bgray-400 hover:text-primary hover:bg-bgray-100 dark:hover:bg-darkblack-400 disabled:opacity-25 disabled:pointer-events-none transition">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                      </button>
+                      {items.length > 1 && (
+                        <button onClick={() => removeItem(idx)} title="Remove item" className="p-1 rounded text-bgray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+              {item.expanded && (
               <div className="grid grid-cols-12 gap-3">
                 {/* Picture */}
                 <div className="col-span-2">
@@ -1368,43 +1472,116 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     )}
                   </div>
 
-                  {/* Customization options (packaging/box/color/logo) — defined per product in the Catalog */}
-                  {item.availableOptions?.length > 0 && (
-                    <div className="bg-bgray-50 dark:bg-darkblack-500 rounded-lg p-3">
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-xs text-bgray-500">Options</label>
-                        <label className="flex items-center gap-1.5 text-xs text-bgray-500 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={!!item.all_inclusive}
-                            onChange={e => updateItem(idx, "all_inclusive", e.target.checked)}
-                          />
-                          Todo incluido (bundle into one price)
-                        </label>
+                  {/* Options (packaging/box/color/logo): catalog choices toggle on/off, ad-hoc ones can be added inline */}
+                  {(() => {
+                    const availIds = new Set((item.availableOptions || []).map(o => o.id));
+                    const adHoc = (item.selectedOptions || []).filter(s => !availIds.has(s.catalog_item_option_id));
+                    return (
+                      <div className="bg-bgray-50 dark:bg-darkblack-500 rounded-lg p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-xs font-semibold text-bgray-500 uppercase tracking-wide">Options</label>
+                          <label className="flex items-center gap-1.5 text-xs text-bgray-500 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={!!item.all_inclusive}
+                              onChange={e => updateItem(idx, "all_inclusive", e.target.checked)}
+                            />
+                            Todo incluido (extras don't add to price)
+                          </label>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {(item.availableOptions || []).map(o => {
+                            const isSelected = (item.selectedOptions || []).some(s => (s.catalog_item_option_id || s.id) === o.id);
+                            return (
+                              <button
+                                type="button"
+                                key={o.id}
+                                onClick={() => toggleItemOption(idx, o)}
+                                className={`px-2.5 py-1.5 rounded-lg text-xs border transition ${
+                                  isSelected
+                                    ? "bg-primary text-white border-primary"
+                                    : "bg-white dark:bg-darkblack-600 text-bgray-600 dark:text-bgray-300 border-bgray-300 dark:border-darkblack-400 hover:border-primary"
+                                }`}
+                              >
+                                <span className="uppercase text-[10px] opacity-70 mr-1">{o.option_type}</span>
+                                {o.label}
+                                {!item.all_inclusive && o.extra_price > 0 && ` (+$${Number(o.extra_price).toFixed(2)})`}
+                              </button>
+                            );
+                          })}
+                          {adHoc.map(o => (
+                            <span key={o.tempOptId || o.id} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1.5 rounded-lg text-xs bg-primary text-white border border-primary">
+                              <span><span className="uppercase text-[10px] opacity-70 mr-1">{o.option_type}</span>{o.label}{!item.all_inclusive && o.extra_price > 0 && ` (+$${Number(o.extra_price).toFixed(2)})`}</span>
+                              <button type="button" onClick={() => removeSelectedOption(idx, o.catalog_item_option_id || o.id || o.tempOptId)} className="p-0.5 rounded hover:bg-white/20">
+                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" /></svg>
+                              </button>
+                            </span>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => updateItem(idx, "addingOption", !item.addingOption)}
+                            className="px-2.5 py-1.5 rounded-lg text-xs border border-dashed border-primary/50 text-primary hover:bg-primary/5 font-semibold transition"
+                          >
+                            + Add option
+                          </button>
+                        </div>
+                        {item.addingOption && (
+                          <div className="mt-2 p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <select
+                                value={item.draftType}
+                                onChange={e => updateItem(idx, "draftType", e.target.value)}
+                                className="px-2 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              >
+                                <option value="packaging">Packaging</option>
+                                <option value="box_type">Box type</option>
+                                <option value="color">Color</option>
+                                <option value="logo">Logo</option>
+                                <option value="other">Other</option>
+                              </select>
+                              <input
+                                type="text"
+                                value={item.draftLabel}
+                                onChange={e => updateItem(idx, "draftLabel", e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addItemOption(idx); } }}
+                                placeholder="e.g. Reinforced export box"
+                                className="flex-1 min-w-[160px] px-2.5 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                value={item.draftPrice}
+                                onChange={e => updateItem(idx, "draftPrice", e.target.value)}
+                                onWheel={e => e.target.blur()}
+                                placeholder="+ price"
+                                className="w-24 px-2.5 py-1.5 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-xs bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => addItemOption(idx)}
+                                disabled={!(item.draftLabel || "").trim()}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition"
+                              >
+                                Add
+                              </button>
+                            </div>
+                            <label className={`flex items-center gap-1.5 mt-2 text-[11px] ${item.catalog_item_id ? "text-bgray-600 cursor-pointer" : "text-bgray-400"}`}>
+                              <input
+                                type="checkbox"
+                                disabled={!item.catalog_item_id}
+                                checked={!!item.saveToCatalog && !!item.catalog_item_id}
+                                onChange={e => updateItem(idx, "saveToCatalog", e.target.checked)}
+                              />
+                              {item.catalog_item_id
+                                ? "Save to this product's catalog (reusable in future quotes)"
+                                : "Pick a catalog product to save options for reuse — this one applies to this quote only"}
+                            </label>
+                          </div>
+                        )}
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {item.availableOptions.map(o => {
-                          const isSelected = (item.selectedOptions || []).some(s => (s.catalog_item_option_id || s.id) === o.id);
-                          return (
-                            <button
-                              type="button"
-                              key={o.id}
-                              onClick={() => toggleItemOption(idx, o)}
-                              className={`px-2.5 py-1.5 rounded-lg text-xs border transition ${
-                                isSelected
-                                  ? "bg-primary text-white border-primary"
-                                  : "bg-white dark:bg-darkblack-600 text-bgray-600 dark:text-bgray-300 border-bgray-300 dark:border-darkblack-400 hover:border-primary"
-                              }`}
-                            >
-                              <span className="uppercase text-[10px] opacity-70 mr-1">{o.option_type}</span>
-                              {o.label}
-                              {!item.all_inclusive && o.extra_price > 0 && ` (+$${Number(o.extra_price).toFixed(2)})`}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {/* Price Tiers — quotations only, editable per item, saved with this quotation */}
                   {documentType === "quotation" && (
@@ -1573,7 +1750,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                       ? supplierPriceRaw / rate
                       : supplierPriceRaw;
                     const qty = parseInt(item.quantity) || 1;
-                    const clientTotal = (parseFloat(item.price) || 0) * qty;
+                    const optExtraSub = item.all_inclusive ? 0 : (item.selectedOptions || []).reduce((sm, o) => sm + (parseFloat(o.extra_price) || 0), 0);
+                    const clientTotal = ((parseFloat(item.price) || 0) + optExtraSub) * qty;
                     const supplierTotal = supplierPriceInDocCurrency * qty;
                     const marginAmt = clientTotal - supplierTotal;
                     const marginPct = clientTotal > 0 ? (marginAmt / clientTotal * 100) : 0;
@@ -1754,6 +1932,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   )}
                 </div>
               </div>
+              )}
             </div>
           ))}
         </div>
