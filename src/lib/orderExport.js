@@ -38,6 +38,24 @@ const toDataUrl = async (url) => {
   } catch { return null; }
 };
 
+// logo as data URL + natural size (for the aspect ratio)
+const loadLogo = async () => {
+  const data = await toDataUrl("/images/interasia-logo.png");
+  if (!data) return null;
+  return await new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      // the source is ~6000px wide; 700px is plenty for print
+      const k = Math.min(1, 700 / im.width), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext("2d").drawImage(im, 0, 0, c.width, c.height);
+      res({ data: c.toDataURL("image/png"), w: c.width, h: c.height });
+    };
+    im.onerror = () => res(null);
+    im.src = data;
+  });
+};
+
 export async function exportOrderPdf({ title, client, lines }) {
   const { jsPDF } = await import("jspdf");
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
@@ -45,6 +63,7 @@ export async function exportOrderPdf({ title, client, lines }) {
   const t = orderTotals(lines);
 
   // thumbnails first (a failed image just leaves the cell empty)
+  const logo = await loadLogo();
   const imgs = {};
   let i = 0;
   const pending = lines.filter(l => l.photo_url);
@@ -53,17 +72,23 @@ export async function exportOrderPdf({ title, client, lines }) {
   }));
 
   const cols = [
-    { k: "photo", label: "", w: 16 }, { k: "ref", label: "Ref. prov.", w: 26 }, { k: "name", label: "Producto", w: 62 },
-    { k: "qty", label: "Cant.", w: 16, right: true }, { k: "price", label: "Precio", w: 18, right: true }, { k: "total", label: "Total", w: 20, right: true },
-    { k: "cref", label: "Ref. cliente", w: 26 }, { k: "mk", label: "Marc.", w: 12 }, { k: "pack", label: "Empaque", w: 28 }, { k: "notes", label: "Notas", w: 53 },
+    { k: "photo", label: "", w: 16 }, { k: "ref", label: "Ref. prov.", w: 24 }, { k: "name", label: "Producto", w: 58 },
+    { k: "color", label: "Color", w: 28 },
+    { k: "qty", label: "Cant.", w: 15, right: true }, { k: "price", label: "Precio", w: 17, right: true }, { k: "total", label: "Total", w: 19, right: true },
+    { k: "cref", label: "Ref. cliente", w: 25 }, { k: "mk", label: "Marc.", w: 11 }, { k: "pack", label: "Empaque", w: 26 }, { k: "notes", label: "Notas", w: 38 },
   ];
+  const colX = {}; { let a = M; cols.forEach(c => { colX[c.k] = a; a += c.w; }); }
   let y = M;
   const header = (first) => {
     if (first) {
+      if (logo) {
+        const lh = 12, lw = Math.min(50, (logo.w / logo.h) * lh);
+        try { doc.addImage(logo.data, "PNG", W - M - lw, y, lw, lw * logo.h / logo.w); } catch { /* logo is optional */ }
+      }
       doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.text(title || "Pedido", M, y + 5);
       doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(110);
       doc.text(`${client || ""}   ·   ${new Date().toLocaleDateString("es-CO")}   ·   ${t.count} productos · ${t.units.toLocaleString()} unidades`, M, y + 11);
-      doc.setTextColor(0); y += 17;
+      doc.setTextColor(0); y += 18;
     }
     doc.setFillColor(243, 244, 246); doc.rect(M, y, W - 2 * M, 7, "F");
     doc.setFont("helvetica", "bold"); doc.setFontSize(8);
@@ -76,7 +101,7 @@ export async function exportOrderPdf({ title, client, lines }) {
   for (const l of lines) {
     const img = imgs[l._key || l.id];
     const cells = {
-      ref: l.supplier_ref || "", name: [lineLabel(l) === "(sin nombre)" ? "" : l.name, l.color ? `Color: ${l.color}` : "", l.supplier ? l.supplier : ""].filter(Boolean).join("\n"),
+      ref: l.supplier_ref || "", name: [lineLabel(l) === "(sin nombre)" ? "" : l.name, l.supplier || ""].filter(Boolean).join("\n"), color: l.color || "",
       qty: String(Number(l.qty) || 0), price: l.price ? num(l.price) : "", total: l.price ? num((Number(l.qty) || 0) * Number(l.price)) : "",
       cref: l.client_ref || "", mk: l.marking === true ? "SI" : l.marking === false ? "NO" : "", pack: l.packaging || "", notes: l.notes || "",
     };
@@ -85,7 +110,8 @@ export async function exportOrderPdf({ title, client, lines }) {
     let lineCount = 1;
     for (const c of cols) {
       if (c.k === "photo") continue;
-      wrapped[c.k] = doc.splitTextToSize(cells[c.k] || "", c.w - 3).slice(0, 4);
+      const hasSwatch = c.k === "color" && colorToHex(l.color);
+      wrapped[c.k] = doc.splitTextToSize(cells[c.k] || "", c.w - 3 - (hasSwatch ? 5 : 0)).slice(0, 4);
       lineCount = Math.max(lineCount, wrapped[c.k].length);
     }
     const rh = Math.max(img ? 15 : 0, lineCount * 3.6 + 3);
@@ -95,19 +121,20 @@ export async function exportOrderPdf({ title, client, lines }) {
       if (c.k === "photo") {
         if (img) { try { doc.addImage(img, img.startsWith("data:image/png") ? "PNG" : "JPEG", x + 1, y + 1, 13, 13); } catch { /* skip unreadable image */ } }
       } else {
-        wrapped[c.k].forEach((txt, n) => doc.text(txt, c.right ? x + c.w - 1.5 : x + 1.5, y + 4 + n * 3.6, { align: c.right ? "right" : "left" }));
+        const off = c.k === "color" && colorToHex(l.color) ? 5 : 0;
+        wrapped[c.k].forEach((txt, n) => doc.text(txt, c.right ? x + c.w - 1.5 : x + 1.5 + off, y + 4 + n * 3.6, { align: c.right ? "right" : "left" }));
       }
       x += c.w;
     }
     const hex = colorToHex(l.color);
-    if (hex) { doc.setFillColor(hex); doc.setDrawColor(180); doc.circle(M + cols[0].w + cols[1].w + cols[2].w - 3, y + 4.5, 1.6, "FD"); }
+    if (hex) { doc.setFillColor(hex); doc.setDrawColor(180); doc.circle(colX.color + 3.4, y + 3.2, 1.6, "FD"); }
     doc.setDrawColor(229, 231, 235); doc.line(M, y + rh, W - M, y + rh);
     y += rh;
   }
 
   if (y + 12 > H - M) { doc.addPage(); y = M; }
   doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-  doc.text(`TOTAL: ${t.units.toLocaleString()} unidades`, M + 16 + 26 + 62 + 16, y + 8, { align: "right" });
-  if (t.priced) doc.text(`Valor objetivo: ${num(t.value)}`, W - M - 1.5, y + 8, { align: "right" });
+  doc.text(`TOTAL: ${t.units.toLocaleString()} unidades`, colX.total + cols.find(c => c.k === "total").w - 1.5, y + 8, { align: "right" });
+  if (t.priced) doc.text(`Valor objetivo: ${num(t.value)}`, W - M - 1.5, y + 14, { align: "right" });
   doc.save(`${slug(title)}.pdf`);
 }
