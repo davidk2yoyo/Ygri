@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import { supabase } from "../supabaseClient";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { useClientPortal } from "./ClientPortalContext";
 import interasiaLogo from "../assets/images/logo/interasialogo.png";
@@ -77,7 +78,7 @@ const NAV = [
   },
 ];
 
-function NavItem({ item, onClick }) {
+function NavItem({ item, onClick, badge }) {
   return (
     <NavLink
       to={item.to}
@@ -92,7 +93,8 @@ function NavItem({ item, onClick }) {
       }
     >
       {item.icon}
-      <span>{item.label}</span>
+      <span className="flex-1">{item.label}</span>
+      {badge > 0 && <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{badge}</span>}
     </NavLink>
   );
 }
@@ -101,6 +103,14 @@ export default function ClientLayout() {
   const { session, logout } = useClientPortal();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!session?.session_id) return;
+    supabase.rpc("client_portal_get_client_orders", { p_session_id: session.session_id })
+      .then(({ data }) => setUnread((data || []).filter(o => o.unread).length));
+  }, [session?.session_id, location.pathname]);
 
   function handleLogout() {
     logout();
@@ -124,7 +134,7 @@ export default function ClientLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV.map(item => (
-            <NavItem key={item.to} item={item} />
+            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : 0} />
           ))}
         </nav>
 
@@ -175,7 +185,7 @@ export default function ClientLayout() {
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {NAV.map(item => (
-                <NavItem key={item.to} item={item} onClick={() => setMobileOpen(false)} />
+                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : 0} onClick={() => setMobileOpen(false)} />
               ))}
             </nav>
             <div className="px-3 py-4 border-t border-gray-100">

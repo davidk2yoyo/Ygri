@@ -26,6 +26,13 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [darkMode, toggleDarkMode] = useDarkMode();
   const { t, i18n } = useTranslation();
+  const [unreadOrders, setUnreadOrders] = useState(0);
+
+  // client orders the client touched since staff last opened them
+  useEffect(() => {
+    supabase.from("v_client_orders_unread").select("order_id", { count: "exact", head: true })
+      .then(({ count }) => setUnreadOrders(count || 0));
+  }, [location.pathname]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
@@ -406,7 +413,10 @@ export default function Layout() {
                       >
                         {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-green-600 dark:bg-green-400" />}
                         {item.icon}
-                        <span>{item.label}</span>
+                        <span className="flex-1">{item.label}</span>
+                        {item.path === "/client-orders" && unreadOrders > 0 && (
+                          <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{unreadOrders}</span>
+                        )}
                       </Link>
                     </li>
                   );

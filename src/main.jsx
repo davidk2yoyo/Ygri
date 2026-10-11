@@ -26,6 +26,7 @@ import PackingListEditorPage from "./pages/PackingListEditorPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ClientOrdersPage from "./pages/ClientOrdersPage";
 import SubirPedidoPage from "./portal/sections/SubirPedidoPage";
+import PedidoDetailPage from "./portal/sections/PedidoDetailPage";
 import PurchaseOrderNewPage from "./pages/PurchaseOrderNewPage";
 import PurchaseOrderDetailPage from "./pages/PurchaseOrderDetailPage";
 import InspectionReportsPage from "./pages/InspectionReportsPage";
@@ -119,6 +120,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
 <Route path="envios"    element={<MisEnviosPage />} />
           <Route path="ordenes"   element={<MisOrdenesPage />} />
           <Route path="pedidos" element={<SubirPedidoPage />} />
+          <Route path="pedidos/:id" element={<PedidoDetailPage />} />
           <Route path="documentos" element={<DocumentosPage />} />
           <Route path="reportes"  element={<MisReportesPage />} />
           <Route path="asistente" element={<AsistenteImportacionPage />} />

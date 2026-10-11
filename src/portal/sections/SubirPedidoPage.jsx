@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import { parseClientOrderWorkbook } from "../../lib/clientOrderParser";
@@ -6,8 +7,10 @@ import { parseClientOrderWorkbook } from "../../lib/clientOrderParser";
 const STATUS_LABEL = {
   submitted: ["Recibido", "bg-blue-100 text-blue-700"],
   draft: ["En revisión", "bg-amber-100 text-amber-700"],
+  in_review: ["En revisión", "bg-amber-100 text-amber-700"],
+  changes_requested: ["Cambios solicitados", "bg-amber-100 text-amber-700"],
   confirmed: ["Confirmado", "bg-green-100 text-green-700"],
-  quoted: ["Cotizado", "bg-green-100 text-green-700"],
+  quoted: ["Cotización lista", "bg-green-100 text-green-700"],
   ordered: ["En compra", "bg-green-100 text-green-700"],
   closed: ["Cerrado", "bg-gray-100 text-gray-600"],
 };
@@ -161,13 +164,13 @@ export default function SubirPedidoPage() {
           {mine.map(o => {
             const [label, color] = STATUS_LABEL[o.status] || [o.status, "bg-gray-100 text-gray-600"];
             return (
-              <div key={o.id} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between gap-3">
+              <Link key={o.id} to={`/clientes/pedidos/${o.id}`} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center justify-between gap-3 hover:border-blue-400 transition">
                 <div>
-                  <p className="text-sm font-medium text-gray-900">{o.reference || "Pedido"}</p>
-                  <p className="text-xs text-gray-500">{o.line_count} productos · {new Date(o.created_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}</p>
+                  <p className="text-sm font-medium text-gray-900">{o.reference || "Pedido"}{o.unread && <span className="ml-2 inline-block w-2 h-2 rounded-full bg-red-500 align-middle" title="Novedades de nuestro equipo" />}</p>
+                  <p className="text-xs text-gray-500">{o.line_count} productos · {new Date(o.created_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}{o.unread ? " · Novedades de nuestro equipo" : ""}</p>
                 </div>
                 <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${color}`}>{label}</span>
-              </div>
+              </Link>
             );
           })}
         </div>

@@ -735,6 +735,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
           all_inclusive: !!it.all_inclusive,
+          client_ref: it.client_ref || null,
+          client_order_line_id: it.client_order_line_id || null,
           sort_order: idx,
         };
       }));
