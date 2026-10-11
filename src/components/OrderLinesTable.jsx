@@ -49,13 +49,13 @@ function ColorField({ value, onChange, readOnly }) {
 function PhotoBox({ url, onPick, onClear, busy, readOnly }) {
   const ref = useRef(null);
   return (
-    <div className="flex-shrink-0 w-24">
-    <div className="relative group w-24 h-24">
+    <div className="flex-shrink-0 w-40">
+    <div className="relative group w-40 h-40">
       {url ? (
-        <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="" className="w-24 h-24 object-cover rounded-lg border border-gray-200" /></a>
+        <a href={url} target="_blank" rel="noreferrer"><img src={url} alt="" className="w-40 h-40 object-contain rounded-lg border border-gray-200 bg-white" /></a>
       ) : (
         <button type="button" disabled={readOnly} onClick={() => ref.current?.click()}
-          className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 flex flex-col items-center justify-center text-[11px] gap-0.5 disabled:hover:border-gray-300 disabled:hover:text-gray-400">
+          className="w-40 h-40 rounded-lg border-2 border-dashed border-gray-300 text-gray-400 hover:border-blue-400 hover:text-blue-500 flex flex-col items-center justify-center text-[11px] gap-0.5 disabled:hover:border-gray-300 disabled:hover:text-gray-400">
           {busy ? "Subiendo…" : readOnly ? "Sin foto" : <><span className="text-xl leading-none">+</span>Foto</>}
         </button>
       )}
@@ -163,9 +163,9 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
             <tr>
               <th className="px-3 py-2 w-10 text-left">#</th>
               <th className="px-2 py-2 w-14 text-left">Foto</th>
-              <th className="px-2 py-2 text-left min-w-[220px]">Producto</th>
-              <th className="px-2 py-2 text-left w-28">Ref. prov.</th>
               <th className="px-2 py-2 text-left w-32">Proveedor</th>
+              <th className="px-2 py-2 text-left w-28">Ref. prov.</th>
+              <th className="px-2 py-2 text-left min-w-[220px]">Producto</th>
               <th className="px-2 py-2 text-left w-40">Color</th>
               <th className="px-2 py-2 text-left w-24">Cant.</th>
               <th className="px-2 py-2 text-left w-28">Precio obj.</th>
@@ -186,16 +186,16 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                     <td className="px-2 py-1.5" onMouseEnter={() => setHover(l._key)} onMouseLeave={() => setHover(null)}
                       onClick={e => { if (canPhoto && !l.photo_url) { stop(e); thumbKey.current = l._key; thumbInput.current?.click(); } }}>
                       {busyPhoto[l._key] ? <div className="w-10 h-10 rounded-md bg-gray-100 text-[9px] text-gray-400 flex items-center justify-center">…</div>
-                        : l.photo_url ? <img src={l.photo_url} alt="" className="w-10 h-10 object-cover rounded-md border border-gray-200" />
+                        : l.photo_url ? <img src={l.photo_url} alt="" className="w-10 h-10 object-contain rounded-md border border-gray-200 bg-white" />
                         : <div className={`w-10 h-10 rounded-md border border-dashed border-gray-300 text-gray-300 flex items-center justify-center ${canPhoto ? "hover:border-blue-400 hover:text-blue-500" : ""}`}>{canPhoto ? "+" : ""}</div>}
                     </td>
+                    <td className="px-2 py-1.5 text-gray-600 truncate max-w-[8rem]">{l.supplier}</td>
+                    <td className="px-2 py-1.5 font-mono text-xs text-gray-600">{l.supplier_ref}</td>
                     <td className="px-2 py-1.5" onClick={readOnly ? undefined : stop}>
                       {readOnly ? <span className="font-medium text-gray-900">{l.name || "—"}</span>
                         : <input value={l.name} onChange={e => patch(l._key, { name: e.target.value })} placeholder="Nombre del producto"
                             className={`${cellInput} font-medium text-gray-900 ${p.id ? "border-red-400" : ""}`} />}
                     </td>
-                    <td className="px-2 py-1.5 font-mono text-xs text-gray-600">{l.supplier_ref}</td>
-                    <td className="px-2 py-1.5 text-gray-600 truncate max-w-[8rem]">{l.supplier}</td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-2 text-gray-700">
                         {hex && <span className="w-4 h-4 rounded-full border border-gray-300 flex-shrink-0" style={{ background: hex }} />}
