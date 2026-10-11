@@ -46,7 +46,12 @@ export default function SubirPedidoPage() {
     }
   };
 
-  const problems = lines.map((l, i) => ({ i, name: !l.name?.trim(), qty: !(Number(l.qty) > 0) })).filter(p => p.name || p.qty);
+  // a product must be identifiable (name, supplier ref or client ref) and have a quantity
+  const problems = lines.map((l, i) => ({
+    i,
+    id: !(l.name?.trim() || l.supplier_ref?.trim() || l.client_ref?.trim()),
+    qty: !(Number(l.qty) > 0),
+  })).filter(p => p.id || p.qty);
   const sheetsCount = new Set(lines.map(l => l.sheet)).size;
 
   const submit = async () => {
@@ -126,7 +131,7 @@ export default function SubirPedidoPage() {
                       <tr key={i} className={`border-t border-gray-100 ${bad ? "bg-red-50" : ""}`}>
                         <td className="px-2 py-1">{l.supplier || l.sheet}</td>
                         <td className="px-2 py-1 font-mono">{l.supplier_ref}</td>
-                        <td className="px-2 py-1">{l.name || <span className="text-red-500">falta nombre</span>}</td>
+                        <td className="px-2 py-1">{l.name || (l.supplier_ref || l.client_ref ? <span className="text-gray-400">—</span> : <span className="text-red-500">falta nombre o referencia</span>)}</td>
                         <td className="px-2 py-1">{l.color}</td>
                         <td className="px-2 py-1">{Number(l.qty) > 0 ? l.qty : <span className="text-red-500">falta</span>}</td>
                         <td className="px-2 py-1 font-mono">{l.client_ref}</td>
