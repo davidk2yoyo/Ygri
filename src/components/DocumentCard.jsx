@@ -65,8 +65,27 @@ function formatDate(dateString) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-export default function DocumentCard({ document, onEdit, onDelete, onPreview, viewMode = "grid" }) {
-  const typeConfig = DOCUMENT_TYPES[document.document_type] || DOCUMENT_TYPES.other;
+export default function DocumentCard({ document, onEdit, onDelete, onPreview, viewMode = "grid", types = DOCUMENT_TYPES, onToggleVisible }) {
+  const typeConfig = types[document.document_type] || types.other || DOCUMENT_TYPES.other;
+
+  const visibilityBadge = onToggleVisible ? (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggleVisible(document); }}
+      title={document.show_to_client ? "Visible in client portal — click to hide" : "Hidden from client portal — click to publish"}
+      className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 transition ${
+        document.show_to_client
+          ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+          : "bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100"
+      }`}
+    >
+      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {document.show_to_client
+          ? <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></>
+          : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M3 3l18 18" />}
+      </svg>
+      {document.show_to_client ? "Client sees it" : "Hidden"}
+    </button>
+  ) : null;
 
   if (viewMode === "list") {
     return (
@@ -86,6 +105,7 @@ export default function DocumentCard({ document, onEdit, onDelete, onPreview, vi
               <span className={`text-xs px-2 py-0.5 rounded-full ${typeConfig.color} shrink-0`}>
                 {typeConfig.label}
               </span>
+              {visibilityBadge}
             </div>
             <div className="flex items-center gap-3 text-xs text-bgray-500 dark:text-bgray-400">
               <span>{document.file_name}</span>
@@ -158,9 +178,12 @@ export default function DocumentCard({ document, onEdit, onDelete, onPreview, vi
     >
       {/* Type badge */}
       <div className="flex items-start justify-between mb-3">
-        <span className={`text-xs px-2 py-1 rounded-lg font-medium ${typeConfig.color}`}>
-          {typeConfig.label}
-        </span>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className={`text-xs px-2 py-1 rounded-lg font-medium ${typeConfig.color}`}>
+            {typeConfig.label}
+          </span>
+          {visibilityBadge}
+        </div>
         <div className="flex items-center gap-1">
           {onEdit && (
             <button
@@ -231,5 +254,16 @@ export default function DocumentCard({ document, onEdit, onDelete, onPreview, vi
     </div>
   );
 }
+
+export const CLIENT_DOCUMENT_TYPES = {
+  packing_list: { label: "Packing List", color: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" },
+  invoice: { label: "Invoice", color: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
+  proforma: { label: "Proforma", color: "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400" },
+  quotation: { label: "Quotation", color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+  bl: { label: "Bill of Lading", color: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" },
+  certificate: { label: "Certificate", color: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
+  client_order: { label: "Client Order", color: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400" },
+  other: { label: "Other", color: "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400" },
+};
 
 export { DOCUMENT_TYPES };

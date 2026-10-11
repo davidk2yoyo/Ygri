@@ -2,25 +2,26 @@ import React, { useState, useEffect } from "react";
 import { supabase } from "../supabaseClient";
 import { sileo } from "sileo";
 import FileUpload from "./FileUpload";
-import DocumentCard, { DOCUMENT_TYPES } from "./DocumentCard";
+import DocumentCard, { CLIENT_DOCUMENT_TYPES as DOCUMENT_TYPES } from "./DocumentCard";
 
-function DocumentModal({ document, clientId, quotations, onClose, onSaved }) {
+function DocumentModal({ document, clientId, quotations, tracks, shipments, onClose, onSaved }) {
   const [form, setForm] = useState({
     name: document?.name || "",
-    document_type: document?.document_type || "catalog",
+    document_type: document?.document_type || "packing_list",
     quotation_id: document?.quotation_id || "",
+    track_id: document?.track_id || "",
+    shipment_id: document?.shipment_id || "",
     notes: document?.notes || "",
-    validity_date: document?.validity_date || "",
-    amount: document?.amount || "",
     reference_number: document?.reference_number || "",
-    status: document?.status || "pending",
+    show_to_client: document?.show_to_client ?? false,
   });
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
 
   const isNew = !document?.id;
-  const isQuotation = form.document_type === "quotation";
+  const trackShipments = shipments.filter(sh => !form.track_id || sh.track_id === form.track_id);
+  const trackQuotations = quotations.filter(q => !form.track_id || q.track_id === form.track_id);
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -66,18 +67,17 @@ function DocumentModal({ document, clientId, quotations, onClose, onSaved }) {
         name: form.name.trim(),
         document_type: form.document_type,
         quotation_id: form.quotation_id || null,
+        track_id: form.track_id || null,
+        shipment_id: form.shipment_id || null,
         notes: form.notes.trim() || null,
         file_url: fileUrl,
         file_name: fileName,
         file_size: fileSize,
-        validity_date: form.validity_date || null,
-        amount: form.amount || null,
         reference_number: form.reference_number.trim() || null,
-        status: form.status,
+        show_to_client: !!form.show_to_client,
       };
 
       if (isNew) {
-        console.log("Attempting to insert document:", docData);
         const { data, error } = await supabase
           .from("client_documents")
           .insert(docData)
@@ -174,7 +174,7 @@ function DocumentModal({ document, clientId, quotations, onClose, onSaved }) {
               type="text"
               value={form.name}
               onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-              placeholder="e.g., Product Catalog 2024 Q1"
+              placeholder="e.g., Packing list — shipment 1"
               className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
             />
           </div>
@@ -195,89 +195,72 @@ function DocumentModal({ document, clientId, quotations, onClose, onSaved }) {
             </select>
           </div>
 
-          {/* Quotation linking */}
-          <div>
-            <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-2 uppercase tracking-wide">
-              Link to Quotation (Optional)
-            </label>
-            <select
-              value={form.quotation_id}
-              onChange={e => setForm(p => ({ ...p, quotation_id: e.target.value }))}
-              className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-            >
-              <option value="">No quotation</option>
-              {quotations.map(q => (
-                <option key={q.id} value={q.id}>
-                  {[q.client_name, q.project_name].filter(Boolean).join(" · ")}
-                  {q.client_name || q.project_name ? ` (${q.quote_number})` : q.quote_number}
-                </option>
-              ))}
-            </select>
+          {/* Project / shipment / quotation association */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-2 uppercase tracking-wide">Project</label>
+              <select
+                value={form.track_id}
+                onChange={e => setForm(p => ({ ...p, track_id: e.target.value, shipment_id: "", quotation_id: "" }))}
+                className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+              >
+                <option value="">No project</option>
+                {tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-2 uppercase tracking-wide">Shipment</label>
+              <select
+                value={form.shipment_id}
+                onChange={e => {
+                  const sh = shipments.find(x => x.id === e.target.value);
+                  setForm(p => ({ ...p, shipment_id: e.target.value, track_id: sh ? sh.track_id : p.track_id }));
+                }}
+                className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+              >
+                <option value="">No shipment</option>
+                {trackShipments.map(sh => (
+                  <option key={sh.id} value={sh.id}>{sh.tracking_number}{sh.description ? ` · ${sh.description}` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-2 uppercase tracking-wide">System quotation / invoice</label>
+              <select
+                value={form.quotation_id}
+                onChange={e => setForm(p => ({ ...p, quotation_id: e.target.value }))}
+                className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+              >
+                <option value="">None</option>
+                {trackQuotations.map(q => (
+                  <option key={q.id} value={q.id}>{q.quote_number}{q.project_name ? ` · ${q.project_name}` : ""}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-2 uppercase tracking-wide">Reference no.</label>
+              <input
+                type="text"
+                value={form.reference_number}
+                onChange={e => setForm(p => ({ ...p, reference_number: e.target.value }))}
+                placeholder="e.g. PL-0005, BL number…"
+                className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+              />
+            </div>
           </div>
 
-          {/* Quotation-specific fields */}
-          {isQuotation && (
-            <div className="grid grid-cols-2 gap-4 p-4 bg-bgray-50 dark:bg-darkblack-500 rounded-lg">
-              <div className="col-span-2 text-xs font-semibold text-bgray-600 dark:text-bgray-300 uppercase tracking-wide mb-1">
-                Quotation Details
-              </div>
-
-              <div>
-                <label className="block text-xs text-bgray-600 dark:text-bgray-300 mb-1.5">
-                  Reference Number
-                </label>
-                <input
-                  type="text"
-                  value={form.reference_number}
-                  onChange={e => setForm(p => ({ ...p, reference_number: e.target.value }))}
-                  placeholder="QT-2024-001"
-                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-bgray-600 dark:text-bgray-300 mb-1.5">
-                  Amount
-                </label>
-                <input
-                  type="number"
-                  value={form.amount}
-                  onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
-                  placeholder="0.00"
-                  step="0.01"
-                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-bgray-600 dark:text-bgray-300 mb-1.5">
-                  Validity Date
-                </label>
-                <input
-                  type="date"
-                  value={form.validity_date}
-                  onChange={e => setForm(p => ({ ...p, validity_date: e.target.value }))}
-                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-bgray-600 dark:text-bgray-300 mb-1.5">
-                  Status
-                </label>
-                <select
-                  value={form.status}
-                  onChange={e => setForm(p => ({ ...p, status: e.target.value }))}
-                  className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
-                  <option value="expired">Expired</option>
-                </select>
-              </div>
-            </div>
-          )}
+          <label className="flex items-start gap-3 p-3 rounded-lg border border-bgray-200 dark:border-darkblack-400 bg-bgray-50 dark:bg-darkblack-500 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.show_to_client}
+              onChange={e => setForm(p => ({ ...p, show_to_client: e.target.checked }))}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-darkblack-700 dark:text-white">Visible in the client portal</span>
+              <span className="block text-xs text-bgray-500 dark:text-bgray-400">Off by default — the client only sees documents you publish.</span>
+            </span>
+          </label>
 
           {/* Notes */}
           <div>
@@ -407,10 +390,12 @@ function DocumentPreviewModal({ document, onClose }) {
 export default function ClientDocumentsTab({ clientId }) {
   const [documents, setDocuments] = useState([]);
   const [quotations, setQuotations] = useState([]);
+  const [tracks, setTracks] = useState([]);
+  const [shipments, setShipments] = useState([]);
+  const [filterShipment, setFilterShipment] = useState("");
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState("grid");
   const [filterType, setFilterType] = useState("");
-  const [filterQuotation, setFilterQuotation] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [modalDocument, setModalDocument] = useState(undefined); // undefined = closed, null = new, obj = edit
   const [previewDocument, setPreviewDocument] = useState(null);
@@ -442,14 +427,23 @@ export default function ClientDocumentsTab({ clientId }) {
 
       setDocuments(docsWithQuotation);
 
-      // Load quotations for dropdown
-      const { data: quotationsData, error: quotationsError } = await supabase
-        .from("quotations")
-        .select("id, quote_number, client_name, project_name")
-        .order("quote_number", { ascending: false });
-
-      if (quotationsError) throw quotationsError;
-      setQuotations(quotationsData || []);
+      // Projects, shipments and quotations that belong to this client
+      const { data: tracksData, error: tracksError } = await supabase
+        .from("tracks").select("id, name").eq("client_id", clientId).order("name");
+      if (tracksError) throw tracksError;
+      setTracks(tracksData || []);
+      const trackIds = (tracksData || []).map(t => t.id);
+      if (trackIds.length) {
+        const [{ data: shData }, { data: qData }] = await Promise.all([
+          supabase.from("shipments").select("id, track_id, tracking_number, description").in("track_id", trackIds).order("created_at", { ascending: false }),
+          supabase.from("quotations").select("id, track_id, quote_number, project_name").in("track_id", trackIds).order("quote_number", { ascending: false }),
+        ]);
+        setShipments(shData || []);
+        setQuotations(qData || []);
+      } else {
+        setShipments([]);
+        setQuotations([]);
+      }
     } catch (e) {
       console.error("Error loading documents:", e);
     } finally {
@@ -489,17 +483,28 @@ export default function ClientDocumentsTab({ clientId }) {
     }
   };
 
+  const handleToggleVisible = async (doc) => {
+    const next = !doc.show_to_client;
+    setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, show_to_client: next } : d));
+    const { error } = await supabase.from("client_documents").update({ show_to_client: next }).eq("id", doc.id);
+    if (error) {
+      setDocuments(prev => prev.map(d => d.id === doc.id ? { ...d, show_to_client: !next } : d));
+      sileo.error({ title: "Could not update visibility", description: error.message });
+    }
+  };
+
   // Filter documents
   const filtered = documents.filter(doc => {
     if (filterType && doc.document_type !== filterType) return false;
-    if (filterQuotation && doc.quotation_id !== filterQuotation) return false;
+    if (filterShipment && doc.shipment_id !== filterShipment) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return (
         doc.name.toLowerCase().includes(query) ||
         doc.file_name.toLowerCase().includes(query) ||
         doc.notes?.toLowerCase().includes(query) ||
-        doc.quotation_number?.toLowerCase().includes(query)
+        doc.quotation_number?.toLowerCase().includes(query) ||
+        doc.reference_number?.toLowerCase().includes(query)
       );
     }
     return true;
@@ -561,30 +566,17 @@ export default function ClientDocumentsTab({ clientId }) {
           ))}
         </select>
 
-        {/* Quotation filter */}
-        <div className="relative">
-          <select
-            value={filterQuotation}
-            onChange={e => setFilterQuotation(e.target.value)}
-            className="appearance-none px-3 py-2 pr-8 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary cursor-pointer"
-          >
-            <option value="">All Quotations</option>
-            {quotations.map(q => (
-              <option key={q.id} value={q.id}>
-                {[q.client_name, q.project_name].filter(Boolean).join(" · ")}
-                {q.client_name || q.project_name ? ` (${q.quote_number})` : q.quote_number}
-              </option>
-            ))}
-          </select>
-          <svg
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-bgray-500 pointer-events-none"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
+        {/* Shipment filter */}
+        <select
+          value={filterShipment}
+          onChange={e => setFilterShipment(e.target.value)}
+          className="px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
+        >
+          <option value="">All shipments</option>
+          {shipments.map(sh => (
+            <option key={sh.id} value={sh.id}>{sh.tracking_number}{sh.description ? ` · ${sh.description}` : ""}</option>
+          ))}
+        </select>
 
         {/* View toggle */}
         <div className="flex items-center gap-1 bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-1">
@@ -632,7 +624,7 @@ export default function ClientDocumentsTab({ clientId }) {
           </div>
           <p className="text-bgray-500 dark:text-bgray-400 text-sm">
             {documents.length === 0
-              ? "No documents yet. Upload your first document."
+              ? "No documents yet. Upload a packing list, invoice or BL and link it to a shipment."
               : "No documents match your filters."}
           </p>
           {documents.length === 0 && (
@@ -658,6 +650,8 @@ export default function ClientDocumentsTab({ clientId }) {
               onEdit={(d) => setModalDocument(d)}
               onDelete={handleDelete}
               onPreview={(d) => setPreviewDocument(d)}
+              types={DOCUMENT_TYPES}
+              onToggleVisible={handleToggleVisible}
             />
           ))}
         </div>
@@ -669,6 +663,8 @@ export default function ClientDocumentsTab({ clientId }) {
           document={modalDocument}
           clientId={clientId}
           quotations={quotations}
+          tracks={tracks}
+          shipments={shipments}
           onClose={() => setModalDocument(undefined)}
           onSaved={handleSaved}
         />

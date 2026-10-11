@@ -7,6 +7,9 @@ const TYPE_CONFIG = {
   bl:           { label: "BL",             icon: "🚢", color: "bg-indigo-50 text-indigo-700" },
   packing_list: { label: "Packing List",   icon: "📦", color: "bg-amber-50 text-amber-700" },
   certificate:  { label: "Certificado",    icon: "📋", color: "bg-green-50 text-green-700" },
+  proforma:     { label: "Proforma",       icon: "🧾", color: "bg-cyan-50 text-cyan-700" },
+  quotation:    { label: "Cotización",     icon: "📋", color: "bg-green-50 text-green-700" },
+  client_order: { label: "Pedido",         icon: "🛒", color: "bg-purple-50 text-purple-700" },
   other:        { label: "Otro",           icon: "📄", color: "bg-gray-50 text-gray-600" },
 };
 
@@ -22,6 +25,7 @@ const DOC_TYPES = Object.keys(TYPE_CONFIG);
 export default function DocumentosPage() {
   const { session } = useClientPortal();
   const [rows, setRows] = useState([]);
+  const [shipments, setShipments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
@@ -29,17 +33,31 @@ export default function DocumentosPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const { data, error } = await supabase.rpc("client_portal_get_documents", {
-        p_session_id: session.session_id,
-      });
+      const [{ data, error }, { data: ships }] = await Promise.all([
+        supabase.rpc("client_portal_get_documents", { p_session_id: session.session_id }),
+        supabase.rpc("client_portal_get_shipments", { p_session_id: session.session_id }),
+      ]);
       if (error) setError(error.message);
       else setRows(data || []);
+      setShipments(ships || []);
       setLoading(false);
     }
     load();
   }, [session.session_id]);
 
   const filtered = filter === "all" ? rows : rows.filter(r => r.document_type === filter);
+
+  // group documents under the shipment they belong to; the rest go under "General"
+  const shipmentTitle = (id) => {
+    const sh = shipments.find(x => x.id === id);
+    return sh ? `Envío ${sh.tracking_number}${sh.description ? ` · ${sh.description}` : ""}` : "Envío";
+  };
+  const groups = [
+    ...shipments
+      .map(sh => ({ key: sh.id, title: shipmentTitle(sh.id), docs: filtered.filter(d => d.shipment_id === sh.id) }))
+      .filter(g => g.docs.length),
+    { key: "general", title: "General", docs: filtered.filter(d => !d.shipment_id || !shipments.some(sh => sh.id === d.shipment_id)) },
+  ].filter(g => g.docs.length);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -97,9 +115,11 @@ export default function DocumentosPage() {
         </div>
       )}
 
-      {!loading && filtered.length > 0 && (
+      {!loading && filtered.length > 0 && groups.map(group => (
+        <div key={group.key} className="mb-6">
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">{group.title}</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {filtered.map(doc => {
+          {group.docs.map(doc => {
             const cfg = TYPE_CONFIG[doc.document_type] || TYPE_CONFIG.other;
             return (
               <div key={doc.id} className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-sm transition">
@@ -117,6 +137,7 @@ export default function DocumentosPage() {
                         <span className="text-xs text-gray-400">{formatSize(doc.file_size)}</span>
                       )}
                     </div>
+                    {doc.reference_number && <p className="text-xs text-gray-500 mt-0.5">Ref: {doc.reference_number}</p>}
                     {doc.notes && (
                       <p className="text-xs text-gray-500 mt-1 line-clamp-2">{doc.notes}</p>
                     )}
@@ -143,7 +164,8 @@ export default function DocumentosPage() {
             );
           })}
         </div>
-      )}
+        </div>
+      ))}
 
       {!loading && filtered.length === 0 && rows.length > 0 && (
         <div className="text-center py-12 text-gray-400 text-sm">
