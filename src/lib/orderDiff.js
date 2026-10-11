@@ -13,6 +13,7 @@ export const ORDER_FIELDS = [
   ["marking", "Marcación"],
   ["packaging", "Empaque"],
   ["notes", "Notas"],
+  ["photo_url", "Foto"],
 ];
 
 let keySeq = 0;
@@ -36,7 +37,7 @@ export const lineFromDb = (r) => ({
 export const lineToRpc = (l) => ({
   id: l.id || null, sheet_name: l.sheet_name, supplier: l.supplier, supplier_ref: l.supplier_ref, name: l.name,
   color: l.color, qty: l.qty === "" ? null : l.qty, price: l.price === "" ? null : l.price, client_ref: l.client_ref,
-  brand: l.brand, marking: l.marking, packaging: l.packaging, notes: l.notes,
+  brand: l.brand, marking: l.marking, packaging: l.packaging, notes: l.notes, photo_url: l.photo_url || null,
 });
 
 // editable line -> client_order_lines columns (staff direct writes)
@@ -78,7 +79,7 @@ export function diffLines(before, after) {
 export const hasChanges = (d) => d.added.length + d.removed.length + d.changed.length > 0;
 
 const fieldName = Object.fromEntries(ORDER_FIELDS);
-const show = (f, v) => (v == null ? "—" : f === "marking" ? (v ? "SI" : "NO") : String(v));
+const show = (f, v) => (f === "photo_url" ? (v ? "con foto" : "sin foto") : v == null ? "—" : f === "marking" ? (v ? "SI" : "NO") : String(v));
 
 // -> array of short human strings for the log
 export function describeChanges(c) {

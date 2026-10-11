@@ -4,7 +4,7 @@ import { sileo } from "sileo";
 import { supabase } from "../supabaseClient";
 import { parseClientOrderWorkbook } from "../lib/clientOrderParser";
 import OrderLinesTable from "../components/OrderLinesTable";
-import OrderEventLog from "../components/OrderEventLog";
+import { OrderHistoryButton } from "../components/OrderEventLog";
 import { createProjectAndQuotation, sendQuotationToClient } from "../lib/orderToQuotation";
 import { diffLines, hasChanges, describeChanges, lineFromDb, lineToDb, lineProblems } from "../lib/orderDiff";
 
@@ -365,6 +365,13 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
     await supabase.from("client_orders").update({ updated_at: new Date().toISOString() }).eq("id", order.id);
   });
 
+  const uploadPhoto = async (blob) => {
+    const path = `${order.id}/${crypto.randomUUID()}.jpg`;
+    const { error: e } = await supabase.storage.from("client-orders").upload(path, blob, { contentType: "image/jpeg" });
+    if (e) throw e;
+    return supabase.storage.from("client-orders").getPublicUrl(path).data.publicUrl;
+  };
+
   const doConvert = () => run(async () => {
     const t = await createProjectAndQuotation(supabase, {
       order, lines, projectName: convert.name, workflow: convert.workflow, showToClient: convert.publish, actorName: await actor(),
@@ -402,6 +409,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           <p className="text-sm text-bgray-500">{order.clients?.company_name} · {lines.length} lines · {totalQty.toLocaleString()} units</p>
         </div>
         <div className="flex items-center gap-2">
+          <OrderHistoryButton events={events} viewer="staff" />
           <select value={order.status} onChange={e => changeStatus(e.target.value)} disabled={busy} className={`${inputCls} py-1.5 text-sm`}>
             {Object.keys(STATUS_STYLE).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
@@ -459,9 +467,10 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
         {staleQuotation && <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">The order changed after the quotation was created — review the quotation in the project and update it before sending.</p>}
       </div>
 
-      <div className="grid xl:grid-cols-[1fr_300px] gap-6 items-start">
+      <div>
         <div className="bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4">
-          <OrderLinesTable lines={lines} onChange={setLines} />
+          <OrderLinesTable lines={lines} onChange={setLines} uploadPhoto={uploadPhoto}
+            exportMeta={{ title: order.reference || order.source_file_name || "Pedido", client: order.clients?.company_name }} />
           <div className="mt-4 border-t border-bgray-100 pt-4">
             {dirty && (
               <ul className="mb-3 list-disc pl-4 text-xs text-bgray-500 space-y-0.5">
@@ -482,10 +491,6 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           </div>
         </div>
 
-        <aside className="bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4">
-          <p className="text-sm font-semibold text-darkblack-700 dark:text-white mb-3">History</p>
-          <OrderEventLog events={events} viewer="staff" />
-        </aside>
       </div>
     </div>
   );

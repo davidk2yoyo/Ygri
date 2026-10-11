@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import OrderLinesTable from "../../components/OrderLinesTable";
-import OrderEventLog from "../../components/OrderEventLog";
+import { OrderHistoryButton } from "../../components/OrderEventLog";
 import { diffLines, hasChanges, lineFromDb, lineProblems, lineToRpc, describeChanges, lineLabel } from "../../lib/orderDiff";
 
 const STATUS_LABEL = {
@@ -71,6 +71,13 @@ export default function PedidoDetailPage() {
     } finally { setBusy(false); }
   };
 
+  const uploadPhoto = async (blob) => {
+    const path = `${crypto.randomUUID()}/foto.jpg`;
+    const { error: e } = await supabase.storage.from("client-portal-uploads").upload(path, blob, { contentType: "image/jpeg" });
+    if (e) throw e;
+    return supabase.storage.from("client-portal-uploads").getPublicUrl(path).data.publicUrl;
+  };
+
   const save = () => run(async () => {
     const { error: e } = await supabase.rpc("client_portal_update_order", {
       p_session_id: session.session_id, p_order_id: id, p_base_revision: order.revision,
@@ -97,14 +104,17 @@ export default function PedidoDetailPage() {
   const quotation = data.quotation;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       <Link to="/clientes/pedidos" className="text-sm text-gray-500 hover:text-blue-600">← Mis pedidos</Link>
       <div className="flex items-start justify-between flex-wrap gap-3 mt-2 mb-5">
         <div>
           <h1 className="text-xl font-bold text-gray-900">{order.reference || order.source_file_name || "Pedido"}</h1>
           <p className="text-sm text-gray-500 mt-0.5">{lines.length} productos · enviado el {new Date(order.created_at).toLocaleDateString("es-CO", { day: "2-digit", month: "short", year: "numeric" })}</p>
         </div>
-        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${color}`}>{label}</span>
+        <div className="flex items-center gap-2">
+          <OrderHistoryButton events={data.events} viewer="client" highlight={!!staffNote} />
+          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${color}`}>{label}</span>
+        </div>
       </div>
 
       {staffNote && (
@@ -163,13 +173,14 @@ export default function PedidoDetailPage() {
         </div>
       )}
 
-      <div className="grid lg:grid-cols-[1fr_300px] gap-6 items-start">
+      <div>
         <div className="bg-white rounded-xl border border-gray-200 p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm font-semibold text-gray-900">Tu pedido</p>
             {!editable && <span className="text-xs text-gray-400">Pedido confirmado: ya no se puede editar</span>}
           </div>
-          <OrderLinesTable lines={lines} onChange={setLines} readOnly={!editable} />
+          <OrderLinesTable lines={lines} onChange={setLines} readOnly={!editable} uploadPhoto={uploadPhoto}
+            exportMeta={{ title: order.reference || "Pedido", client: session.client_name }} />
 
           {editable && (
             <div className="mt-4 border-t border-gray-100 pt-4">
@@ -198,10 +209,6 @@ export default function PedidoDetailPage() {
           )}
         </div>
 
-        <aside className="bg-white rounded-xl border border-gray-200 p-5">
-          <p className="text-sm font-semibold text-gray-900 mb-3">Historial</p>
-          <OrderEventLog events={data.events} viewer="client" />
-        </aside>
       </div>
     </div>
   );

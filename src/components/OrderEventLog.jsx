@@ -45,3 +45,28 @@ export default function OrderEventLog({ events, viewer }) {
     </ol>
   );
 }
+
+// Button + popup so the history doesn't take space from the order itself
+export function OrderHistoryButton({ events, viewer, highlight = false, title = "Historial" }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)}
+        className="relative px-3 py-1.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-white/5">
+        {title} ({events?.length || 0})
+        {highlight && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-red-500" />}
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
+          <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 dark:border-darkblack-400">
+              <p className="text-base font-semibold text-gray-900 dark:text-white">{title}</p>
+              <button onClick={() => setOpen(false)} className="text-2xl leading-none text-gray-400 hover:text-gray-700">×</button>
+            </div>
+            <div className="p-5 overflow-y-auto"><OrderEventLog events={events} viewer={viewer} /></div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
