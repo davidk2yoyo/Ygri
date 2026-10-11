@@ -96,7 +96,25 @@ function StatPill({ count, label, color }) {
   );
 }
 
-function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, onDragStart }) {
+function VisibilityToggle({ project, onToggle }) {
+  if (!onToggle) return null;
+  const on = !!project.show_to_client;
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onToggle(project); }}
+      title={on ? "Visible to the client in their portal — click to hide" : "Hidden from the client — click to publish this order"}
+      className={`p-0.5 rounded transition-colors ${on ? "text-green-600 hover:bg-green-50" : "text-bgray-300 hover:text-bgray-500 hover:bg-bgray-100"}`}
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {on
+          ? <><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></>
+          : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M3 3l18 18" />}
+      </svg>
+    </button>
+  );
+}
+
+function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, onDragStart, onToggleVisibility }) {
   const progress = Number(project.progress_pct) || 0;
   const progressColor = getProgressColor(progress);
   const overdue = isOverdue(project.next_due_date);
@@ -124,6 +142,7 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, 
           <div className="flex items-center gap-1.5 flex-shrink-0">
             {overdue && <span className="text-[9px] font-bold text-red-500 bg-red-50 px-1 py-0.5 rounded">LATE</span>}
             <span className={`text-[10px] font-semibold ${progressColor.text}`}>{progress}%</span>
+            <VisibilityToggle project={project} onToggle={onToggleVisibility} />
             <KebabMenu onRename={onRename} onCancel={onCancel} />
           </div>
         </div>
@@ -151,7 +170,10 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, 
           <div className="font-semibold text-darkblack-700 dark:text-white text-sm leading-tight line-clamp-2 flex-1">
             {project.track_name}
           </div>
-          <KebabMenu onRename={onRename} onCancel={onCancel} />
+          <div className="flex items-center gap-0.5">
+            <VisibilityToggle project={project} onToggle={onToggleVisibility} />
+            <KebabMenu onRename={onRename} onCancel={onCancel} />
+          </div>
         </div>
 
         {/* Client */}
@@ -188,7 +210,7 @@ function ProjectCard({ project, isActive, onClick, compact, onRename, onCancel, 
   );
 }
 
-function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect, compact, onRename, onCancel, draggingProject, onDrop, onDragStart }) {
+function PipelineColumn({ stageName, color, projects, activeProjectId, onProjectSelect, compact, onRename, onCancel, draggingProject, onDrop, onDragStart, onToggleVisibility }) {
   const [isDragOver, setIsDragOver] = useState(false);
   const colWidth = compact ? "w-44" : "w-56";
 
@@ -230,6 +252,7 @@ function PipelineColumn({ stageName, color, projects, activeProjectId, onProject
               onRename={() => onRename?.(project)}
               onCancel={() => onCancel?.(project)}
               onDragStart={() => onDragStart?.(project)}
+              onToggleVisibility={onToggleVisibility}
             />
           ))}
         </AnimatePresence>
@@ -243,7 +266,7 @@ function PipelineColumn({ stageName, color, projects, activeProjectId, onProject
   );
 }
 
-export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "", compact = false, onRename, onCancel, onMoveProject }) {
+export default function PipelineView({ projects, onProjectSelect, activeProjectId, searchQuery = "", compact = false, onRename, onCancel, onMoveProject, onToggleVisibility }) {
   const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState("Product");
   const [draggingProject, setDraggingProject] = useState(null);
@@ -322,6 +345,7 @@ export default function PipelineView({ projects, onProjectSelect, activeProjectI
               compact={compact}
               onRename={onRename}
               onCancel={onCancel}
+              onToggleVisibility={onToggleVisibility}
               draggingProject={draggingProject}
               onDragStart={setDraggingProject}
               onDrop={(project, targetStage) => {

@@ -24,6 +24,8 @@ const FIELD_BY_HEADER = {
   CANTIDAD: "qty",
   "NUEVO PEDIDO": "qty",
   PRECIO: "price",
+  "PRECIO OBJETIVO": "price",
+  MARCA: "brand",
   "PRECIO UNIT USD": "price",
   TOTAL: "total",
   "TOTAL USD": "total",
@@ -191,6 +193,20 @@ export async function parseClientOrderWorkbook(arrayBuffer) {
     s.imageCount = s.lines.filter((l) => l.image).length;
     return s;
   });
+
+  // Template layout: ONE sheet with a PROVEEDOR column -> one logical sheet per supplier
+  const supplierSheets = sheets.filter(s => s.kind === "supplier");
+  if (supplierSheets.length === 1 && new Set(supplierSheets[0].lines.map(l => l.supplier).filter(Boolean)).size > 1) {
+    const only = supplierSheets[0];
+    const groups = {};
+    only.lines.forEach(l => { (groups[l.supplier || only.name] ||= []).push(l); });
+    const split = Object.entries(groups).map(([name, lines]) => ({
+      ...only, name, lines, imageCount: lines.filter(l => l.image).length,
+    }));
+    const others = sheets.filter(s => s !== only);
+    sheets.length = 0;
+    sheets.push(...split, ...others);
+  }
 
   const readImage = async (path) => zip.file(path)?.async("blob");
   return { sheets, readImage };

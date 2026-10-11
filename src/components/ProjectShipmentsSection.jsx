@@ -114,6 +114,8 @@ const BLANK_FORM = {
   origin: "",
   destination: "",
   estimated_delivery: "",
+  kind: "shipment",
+  show_to_client: true,
 };
 
 function map17Status(status) {
@@ -239,6 +241,8 @@ export default function ProjectShipmentsSection({ trackId }) {
       origin: shipment.origin || "",
       destination: shipment.destination || "",
       estimated_delivery: shipment.estimated_delivery || "",
+      kind: shipment.kind || "shipment",
+      show_to_client: shipment.show_to_client ?? true,
     });
     setModalOpen(true);
   };
@@ -265,6 +269,8 @@ export default function ProjectShipmentsSection({ trackId }) {
         origin: form.origin.trim(),
         destination: form.destination.trim(),
         estimated_delivery: form.estimated_delivery || null,
+        kind: form.kind,
+        show_to_client: !!form.show_to_client,
         track_id: trackId,
       };
       if (editingId) {
@@ -627,6 +633,20 @@ export default function ProjectShipmentsSection({ trackId }) {
                   <p className="text-[11px] text-bgray-400 mt-1">Required for domestic {form.carrier} — last 4 digits of recipient phone</p>
                 </div>
               )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Type</label>
+                  <select value={form.kind} onChange={(e) => setForm(f => ({ ...f, kind: e.target.value }))} className={inputClass}>
+                    <option value="shipment">Shipment</option>
+                    <option value="sample">Sample (muestra)</option>
+                  </select>
+                </div>
+                <label className="flex items-end gap-2 pb-2 text-sm text-darkblack-700 dark:text-white cursor-pointer">
+                  <input type="checkbox" checked={form.show_to_client} onChange={(e) => setForm(f => ({ ...f, show_to_client: e.target.checked }))} />
+                  Visible to the client
+                </label>
+              </div>
 
               {/* Description */}
               <div>

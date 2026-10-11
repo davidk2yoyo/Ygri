@@ -26,6 +26,7 @@ export default function DocumentosPage() {
   const { session } = useClientPortal();
   const [rows, setRows] = useState([]);
   const [shipments, setShipments] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
@@ -33,10 +34,12 @@ export default function DocumentosPage() {
   useEffect(() => {
     async function load() {
       setLoading(true);
-      const [{ data, error }, { data: ships }] = await Promise.all([
+      const [{ data, error }, { data: ships }, { data: ords }] = await Promise.all([
         supabase.rpc("client_portal_get_documents", { p_session_id: session.session_id }),
         supabase.rpc("client_portal_get_shipments", { p_session_id: session.session_id }),
+        supabase.rpc("client_portal_get_orders", { p_session_id: session.session_id }),
       ]);
+      setOrders(ords || []);
       if (error) setError(error.message);
       else setRows(data || []);
       setShipments(ships || []);
@@ -47,17 +50,22 @@ export default function DocumentosPage() {
 
   const filtered = filter === "all" ? rows : rows.filter(r => r.document_type === filter);
 
-  // group documents under the shipment they belong to; the rest go under "General"
-  const shipmentTitle = (id) => {
-    const sh = shipments.find(x => x.id === id);
-    return sh ? `Envío ${sh.tracking_number}${sh.description ? ` · ${sh.description}` : ""}` : "Envío";
-  };
-  const groups = [
-    ...shipments
-      .map(sh => ({ key: sh.id, title: shipmentTitle(sh.id), docs: filtered.filter(d => d.shipment_id === sh.id) }))
-      .filter(g => g.docs.length),
-    { key: "general", title: "General", docs: filtered.filter(d => !d.shipment_id || !shipments.some(sh => sh.id === d.shipment_id)) },
-  ].filter(g => g.docs.length);
+  // group: order (project) -> shipment; documents without a project go under "General"
+  const shipmentTitle = (sh) => `${sh.kind === "sample" ? "Muestra" : "Envío"} ${sh.tracking_number}${sh.description ? ` · ${sh.description}` : ""}`;
+  const groups = [];
+  orders.forEach(o => {
+    const inOrder = filtered.filter(d => d.track_id === o.track_id);
+    if (!inOrder.length) return;
+    const orderShipments = shipments.filter(sh => sh.track_id === o.track_id);
+    orderShipments.forEach(sh => {
+      const docs = inOrder.filter(d => d.shipment_id === sh.id);
+      if (docs.length) groups.push({ key: `${o.track_id}-${sh.id}`, title: `${o.track_name} › ${shipmentTitle(sh)}`, docs });
+    });
+    const rest = inOrder.filter(d => !orderShipments.some(sh => sh.id === d.shipment_id));
+    if (rest.length) groups.push({ key: `${o.track_id}-rest`, title: o.track_name, docs: rest });
+  });
+  const general = filtered.filter(d => !orders.some(o => o.track_id === d.track_id));
+  if (general.length) groups.push({ key: "general", title: "General", docs: general });
 
   return (
     <div className="p-6 max-w-5xl mx-auto">

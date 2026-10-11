@@ -661,14 +661,17 @@ export default function ProjectsPage() {
   const fetchTracksOverview = async () => {
     try {
       setLoading(true);
-      const [overviewRes, quotRes, shipRes, stagesRes, todosRes] = await Promise.all([
+      const [overviewRes, quotRes, shipRes, stagesRes, todosRes, visRes] = await Promise.all([
         supabase.from("v_tracks_overview").select("*").order("created_at", { ascending: false }),
         supabase.from("quotations").select("track_id"),
         supabase.from("shipments").select("track_id, status"),
         supabase.from("track_stages").select("id, track_id"),
         supabase.from("stage_todos").select("track_stage_id, is_done"),
+        supabase.from("tracks").select("id, show_to_client"),
       ]);
       if (overviewRes.error) throw overviewRes.error;
+      const visibleMap = {};
+      (visRes.data ?? []).forEach(t => { visibleMap[t.id] = !!t.show_to_client; });
 
       // Build count maps
       const quotCounts = {};
@@ -691,6 +694,7 @@ export default function ProjectsPage() {
         quotation_count: quotCounts[r.track_id] || 0,
         shipment_count: shipCounts[r.track_id] || 0,
         task_count: taskCounts[r.track_id] || 0,
+        show_to_client: visibleMap[r.track_id] || false,
       }));
 
       const activeProjects = rows.filter(r =>
@@ -1176,6 +1180,14 @@ export default function ProjectsPage() {
                     onRename={(project) => { setRenamingTrackId(project.track_id); setRenameValue(project.track_name); }}
                     onCancel={(project) => handleDeleteProject(project)}
                     onMoveProject={handleMoveProject}
+                    onToggleVisibility={async (project) => {
+                      const next = !project.show_to_client;
+                      const patch = (list) => list.map(p => p.track_id === project.track_id ? { ...p, show_to_client: next } : p);
+                      setOverview(patch);
+                      const { error: rpcErr } = await supabase.rpc("admin_toggle_track_client_visibility", { p_track_id: project.track_id, p_visible: next });
+                      if (rpcErr) { setOverview(list => list.map(p => p.track_id === project.track_id ? { ...p, show_to_client: !next } : p)); sileo.error({ title: "Could not change visibility", description: rpcErr.message }); }
+                      else if (detail?.track?.id === project.track_id) loadTrackDetail();
+                    }}
                   />
                 </div>
               ) : (

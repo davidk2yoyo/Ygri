@@ -171,7 +171,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">Estado de tus proyectos</h2>
-            <Link to="/clientes/carga" className="text-xs text-blue-600 hover:underline">Ver detalle →</Link>
+            <Link to="/clientes/ordenes" className="text-xs text-blue-600 hover:underline">Ver detalle →</Link>
           </div>
           {tracks.length === 0
             ? <EmptyState icon="📦" text="Sin proyectos visibles aún" />

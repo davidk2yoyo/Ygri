@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import { parseClientOrderWorkbook } from "../lib/clientOrderParser";
 
 const STATUS_STYLE = {
+  submitted: "bg-purple-100 text-purple-700",
   draft: "bg-gray-100 text-gray-600",
   confirmed: "bg-blue-100 text-blue-700",
   quoted: "bg-amber-100 text-amber-700",
@@ -396,7 +397,7 @@ export default function ClientOrdersPage() {
             <tbody>
               {orders.map(o => (
                 <tr key={o.id} onClick={() => setSelected(o)} className="border-t border-bgray-100 hover:bg-bgray-50 dark:hover:bg-darkblack-500 cursor-pointer">
-                  <td className="px-5 py-3 font-semibold text-darkblack-700 dark:text-white">{o.reference || o.source_file_name}</td>
+                  <td className="px-5 py-3 font-semibold text-darkblack-700 dark:text-white">{o.reference || o.source_file_name}{o.source === "portal" && <span className="ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-700">FROM CLIENT</span>}</td>
                   <td className="px-5 py-3 text-bgray-600">{o.clients?.company_name}</td>
                   <td className="px-5 py-3 text-right">{o.client_order_lines?.[0]?.count ?? 0}</td>
                   <td className="px-5 py-3"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLE[o.status]}`}>{o.status}</span></td>
