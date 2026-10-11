@@ -57,6 +57,98 @@ function TagInput({ tags, onChange }) {
   );
 }
 
+function PortalAccessPanel({ client }) {
+  const [email, setEmail] = useState(client.email || "");
+  const [password, setPassword] = useState("");
+  const [hasAccess, setHasAccess] = useState(null);
+  const [currentEmail, setCurrentEmail] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    async function check() {
+      const { data } = await supabase.rpc("admin_get_client_portal_info", { p_client_id: client.id });
+      if (data?.length) {
+        setHasAccess(data[0].has_access);
+        if (data[0].email) { setCurrentEmail(data[0].email); setEmail(data[0].email); }
+      } else {
+        setHasAccess(false);
+      }
+    }
+    check();
+  }, [client.id]);
+
+  async function handleSave() {
+    if (!email.trim() || !password) { setMsg({ type: "error", text: "Email and password are required." }); return; }
+    if (password.length < 8) { setMsg({ type: "error", text: "Password must be at least 8 characters." }); return; }
+    setBusy(true); setMsg(null);
+    const { error } = await supabase.rpc("admin_upsert_client_portal_user", {
+      p_client_id: client.id, p_email: email.trim(), p_password: password,
+    });
+    setBusy(false);
+    if (error) { setMsg({ type: "error", text: error.message }); return; }
+    setMsg({ type: "success", text: hasAccess ? "Password updated." : "Portal access created." });
+    setHasAccess(true); setCurrentEmail(email.trim()); setPassword("");
+  }
+
+  async function handleRevoke() {
+    if (!window.confirm(`Remove portal access for ${client.company_name}?`)) return;
+    setBusy(true);
+    await supabase.rpc("admin_remove_client_portal_user", { p_client_id: client.id });
+    setBusy(false);
+    setHasAccess(false); setCurrentEmail(""); setPassword("");
+    setMsg({ type: "success", text: "Access removed." });
+  }
+
+  const inputCls = "w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400";
+  return (
+    <div className="p-6 max-w-lg space-y-4">
+      <div>
+        <h3 className="text-base font-bold text-darkblack-700 dark:text-white">Client portal access</h3>
+        <p className="text-sm text-bgray-500 mt-0.5">Create the login for {client.company_name}. They sign in at <span className="font-mono">/clientes/login</span> and only see documents you mark as visible.</p>
+      </div>
+
+      {hasAccess && (
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-green-50 border border-green-200 rounded-lg">
+          <span className="w-2 h-2 rounded-full bg-green-500" />
+          <span className="text-sm text-green-700 font-medium">Active access</span>
+          <span className="text-xs text-green-600">— {currentEmail}</span>
+        </div>
+      )}
+      {hasAccess === false && (
+        <div className="flex items-center gap-2 px-3 py-2.5 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-lg">
+          <span className="w-2 h-2 rounded-full bg-bgray-400" />
+          <span className="text-sm text-bgray-600 dark:text-bgray-300">No portal access yet</span>
+        </div>
+      )}
+
+      <div>
+        <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Login email</label>
+        <input type="email" value={email} onChange={e => setEmail(e.target.value)} className={inputCls} />
+      </div>
+      <div>
+        <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">{hasAccess ? "New password" : "Password"}</label>
+        <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Minimum 8 characters" autoComplete="new-password" className={inputCls} />
+      </div>
+
+      {msg && (
+        <div className={`px-3 py-2 rounded-lg text-sm ${msg.type === "error" ? "bg-red-50 text-red-600 border border-red-200" : "bg-green-50 text-green-700 border border-green-200"}`}>{msg.text}</div>
+      )}
+
+      <div className="flex gap-2">
+        <button onClick={handleSave} disabled={busy} className="flex-1 py-2.5 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition">
+          {busy ? "Saving..." : hasAccess ? "Update password" : "Create access"}
+        </button>
+        {hasAccess && (
+          <button onClick={handleRevoke} disabled={busy} className="px-4 py-2.5 bg-red-50 text-red-600 text-sm font-medium rounded-lg hover:bg-red-100 disabled:opacity-50 border border-red-200 transition">
+            Revoke
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ClientDrawer({ client, onClose, onSaved }) {
   const [form, setForm] = useState(client ? { ...client, tags: client.tags || [] } : { ...EMPTY_CLIENT });
   const [busy, setBusy] = useState(false);
@@ -208,6 +300,18 @@ function ClientDrawer({ client, onClose, onSaved }) {
               Documents
             </button>
           )}
+          {!isNew && (
+            <button
+              onClick={() => setActiveTab("portal")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "portal"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Portal
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -295,6 +399,8 @@ function ClientDrawer({ client, onClose, onSaved }) {
                 </div>
               </div>
             </div>
+          ) : activeTab === "portal" ? (
+            <PortalAccessPanel client={client} />
           ) : (
             <ClientDocumentsTab clientId={client.id} />
           )}
