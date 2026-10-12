@@ -372,6 +372,19 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
     return supabase.storage.from("client-orders").getPublicUrl(path).data.publicUrl;
   };
 
+  const deleteOrder = async () => {
+    const extra = order.track_id || order.quotation_id ? "\n\nEl proyecto y la cotización ligados NO se borran." : "";
+    if (!window.confirm(`Delete order "${order.reference || order.source_file_name}"? Its ${lines.length} lines and history are removed. This cannot be undone.${extra}`)) return;
+    setBusy(true); setError("");
+    // the hidden copy of the client's file kept in client documents goes too
+    if (order.source_file_url) await supabase.from("client_documents").delete().eq("client_id", order.client_id).eq("document_type", "client_order").eq("file_url", order.source_file_url);
+    const { error: e } = await supabase.from("client_orders").delete().eq("id", order.id);
+    setBusy(false);
+    if (e) { setError(e.message); return; }
+    sileo.success({ title: "Order deleted" });
+    onChanged(); onBack();
+  };
+
   const doConvert = () => run(async () => {
     const t = await createProjectAndQuotation(supabase, {
       order, lines, projectName: convert.name, workflow: convert.workflow, showToClient: convert.publish, actorName: await actor(),
@@ -414,6 +427,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
             {Object.keys(STATUS_STYLE).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {order.source_file_url && <a href={order.source_file_url} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Original file</a>}
+          <button onClick={deleteOrder} disabled={busy} className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Delete order</button>
         </div>
       </div>
 

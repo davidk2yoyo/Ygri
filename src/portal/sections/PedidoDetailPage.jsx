@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import OrderLinesTable from "../../components/OrderLinesTable";
@@ -29,6 +29,7 @@ const toEditable = (l) => lineFromDb({
 
 export default function PedidoDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { session } = useClientPortal();
   const [data, setData] = useState(null);
   const [lines, setLines] = useState([]);
@@ -78,6 +79,17 @@ export default function PedidoDetailPage() {
     return supabase.storage.from("client-portal-uploads").getPublicUrl(path).data.publicUrl;
   };
 
+  // only while nobody on our side has picked it up (no quotation yet, early status)
+  const deletable = order && !order.quotation_id && ["submitted", "in_review", "draft"].includes(order.status);
+  const deleteOrder = async () => {
+    if (!window.confirm("¿Borrar este pedido? Se eliminan sus productos y su historial. No se puede deshacer.")) return;
+    setBusy(true); setError("");
+    const { error: e } = await supabase.rpc("client_portal_delete_order", { p_session_id: session.session_id, p_order_id: id });
+    setBusy(false);
+    if (e) { setError(e.message); return; }
+    navigate("/clientes/pedidos", { replace: true });
+  };
+
   const save = () => run(async () => {
     const { error: e } = await supabase.rpc("client_portal_update_order", {
       p_session_id: session.session_id, p_order_id: id, p_base_revision: order.revision,
@@ -113,6 +125,7 @@ export default function PedidoDetailPage() {
         </div>
         <div className="flex items-center gap-2">
           <OrderHistoryButton events={data.events} viewer="client" highlight={!!staffNote} />
+          {deletable && <button onClick={deleteOrder} disabled={busy} className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Borrar pedido</button>}
           <span className={`px-3 py-1 rounded-full text-xs font-semibold ${color}`}>{label}</span>
         </div>
       </div>
