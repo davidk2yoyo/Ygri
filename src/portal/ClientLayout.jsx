@@ -104,12 +104,16 @@ export default function ClientLayout() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [unreadDocs, setUnreadDocs] = useState(0);
   const location = useLocation();
 
   useEffect(() => {
     if (!session?.session_id) return;
     supabase.rpc("client_portal_get_client_orders", { p_session_id: session.session_id })
       .then(({ data }) => setUnread((data || []).filter(o => o.unread).length));
+    // the Documentos page marks them seen when it loads, so this is read before that on navigation
+    supabase.rpc("client_portal_documents_unread", { p_session_id: session.session_id })
+      .then(({ data }) => setUnreadDocs(location.pathname.endsWith("/documentos") ? 0 : (data || 0)));
   }, [session?.session_id, location.pathname]);
 
   function handleLogout() {
@@ -134,7 +138,7 @@ export default function ClientLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {NAV.map(item => (
-            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : 0} />
+            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} />
           ))}
         </nav>
 
@@ -185,7 +189,7 @@ export default function ClientLayout() {
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {NAV.map(item => (
-                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : 0} onClick={() => setMobileOpen(false)} />
+                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} onClick={() => setMobileOpen(false)} />
               ))}
             </nav>
             <div className="px-3 py-4 border-t border-gray-100">

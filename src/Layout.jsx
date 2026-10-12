@@ -27,11 +27,14 @@ export default function Layout() {
   const [darkMode, toggleDarkMode] = useDarkMode();
   const { t, i18n } = useTranslation();
   const [unreadOrders, setUnreadOrders] = useState(0);
+  const [unreadDocs, setUnreadDocs] = useState(0);
 
   // client orders the client touched since staff last opened them
   useEffect(() => {
     supabase.from("v_client_orders_unread").select("order_id", { count: "exact", head: true })
       .then(({ count }) => setUnreadOrders(count || 0));
+    supabase.from("v_client_documents_unread").select("unread")
+      .then(({ data }) => setUnreadDocs((data || []).reduce((n, r) => n + (r.unread || 0), 0)));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -242,6 +245,16 @@ export default function Layout() {
       )
     },
     {
+      section: "Pipeline",
+      path: "/client-documents",
+      label: "Client Documents",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z" />
+        </svg>
+      )
+    },
+    {
       section: "Sourcing",
       path: "/items",
       label: "Items",
@@ -414,8 +427,8 @@ export default function Layout() {
                         {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-green-600 dark:bg-green-400" />}
                         {item.icon}
                         <span className="flex-1">{item.label}</span>
-                        {item.path === "/client-orders" && unreadOrders > 0 && (
-                          <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{unreadOrders}</span>
+                        {((item.path === "/client-orders" && unreadOrders > 0) || (item.path === "/client-documents" && unreadDocs > 0)) && (
+                          <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{item.path === "/client-orders" ? unreadOrders : unreadDocs}</span>
                         )}
                       </Link>
                     </li>

@@ -25,6 +25,7 @@ import AnnexPublicPage from "./pages/AnnexPublicPage";
 import PackingListEditorPage from "./pages/PackingListEditorPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ClientOrdersPage from "./pages/ClientOrdersPage";
+import ClientDocumentsPage from "./pages/ClientDocumentsPage";
 import SubirPedidoPage from "./portal/sections/SubirPedidoPage";
 import PedidoDetailPage from "./portal/sections/PedidoDetailPage";
 import PurchaseOrderNewPage from "./pages/PurchaseOrderNewPage";
@@ -83,6 +84,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/quotations/:quotationId/annex" element={<AnnexEditorPage />} />
           <Route path="/quotations/:quotationId/packing-list" element={<PackingListEditorPage />} />
           <Route path="/client-orders" element={<ClientOrdersPage />} />
+          <Route path="/client-documents" element={<ClientDocumentsPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="/purchase-orders/new" element={<PurchaseOrderNewPage />} />
           <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
