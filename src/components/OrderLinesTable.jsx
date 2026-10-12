@@ -59,15 +59,14 @@ function PhotoBox({ url, onPick, onClear, busy, readOnly }) {
           {busy ? "Subiendo…" : readOnly ? "Sin foto" : <><span className="text-xl leading-none">+</span>Foto</>}
         </button>
       )}
-      {!readOnly && url && (
-        <div className="absolute inset-x-0 bottom-0 hidden group-hover:flex rounded-b-lg overflow-hidden text-[10px] font-medium text-white">
-          <button type="button" onClick={() => ref.current?.click()} className="flex-1 bg-black/60 hover:bg-black/80 py-1">{busy ? "…" : "Cambiar"}</button>
-          <button type="button" onClick={onClear} className="px-2 bg-red-600/80 hover:bg-red-600 py-1">×</button>
-        </div>
-      )}
       <input ref={ref} type="file" accept="image/*" className="hidden" onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onPick(f); }} />
     </div>
-    {!readOnly && <p className="mt-1 text-[10px] text-gray-400 text-center leading-tight">Clic para subir<br />o pega con Ctrl+V</p>}
+    {!readOnly && (url ? (
+      <div className="mt-1.5 flex gap-1.5">
+        <button type="button" onClick={() => ref.current?.click()} className="flex-1 px-2 py-1 border border-gray-300 rounded-md text-[11px] font-medium text-gray-700 hover:bg-gray-50">{busy ? "Subiendo…" : "Cambiar"}</button>
+        <button type="button" onClick={onClear} className="flex-1 px-2 py-1 border border-red-200 rounded-md text-[11px] font-medium text-red-600 hover:bg-red-50">Borrar foto</button>
+      </div>
+    ) : <p className="mt-1 text-[10px] text-gray-400 text-center leading-tight">Clic para subir<br />o pega con Ctrl+V</p>)}
     </div>
   );
 }
@@ -169,7 +168,7 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
               <th className="px-2 py-2 text-left w-40">Color</th>
               <th className="px-2 py-2 text-left w-24">Cant.</th>
               <th className="px-2 py-2 text-left w-28">Precio obj.</th>
-              <th className="w-8" />
+              <th className="w-20" />
             </tr>
           </thead>
           <tbody>
@@ -210,7 +209,10 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                       {readOnly ? <span>{l.price || "—"}</span>
                         : <input type="number" min="0" step="any" value={l.price} onChange={e => patch(l._key, { price: e.target.value })} className={cellInput} />}
                     </td>
-                    <td className="px-2 text-gray-400 text-xs">{open ? "▲" : "▼"}</td>
+                    <td className="px-2 whitespace-nowrap text-xs text-gray-400">
+                      {!readOnly && <button type="button" title="Borrar producto" onClick={e => { stop(e); remove(l._key); }} className="mr-2 px-1.5 py-0.5 rounded text-gray-400 hover:text-red-600 hover:bg-red-50 text-base leading-none">🗑</button>}
+                      {open ? "▲" : "▼"}
+                    </td>
                   </tr>
 
                   {open && (
@@ -250,10 +252,12 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                               {readOnly ? <p className="text-sm text-gray-700 whitespace-pre-wrap">{l.notes || "—"}</p>
                                 : <textarea value={l.notes} rows={2} onChange={e => patch(l._key, { notes: e.target.value })} placeholder="Instrucciones, detalles, observaciones…" className={`${inputCls} resize-y`} />}
                             </Field>
+                            {!readOnly && (
+                              <div className="col-span-2 md:col-span-12 flex justify-end">
+                                <button type="button" onClick={() => remove(l._key)} className="px-3 py-1.5 border border-red-200 rounded-lg text-xs font-medium text-red-600 hover:bg-red-50">Borrar este producto</button>
+                              </div>
+                            )}
                           </div>
-                          {!readOnly && (
-                            <button type="button" onClick={() => remove(l._key)} className="self-start text-xs text-red-500 hover:text-red-700 whitespace-nowrap">Quitar producto</button>
-                          )}
                         </div>
                       </td>
                     </tr>
