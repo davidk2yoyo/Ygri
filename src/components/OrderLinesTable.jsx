@@ -46,6 +46,39 @@ function ColorField({ value, onChange, readOnly }) {
   );
 }
 
+// Text input that suggests this client's previously-ordered items as they type —
+// used on name / supplier ref / client ref, the fields that identify a product.
+// Matches against whichever field is focused so looking up by item number works
+// just as well as looking up by product name.
+function SuggestInput({ value, onChange, onSelect, suggestions, open, onOpen, onClose, placeholder, className }) {
+  const typed = (value || "").trim().toLowerCase();
+  const matches = suggestions.length
+    ? (typed
+        ? suggestions.filter(s => [s.name, s.supplier_ref, s.client_ref].some(v => String(v || "").toLowerCase().includes(typed)))
+        : suggestions
+      ).slice(0, 8)
+    : [];
+  return (
+    <div className="relative">
+      <input value={value ?? ""} onChange={e => onChange(e.target.value)}
+        onFocus={onOpen} onBlur={() => setTimeout(onClose, 150)}
+        placeholder={placeholder} className={className} />
+      {open && matches.length > 0 && (
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+          {matches.map((s, i) => (
+            <button key={i} type="button"
+              onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onSelect(s); }}
+              className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0">
+              <div className="font-medium text-gray-900 truncate">{s.name || "(sin nombre)"}</div>
+              <div className="text-gray-500 truncate">{[s.supplier_ref, s.color, s.brand].filter(Boolean).join(" · ") || "—"}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PhotoBox({ url, onPick, onClear, busy, readOnly }) {
   const ref = useRef(null);
   return (
@@ -89,11 +122,18 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
 
   const patch = (key, p) => onChange(lines.map(l => (l._key === key ? { ...l, ...p } : l)));
   const remove = (key) => { onChange(lines.filter(l => l._key !== key)); setExpanded(null); };
-  // fills in everything we already know about a previously-ordered item, not just its name
+  // fills in everything we already know about a previously-ordered item, not just whichever field matched
   const selectSuggestion = (key, s) => {
     patch(key, { name: s.name || "", supplier_ref: s.supplier_ref || "", client_ref: s.client_ref || "", color: s.color || "", brand: s.brand || "", supplier: s.supplier || "" });
     setAcOpen(null);
   };
+  // acOpen identifies which row+field's dropdown is open, e.g. { key: l._key, field: "supplier_ref" }
+  const acProps = (l, field) => ({
+    suggestions: readOnly ? [] : suggestions,
+    open: acOpen?.key === l._key && acOpen?.field === field,
+    onOpen: () => setAcOpen({ key: l._key, field }),
+    onClose: () => setAcOpen(o => (o?.key === l._key && o?.field === field ? null : o)),
+  });
   const add = () => { const n = emptyLine(lines[lines.length - 1]?.sheet_name || ""); onChange([...lines, n]); setExpanded(n._key); };
   const totals = useMemo(() => orderTotals(lines), [lines]);
   const canPhoto = !readOnly && !!uploadPhoto;
@@ -183,13 +223,6 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
               const bad = p.id || p.qty;
               const open = expanded === l._key;
               const hex = colorToHex(l.color);
-              const typed = (l.name || "").trim().toLowerCase();
-              const matches = (!readOnly && suggestions.length > 0)
-                ? (typed
-                    ? suggestions.filter(s => [s.name, s.supplier_ref, s.client_ref].some(v => String(v || "").toLowerCase().includes(typed)))
-                    : suggestions
-                  ).slice(0, 8)
-                : [];
               return (
                 <React.Fragment key={l._key}>
                   <tr onClick={() => setExpanded(open ? null : l._key)}
@@ -203,27 +236,12 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                     </td>
                     <td className="px-2 py-1.5 text-gray-600 truncate max-w-[8rem]">{l.supplier}</td>
                     <td className="px-2 py-1.5 font-mono text-xs text-gray-600">{l.supplier_ref}</td>
-                    <td className="px-2 py-1.5 relative" onClick={readOnly ? undefined : stop}>
+                    <td className="px-2 py-1.5" onClick={readOnly ? undefined : stop}>
                       {readOnly ? <span className="font-medium text-gray-900">{l.name || "—"}</span> : (
-                        <>
-                          <input value={l.name} onChange={e => patch(l._key, { name: e.target.value })}
-                            onFocus={() => setAcOpen(l._key)}
-                            onBlur={() => setTimeout(() => setAcOpen(o => (o === l._key ? null : o)), 150)}
-                            placeholder="Nombre del producto"
-                            className={`${cellInput} font-medium text-gray-900 ${p.id ? "border-red-400" : ""}`} />
-                          {acOpen === l._key && matches.length > 0 && (
-                            <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
-                              {matches.map((s, i) => (
-                                <button key={i} type="button"
-                                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); selectSuggestion(l._key, s); }}
-                                  className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0">
-                                  <div className="font-medium text-gray-900 truncate">{s.name || "(sin nombre)"}</div>
-                                  <div className="text-gray-500 truncate">{[s.supplier_ref, s.color, s.brand].filter(Boolean).join(" · ") || "—"}</div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
+                        <SuggestInput value={l.name} onChange={v => patch(l._key, { name: v })}
+                          onSelect={s => selectSuggestion(l._key, s)} {...acProps(l, "name")}
+                          placeholder="Nombre del producto"
+                          className={`${cellInput} font-medium text-gray-900 ${p.id ? "border-red-400" : ""}`} />
                       )}
                     </td>
                     <td className="px-2 py-1.5">
@@ -256,7 +274,10 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                           </div>
                           <div className="flex-1 min-w-0 grid grid-cols-2 md:grid-cols-12 gap-x-3 gap-y-3">
                             <Field label="Ref. proveedor" className="col-span-1 md:col-span-3">
-                              {readOnly ? <p className="text-sm font-mono">{l.supplier_ref || "—"}</p> : <input value={l.supplier_ref} onChange={e => patch(l._key, { supplier_ref: e.target.value })} className={inputCls} />}
+                              {readOnly ? <p className="text-sm font-mono">{l.supplier_ref || "—"}</p> : (
+                                <SuggestInput value={l.supplier_ref} onChange={v => patch(l._key, { supplier_ref: v })}
+                                  onSelect={s => selectSuggestion(l._key, s)} {...acProps(l, "supplier_ref")} className={inputCls} />
+                              )}
                             </Field>
                             <Field label="Proveedor" className="col-span-1 md:col-span-3">
                               {readOnly ? <p className="text-sm">{l.supplier || "—"}</p> : <input value={l.supplier} onChange={e => patch(l._key, { supplier: e.target.value })} className={inputCls} />}
@@ -265,7 +286,10 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                               <ColorField value={l.color} readOnly={readOnly} onChange={v => patch(l._key, { color: v })} />
                             </Field>
                             <Field label="Ref. cliente" className="col-span-1 md:col-span-3">
-                              {readOnly ? <p className="text-sm font-mono">{l.client_ref || "—"}</p> : <input value={l.client_ref} onChange={e => patch(l._key, { client_ref: e.target.value })} className={inputCls} />}
+                              {readOnly ? <p className="text-sm font-mono">{l.client_ref || "—"}</p> : (
+                                <SuggestInput value={l.client_ref} onChange={v => patch(l._key, { client_ref: v })}
+                                  onSelect={s => selectSuggestion(l._key, s)} {...acProps(l, "client_ref")} className={inputCls} />
+                              )}
                             </Field>
                             <Field label="Marca" className="col-span-1 md:col-span-3">
                               {readOnly ? <p className="text-sm">{l.brand || "—"}</p> : <input value={l.brand} onChange={e => patch(l._key, { brand: e.target.value })} className={inputCls} />}
