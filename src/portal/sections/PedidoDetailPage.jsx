@@ -5,6 +5,7 @@ import { useClientPortal } from "../ClientPortalContext";
 import OrderLinesTable from "../../components/OrderLinesTable";
 import { OrderHistoryButton } from "../../components/OrderEventLog";
 import { diffLines, hasChanges, lineFromDb, lineProblems, lineToRpc, describeChanges, lineLabel } from "../../lib/orderDiff";
+import { uploadPortalPhoto } from "../lib/uploadPortalPhoto";
 
 const STATUS_LABEL = {
   submitted: ["Recibido", "bg-blue-100 text-blue-700"],
@@ -34,6 +35,7 @@ export default function PedidoDetailPage() {
   const [data, setData] = useState(null);
   const [lines, setLines] = useState([]);
   const [original, setOriginal] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -50,6 +52,12 @@ export default function PedidoDetailPage() {
     setLines(ed); setOriginal(ed); setLoading(false);
   }, [id, session.session_id]);
   useEffect(() => { load(); }, [load]);
+
+  // fetched once, independent of order reloads — this client's past items don't change mid-edit
+  useEffect(() => {
+    supabase.rpc("client_portal_get_my_items", { p_session_id: session.session_id })
+      .then(({ data }) => setSuggestions(data || []));
+  }, [session.session_id]);
 
   const order = data?.order;
   const editable = order && CLIENT_EDITABLE.includes(order.status);
@@ -72,13 +80,6 @@ export default function PedidoDetailPage() {
       const m = e.message || "No pudimos completar la acción.";
       setError(m.startsWith("conflict") ? "Nuestro equipo modificó este pedido mientras lo editabas. Recarga para ver los cambios y vuelve a aplicar los tuyos." : m);
     } finally { setBusy(false); }
-  };
-
-  const uploadPhoto = async (blob) => {
-    const path = `${crypto.randomUUID()}/foto.jpg`;
-    const { error: e } = await supabase.storage.from("client-portal-uploads").upload(path, blob, { contentType: "image/jpeg" });
-    if (e) throw e;
-    return supabase.storage.from("client-portal-uploads").getPublicUrl(path).data.publicUrl;
   };
 
   // only while nobody on our side has picked it up (no quotation yet, early status)
@@ -236,8 +237,8 @@ export default function PedidoDetailPage() {
             <p className="text-sm font-semibold text-gray-900">Tu pedido</p>
             {!editable && <span className="text-xs text-gray-400">Pedido confirmado: ya no se puede editar</span>}
           </div>
-          <OrderLinesTable lines={lines} onChange={setLines} readOnly={!editable} uploadPhoto={uploadPhoto}
-            exportMeta={{ title: order.reference || "Pedido", client: session.client_name }} />
+          <OrderLinesTable lines={lines} onChange={setLines} readOnly={!editable} uploadPhoto={uploadPortalPhoto}
+            suggestions={suggestions} exportMeta={{ title: order.reference || "Pedido", client: session.client_name }} />
 
           {editable && (
             <div className="mt-4 border-t border-gray-100 pt-4">

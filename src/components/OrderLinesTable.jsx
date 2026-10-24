@@ -76,18 +76,24 @@ function PhotoBox({ url, onPick, onClear, busy, readOnly }) {
 //  lines: orderDiff "editable line" shape · onChange(nextLines)
 //  uploadPhoto(blob) -> public url (omit to hide photo upload)
 //  exportMeta {title, client} shows the Excel/PDF buttons
-export default function OrderLinesTable({ lines, onChange, readOnly = false, uploadPhoto, exportMeta }) {
+export default function OrderLinesTable({ lines, onChange, readOnly = false, uploadPhoto, exportMeta, suggestions = [] }) {
   const [q, setQ] = useState("");
   const [busyPhoto, setBusyPhoto] = useState({});
   const [exporting, setExporting] = useState("");
   const [err, setErr] = useState("");
   const [expanded, setExpanded] = useState(null);
   const [hover, setHover] = useState(null);
+  const [acOpen, setAcOpen] = useState(null);
   const thumbInput = useRef(null);
   const thumbKey = useRef(null);
 
   const patch = (key, p) => onChange(lines.map(l => (l._key === key ? { ...l, ...p } : l)));
   const remove = (key) => { onChange(lines.filter(l => l._key !== key)); setExpanded(null); };
+  // fills in everything we already know about a previously-ordered item, not just its name
+  const selectSuggestion = (key, s) => {
+    patch(key, { name: s.name || "", supplier_ref: s.supplier_ref || "", client_ref: s.client_ref || "", color: s.color || "", brand: s.brand || "", supplier: s.supplier || "" });
+    setAcOpen(null);
+  };
   const add = () => { const n = emptyLine(lines[lines.length - 1]?.sheet_name || ""); onChange([...lines, n]); setExpanded(n._key); };
   const totals = useMemo(() => orderTotals(lines), [lines]);
   const canPhoto = !readOnly && !!uploadPhoto;
@@ -177,6 +183,13 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
               const bad = p.id || p.qty;
               const open = expanded === l._key;
               const hex = colorToHex(l.color);
+              const typed = (l.name || "").trim().toLowerCase();
+              const matches = (!readOnly && suggestions.length > 0)
+                ? (typed
+                    ? suggestions.filter(s => [s.name, s.supplier_ref, s.client_ref].some(v => String(v || "").toLowerCase().includes(typed)))
+                    : suggestions
+                  ).slice(0, 8)
+                : [];
               return (
                 <React.Fragment key={l._key}>
                   <tr onClick={() => setExpanded(open ? null : l._key)}
@@ -190,10 +203,28 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
                     </td>
                     <td className="px-2 py-1.5 text-gray-600 truncate max-w-[8rem]">{l.supplier}</td>
                     <td className="px-2 py-1.5 font-mono text-xs text-gray-600">{l.supplier_ref}</td>
-                    <td className="px-2 py-1.5" onClick={readOnly ? undefined : stop}>
-                      {readOnly ? <span className="font-medium text-gray-900">{l.name || "—"}</span>
-                        : <input value={l.name} onChange={e => patch(l._key, { name: e.target.value })} placeholder="Nombre del producto"
-                            className={`${cellInput} font-medium text-gray-900 ${p.id ? "border-red-400" : ""}`} />}
+                    <td className="px-2 py-1.5 relative" onClick={readOnly ? undefined : stop}>
+                      {readOnly ? <span className="font-medium text-gray-900">{l.name || "—"}</span> : (
+                        <>
+                          <input value={l.name} onChange={e => patch(l._key, { name: e.target.value })}
+                            onFocus={() => setAcOpen(l._key)}
+                            onBlur={() => setTimeout(() => setAcOpen(o => (o === l._key ? null : o)), 150)}
+                            placeholder="Nombre del producto"
+                            className={`${cellInput} font-medium text-gray-900 ${p.id ? "border-red-400" : ""}`} />
+                          {acOpen === l._key && matches.length > 0 && (
+                            <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-y-auto">
+                              {matches.map((s, i) => (
+                                <button key={i} type="button"
+                                  onMouseDown={e => { e.preventDefault(); e.stopPropagation(); selectSuggestion(l._key, s); }}
+                                  className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0">
+                                  <div className="font-medium text-gray-900 truncate">{s.name || "(sin nombre)"}</div>
+                                  <div className="text-gray-500 truncate">{[s.supplier_ref, s.color, s.brand].filter(Boolean).join(" · ") || "—"}</div>
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
                     </td>
                     <td className="px-2 py-1.5">
                       <div className="flex items-center gap-2 text-gray-700">

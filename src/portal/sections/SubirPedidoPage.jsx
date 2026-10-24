@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import { parseClientOrderWorkbook } from "../../lib/clientOrderParser";
+import OrderLinesTable from "../../components/OrderLinesTable";
+import { emptyLine, lineProblems, lineToRpc } from "../../lib/orderDiff";
+import { uploadPortalPhoto } from "../lib/uploadPortalPhoto";
 
 const STATUS_LABEL = {
   submitted: ["Recibido", "bg-blue-100 text-blue-700"],
@@ -17,21 +20,34 @@ const STATUS_LABEL = {
 
 export default function SubirPedidoPage() {
   const { session } = useClientPortal();
+  const navigate = useNavigate();
   const fileRef = useRef(null);
+  const [mode, setMode] = useState("file"); // "file" | "manual"
   const [file, setFile] = useState(null);
   const [reference, setReference] = useState("");
   const [lines, setLines] = useState([]);
+  const [manualLines, setManualLines] = useState([]);
   const [parsing, setParsing] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
   const [mine, setMine] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
 
   const loadMine = async () => {
     const { data } = await supabase.rpc("client_portal_get_client_orders", { p_session_id: session.session_id });
     setMine(data || []);
   };
   useEffect(() => { loadMine(); }, [session.session_id]);
+  useEffect(() => {
+    supabase.rpc("client_portal_get_my_items", { p_session_id: session.session_id })
+      .then(({ data }) => setSuggestions(data || []));
+  }, [session.session_id]);
+
+  const startManual = () => {
+    setMode("manual"); setError(""); setDone(false);
+    if (manualLines.length === 0) setManualLines([emptyLine()]);
+  };
 
   const handleFile = async (f) => {
     if (!f) return;
@@ -86,6 +102,22 @@ export default function SubirPedidoPage() {
     }
   };
 
+  const manualProblems = manualLines.filter(l => { const p = lineProblems(l); return p.id || p.qty; }).length;
+
+  const submitManual = async () => {
+    setSending(true); setError("");
+    try {
+      const { data: orderId, error: rpcErr } = await supabase.rpc("client_portal_create_order", {
+        p_session_id: session.session_id, p_reference: reference, p_lines: manualLines.map(lineToRpc),
+      });
+      if (rpcErr) throw rpcErr;
+      navigate(`/clientes/pedidos/${orderId}`);
+    } catch (e) {
+      setError(e.message || "No pudimos crear el pedido.");
+      setSending(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-5xl mx-auto">
       <div className="mb-6">
@@ -104,17 +136,53 @@ export default function SubirPedidoPage() {
           </a>
         </div>
 
-        <p className="text-sm font-semibold text-gray-900 mb-2">2. Sube tu archivo</p>
-        <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
-        <button onClick={() => fileRef.current?.click()} className="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
-          {file ? file.name : "Haz clic para elegir tu archivo .xlsx"}
-        </button>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-2">
+          <p className="text-sm font-semibold text-gray-900">2. Sube tu archivo o créalo manual</p>
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-0.5">
+            <button onClick={() => { setMode("file"); setError(""); setDone(false); }}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${mode === "file" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
+              Subir archivo
+            </button>
+            <button onClick={startManual}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition ${mode === "manual" ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"}`}>
+              Crear manual
+            </button>
+          </div>
+        </div>
 
-        {parsing && <p className="text-sm text-gray-500 mt-3">Leyendo el archivo…</p>}
+        {mode === "file" ? (
+          <>
+            <input ref={fileRef} type="file" accept=".xlsx,.xlsm" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
+            <button onClick={() => fileRef.current?.click()} className="w-full px-4 py-6 border-2 border-dashed border-gray-300 rounded-xl text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 transition">
+              {file ? file.name : "Haz clic para elegir tu archivo .xlsx"}
+            </button>
+            {parsing && <p className="text-sm text-gray-500 mt-3">Leyendo el archivo…</p>}
+          </>
+        ) : (
+          <p className="text-sm text-gray-500">Agrega tus productos abajo, uno por uno. Si ya los has pedido antes, te los sugerimos mientras escribes.</p>
+        )}
+
         {error && <div className="mt-3 bg-red-50 border border-red-200 text-red-600 text-sm rounded-lg px-4 py-3">{error}</div>}
         {done && <div className="mt-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg px-4 py-3">Pedido enviado. Nuestro equipo lo revisará y te avisará.</div>}
 
-        {lines.length > 0 && (
+        {mode === "manual" && (
+          <div className="mt-5">
+            <p className="text-sm font-semibold text-gray-900 mb-2">3. Revisa y envía</p>
+            <div className="mb-3">
+              <label className="block text-xs text-gray-500 mb-1">Referencia de tu pedido</label>
+              <input value={reference} onChange={e => setReference(e.target.value)} placeholder="Nombre para identificar este pedido"
+                className="w-full max-w-sm px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+            </div>
+            <OrderLinesTable lines={manualLines} onChange={setManualLines} uploadPhoto={uploadPortalPhoto} suggestions={suggestions} />
+            {manualProblems > 0 && <p className="text-xs text-red-600 mt-2">{manualProblems} fila(s) sin nombre/referencia o sin cantidad.</p>}
+            <button onClick={submitManual} disabled={sending || manualLines.length === 0 || manualProblems > 0}
+              className="mt-4 px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 transition">
+              {sending ? "Enviando…" : `Enviar pedido (${manualLines.length} productos)`}
+            </button>
+          </div>
+        )}
+
+        {mode === "file" && lines.length > 0 && (
           <div className="mt-5">
             <p className="text-sm font-semibold text-gray-900 mb-2">3. Revisa y envía</p>
             <div className="mb-3">
