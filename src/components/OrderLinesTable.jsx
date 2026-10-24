@@ -68,9 +68,14 @@ function SuggestInput({ value, onChange, onSelect, suggestions, open, onOpen, on
           {matches.map((s, i) => (
             <button key={i} type="button"
               onMouseDown={e => { e.preventDefault(); e.stopPropagation(); onSelect(s); }}
-              className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0">
-              <div className="font-medium text-gray-900 truncate">{s.name || "(sin nombre)"}</div>
-              <div className="text-gray-500 truncate">{[s.supplier_ref, s.color, s.brand].filter(Boolean).join(" · ") || "—"}</div>
+              className="w-full flex items-center gap-2 text-left px-3 py-2 text-xs hover:bg-blue-50 border-b border-gray-50 last:border-0">
+              {s.photo_url
+                ? <img src={s.photo_url} alt="" className="w-7 h-7 object-contain rounded border border-gray-200 bg-white flex-shrink-0" />
+                : <span className="w-7 h-7 rounded border border-dashed border-gray-200 flex-shrink-0" />}
+              <span className="min-w-0 flex-1">
+                <div className="font-medium text-gray-900 truncate">{s.name || "(sin nombre)"}</div>
+                <div className="text-gray-500 truncate">{[s.supplier_ref, s.color, s.brand].filter(Boolean).join(" · ") || "—"}</div>
+              </span>
             </button>
           ))}
         </div>
@@ -122,9 +127,14 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
 
   const patch = (key, p) => onChange(lines.map(l => (l._key === key ? { ...l, ...p } : l)));
   const remove = (key) => { onChange(lines.filter(l => l._key !== key)); setExpanded(null); };
-  // fills in everything we already know about a previously-ordered item, not just whichever field matched
+  // fills in everything we already know about a previously-ordered item, not just whichever field matched —
+  // including its photo when the suggestion carries one; never clear a photo already on this row otherwise
   const selectSuggestion = (key, s) => {
-    patch(key, { name: s.name || "", supplier_ref: s.supplier_ref || "", client_ref: s.client_ref || "", color: s.color || "", brand: s.brand || "", supplier: s.supplier || "" });
+    patch(key, {
+      name: s.name || "", supplier_ref: s.supplier_ref || "", client_ref: s.client_ref || "",
+      color: s.color || "", brand: s.brand || "", supplier: s.supplier || "",
+      ...(s.photo_url ? { photo_url: s.photo_url } : {}),
+    });
     setAcOpen(null);
   };
   // Suggestions = this client's history (via the suggestions prop) PLUS whatever's
