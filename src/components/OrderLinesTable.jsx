@@ -127,9 +127,25 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
     patch(key, { name: s.name || "", supplier_ref: s.supplier_ref || "", client_ref: s.client_ref || "", color: s.color || "", brand: s.brand || "", supplier: s.supplier || "" });
     setAcOpen(null);
   };
+  // Suggestions = this client's history (via the suggestions prop) PLUS whatever's
+  // already typed elsewhere in THIS order — a product added two rows up hasn't been
+  // saved yet, so it wouldn't show up in history-based suggestions on its own.
+  const allSuggestions = useMemo(() => {
+    const seen = new Set();
+    const out = [];
+    const add = (s) => {
+      const k = `${(s.name || "").trim().toLowerCase()}|${(s.supplier_ref || "").trim().toLowerCase()}|${(s.client_ref || "").trim().toLowerCase()}`;
+      if (k === "||" || seen.has(k)) return;
+      seen.add(k);
+      out.push(s);
+    };
+    lines.forEach(add);
+    suggestions.forEach(add);
+    return out;
+  }, [lines, suggestions]);
   // acOpen identifies which row+field's dropdown is open, e.g. { key: l._key, field: "supplier_ref" }
   const acProps = (l, field) => ({
-    suggestions: readOnly ? [] : suggestions,
+    suggestions: readOnly ? [] : allSuggestions,
     open: acOpen?.key === l._key && acOpen?.field === field,
     onOpen: () => setAcOpen({ key: l._key, field }),
     onClose: () => setAcOpen(o => (o?.key === l._key && o?.field === field ? null : o)),
