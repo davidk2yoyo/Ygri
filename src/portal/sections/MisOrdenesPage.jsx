@@ -3,13 +3,38 @@ import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import { ShipmentCard } from "./MisEnviosPage";
 
+// track_stages.status is one of these four — NOT "pending" (that key never matched,
+// so a not-yet-started stage leaked the raw DB string straight into the UI).
 const STAGE_COLOR = {
   done: "bg-green-500",
   in_progress: "bg-blue-500",
   blocked: "bg-red-500",
-  pending: "bg-gray-200",
+  not_started: "bg-gray-200",
 };
-const STAGE_LABEL = { done: "Completado", in_progress: "En proceso", blocked: "Bloqueado", pending: "Pendiente" };
+const STAGE_LABEL = { done: "Completado", in_progress: "En proceso", blocked: "Bloqueado", not_started: "Pendiente" };
+const STAGE_BADGE = {
+  done: "bg-green-100 text-green-700",
+  in_progress: "bg-blue-100 text-blue-700",
+  blocked: "bg-red-100 text-red-700",
+  not_started: "bg-gray-100 text-gray-500",
+};
+// stage_templates.name is plain English, stored once in the database with no
+// translation layer — and the staff Kanban (PipelineView.jsx's PIPELINES
+// constant) string-matches against these exact English names to group its
+// columns, so they can't be renamed in the database without breaking that.
+// This translates them for display here only.
+const STAGE_NAME_ES = {
+  "Lead or Inquiry": "Consulta inicial",
+  "Quotation": "Cotización",
+  "Service delivery": "Entrega del servicio",
+  "Payment": "Pago",
+  "Samples approval": "Aprobación de muestras",
+  "Deposit payment": "Pago de anticipo",
+  "Production": "Producción",
+  "Goods inspection": "Inspección de mercancía",
+  "Balance payment": "Pago final",
+  "Shipment": "Envío",
+};
 const DOC_LABEL = { quotation: "Cotización", proforma: "Proforma", invoice: "Factura comercial" };
 const TRACK_STATUS = {
   active: "bg-blue-100 text-blue-700", completed: "bg-green-100 text-green-700",
@@ -26,10 +51,16 @@ function StageTimeline({ stages }) {
     <ol className="space-y-2">
       {stages.map(s => (
         <li key={s.id} className="flex items-center gap-3">
-          <span className={`w-3 h-3 rounded-full flex-shrink-0 ${STAGE_COLOR[s.status] || STAGE_COLOR.pending} ${s.status === "in_progress" ? "animate-pulse" : ""}`} />
-          <span className={`text-sm flex-1 ${s.status === "pending" ? "text-gray-400" : "text-gray-800 font-medium"}`}>{s.name}</span>
+          <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${STAGE_COLOR[s.status] || STAGE_COLOR.not_started} ${s.status === "in_progress" ? "animate-pulse" : ""}`}>
+            {s.status === "done" && (
+              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
+            )}
+          </span>
+          <span className={`text-sm flex-1 ${s.status === "not_started" ? "text-gray-400" : "text-gray-800 font-medium"}`}>{STAGE_NAME_ES[s.name] || s.name}</span>
           {s.due_date && s.status !== "done" && <span className="text-xs text-gray-400">{fmtDate(s.due_date)}</span>}
-          <span className="text-xs text-gray-400 w-20 text-right">{STAGE_LABEL[s.status] || s.status}</span>
+          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${STAGE_BADGE[s.status] || STAGE_BADGE.not_started}`}>
+            {STAGE_LABEL[s.status] || s.status}
+          </span>
         </li>
       ))}
     </ol>
@@ -105,7 +136,7 @@ function OrderCard({ order }) {
           <div className="min-w-0">
             <p className="font-semibold text-gray-900">{order.track_name}</p>
             <p className="text-xs text-gray-500 mt-0.5">
-              {current ? `Etapa actual: ${current.name}` : TRACK_STATUS_LABEL[order.status] || order.status} · desde {fmtDate(order.created_at)}
+              {current ? `Etapa actual: ${STAGE_NAME_ES[current.name] || current.name}` : TRACK_STATUS_LABEL[order.status] || order.status} · desde {fmtDate(order.created_at)}
             </p>
           </div>
           <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${TRACK_STATUS[order.status] || "bg-gray-100 text-gray-600"}`}>

@@ -1,59 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-
-const toBase64 = (file) =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-
-// Simple fuzzy match: check if significant words from detected name appear in supplier name
-// Generic words common in company names that shouldn't count as a match
-const STOPWORDS = new Set([
-  "technology","technologies","tech","group","co","ltd","limited","company",
-  "international","trading","industrial","china","chinese","manufacture",
-  "manufacturer","manufacturing","development","enterprise","enterprises",
-  "science","scientific","precision","solutions","services","service",
-  "products","product","import","export","supply","supplier","trade",
-  "corporation","corp","incorporated","inc","holding","holdings",
-  "beijing","shanghai","guangzhou","shenzhen","hangzhou","ningbo",
-  "zhejiang","jiangsu","guangdong","shandong","hebei","hunan",
-  "electronic","electronics","electrical","equipment","machinery",
-  "instrument","instruments","control","automation","system","systems",
-]);
-
-function fuzzyMatch(detected, suppliers) {
-  if (!detected) return null;
-  const normalize = (s) => s.toLowerCase().replace(/[^a-z0-9\s]/g, " ").trim();
-  // Only keep words that are meaningful (length > 3 and not stopwords)
-  const meaningful = (words) => words.filter(w => w.length > 3 && !STOPWORDS.has(w));
-  const detectedWords = new Set(meaningful(normalize(detected).split(/\s+/)));
-
-  if (detectedWords.size === 0) return null;
-
-  let best = null;
-  let bestScore = 0;
-
-  for (const sup of suppliers) {
-    const supWords = new Set(meaningful(normalize(sup.name || "").split(/\s+/)));
-    // Count each distinct meaningful word shared by both names ONCE — the
-    // previous version looped both directions and summed both counts, so a
-    // single shared generic-but-not-stopworded word (e.g. "power",
-    // "industry") alone produced a score of 2 and crossed the match
-    // threshold, silently linking unrelated suppliers.
-    let score = 0;
-    for (const word of detectedWords) if (supWords.has(word)) score++;
-    if (score > bestScore) {
-      bestScore = score;
-      best = sup;
-    }
-  }
-  // Require at least 2 distinct shared words, AND that they cover a real
-  // share of the detected name — not just 2 generic words coincidentally
-  // present in an otherwise unrelated, longer name.
-  return bestScore >= 2 && bestScore / detectedWords.size >= 0.5 ? best : null;
-}
+import { matchSupplierByName } from "../lib/suppliers";
 
 export default function AIQuotationImporter({ currency, suppliers = [], supabase, onSupplierCreated, onImport, onClose }) {
   const [step, setStep] = useState("pick"); // pick | loading | review | error
@@ -104,7 +50,7 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
       );
       // Auto-match supplier
       if (info?.name) {
-        const match = fuzzyMatch(info.name, suppliers);
+        const match = matchSupplierByName(info.name, suppliers);
         if (match) {
           setResolvedSupplier(match);
           setSupplierStatus("matched");
@@ -200,7 +146,7 @@ export default function AIQuotationImporter({ currency, suppliers = [], supabase
   // moved past auto-matching, so only re-match while still in that state.
   const handleNameBlur = () => {
     if (!supplierInfo?.name || !["matched", "no_match"].includes(supplierStatus)) return;
-    const match = fuzzyMatch(supplierInfo.name, suppliers);
+    const match = matchSupplierByName(supplierInfo.name, suppliers);
     setResolvedSupplier(match);
     setSupplierStatus(match ? "matched" : "no_match");
   };

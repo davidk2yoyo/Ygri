@@ -1,4 +1,5 @@
 import { resolveOrCreateCatalogItem } from "./catalogItems";
+import { resolveOrCreateSupplier } from "./suppliers";
 
 // What the client asked for (packaging, colour, marking, brand) becomes the item's
 // chosen options on the quotation, so staff only has to price them.
@@ -38,8 +39,14 @@ export async function createProjectAndQuotation(supabase, { order, lines, projec
   }).select().single();
   if (qErr) throw qErr;
 
-  // 3. items (catalog resolved like the form does, so products never duplicate)
+  // 3. items (catalog + supplier resolved like the form does, so products/suppliers never duplicate).
+  // Clients type a supplier name as free text — they never pick one from a list — so a line's
+  // supplier_id is usually still null here; fuzzy-match it against real suppliers (same rule the
+  // AI quotation importer uses) instead of leaving it unlinked.
   const catalogCache = [];
+  const supplierCache = [];
+  const needsSupplier = String(workflow).toLowerCase() !== "service";
+  const suppliers = needsSupplier ? (await supabase.from("suppliers").select("*")).data || [] : [];
   const rows = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
@@ -51,10 +58,15 @@ export async function createProjectAndQuotation(supabase, { order, lines, projec
       }, catalogCache);
       if (cat) { catalogId = cat.id; catalogCache.push(cat); }
     }
+    let supplierId = l.supplier_id || null;
+    if (needsSupplier && !supplierId && l.supplier?.trim()) {
+      const sup = await resolveOrCreateSupplier(supabase, l.supplier, suppliers, supplierCache);
+      supplierId = sup?.id || null;
+    }
     rows.push({
       quotation_id: quote.id, catalog_item_id: catalogId, item_number: l.supplier_ref || null, description,
       picture_url: l.photo_url || null, price: Number(l.price) || 0, quantity: Math.max(1, Math.round(Number(l.qty) || 1)),
-      supplier_id: String(workflow).toLowerCase() === "service" ? null : (l.supplier_id || null), client_ref: l.client_ref || null,
+      supplier_id: needsSupplier ? supplierId : null, client_ref: l.client_ref || null,
       client_order_line_id: l.id, sort_order: i,
     });
   }
