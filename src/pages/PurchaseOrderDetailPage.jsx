@@ -69,6 +69,8 @@ export default function PurchaseOrderDetailPage() {
         const { error } = await supabase.from("purchase_order_items").update({
           quantity: parseInt(it.quantity) || 1,
           price: parseFloat(it.price) || 0,
+          ready_at: it.ready_at || null,
+          expected_ready_date: it.expected_ready_date || null,
         }).eq("id", it.id);
         if (error) throw error;
       }
@@ -172,6 +174,22 @@ export default function PurchaseOrderDetailPage() {
               </div>
               <div className="w-28 text-right shrink-0 text-sm font-semibold text-darkblack-700 dark:text-white">
                 {po.currency} {((parseFloat(it.price) || 0) * (parseInt(it.quantity) || 1)).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+              </div>
+              <div className="w-36 shrink-0">
+                {it.ready_at ? (
+                  <label className="flex items-center gap-1.5 cursor-pointer text-xs font-medium text-primary">
+                    <input type="checkbox" checked onChange={() => updateItem(it._localId, "ready_at", null)}
+                      className="w-4 h-4 rounded border-bgray-300 text-primary focus:ring-primary" />
+                    Listo
+                  </label>
+                ) : (
+                  <div className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={false} onChange={() => updateItem(it._localId, "ready_at", new Date().toISOString())}
+                      className="w-4 h-4 rounded border-bgray-300 text-primary focus:ring-primary shrink-0" title="Marcar como listo" />
+                    <input type="date" value={it.expected_ready_date || ""} onChange={e => updateItem(it._localId, "expected_ready_date", e.target.value || null)}
+                      className="w-full px-1.5 py-1 border border-bgray-300 dark:border-darkblack-400 rounded-md text-[11px] bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white" title="Fecha estimada" />
+                  </div>
+                )}
               </div>
               <button onClick={() => removeItem(it._localId)} className="text-bgray-300 hover:text-red-500 shrink-0">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>

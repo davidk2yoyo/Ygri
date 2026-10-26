@@ -175,6 +175,13 @@ export default function PedidoDetailPage() {
         </div>
       </div>
 
+      {order.track_id && (
+        <Link to="/clientes/ordenes" className="mb-4 flex items-center justify-between gap-3 bg-green-50 border border-green-200 rounded-xl px-4 py-3 text-sm text-green-800 hover:bg-green-100 transition">
+          <span>Este pedido ya está en producción — sigue su avance por proveedor.</span>
+          <span className="font-semibold whitespace-nowrap">Ver tu orden →</span>
+        </Link>
+      )}
+
       {staffNote && (
         <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-900">
           <p className="font-semibold">Interasia {staffNote.kind === "lines_edited" ? "modificó tu pedido" : staffNote.kind === "quotation_sent" ? "te envió la cotización" : "te escribió"}</p>
