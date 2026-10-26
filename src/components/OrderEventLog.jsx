@@ -11,6 +11,7 @@ const KIND_LABEL = {
   quotation_sent: "envió la cotización",
   accepted: "aceptó la cotización",
   changes_requested: "pidió cambios",
+  project_unlinked: "desvinculó el proyecto",
 };
 
 // Change log of an order. `viewer` ('client' | 'staff') decides who is "Tú".

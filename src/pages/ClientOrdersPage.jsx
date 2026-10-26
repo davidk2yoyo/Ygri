@@ -495,6 +495,15 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
     setSupplierNames(names);
   };
 
+  // Disconnects the order from its project/quotation without deleting either — lets staff redo
+  // the conversion (e.g. with the supplier-mapping modal) instead of fixing 200 lines by hand.
+  const unlinkProject = () => run(async () => {
+    if (!window.confirm("Unlink this order from its project and quotation?\n\nThe project and quotation are NOT deleted — they just stop being connected to this order, so you can create a new one from scratch.")) return;
+    const { error: e } = await supabase.from("client_orders").update({ track_id: null, quotation_id: null, updated_at: new Date().toISOString() }).eq("id", order.id);
+    if (e) throw e;
+    await logEvent("project_unlinked", { note: quotationEvent?.note ? `Was linked to ${quotationEvent.note}` : null });
+  });
+
   const doSend = () => run(async () => {
     await sendQuotationToClient(supabase, { order, note, actorName: await actor() });
     sileo.success({ title: "Quotation sent to the client" });
@@ -577,6 +586,10 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
                   {order.status === "quoted" ? "Re-send quotation" : "Send quotation to client"}
                 </button>
               )}
+              <button onClick={unlinkProject} disabled={busy} className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+                title="Disconnects this order from that project/quotation so you can create a new one — the project and quotation themselves are not deleted">
+                Unlink project
+              </button>
             </div>
           </div>
         )}
