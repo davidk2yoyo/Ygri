@@ -374,6 +374,128 @@ function SupplierMatchModal({ names, suppliers, onCancel, onConfirm }) {
   );
 }
 
+// Re-upload an Excel (same template/parser as importing a new order) purely to backfill the
+// "price" field on lines the order already has — matched by supplier ref, nothing else is
+// touched. Returns a {lineId: price} map; the caller merges it into local line state and the
+// existing Save button persists + logs it like any other edit, instead of this modal writing
+// to the DB directly.
+function UpdatePricesModal({ lines, onApply, onClose }) {
+  const fileRef = useRef(null);
+  const [parsing, setParsing] = useState(false);
+  const [error, setError] = useState("");
+  const [matches, setMatches] = useState(null);
+  const [unmatched, setUnmatched] = useState([]);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setParsing(true); setError(""); setMatches(null); setUnmatched([]);
+    try {
+      const { sheets } = await parseClientOrderWorkbook(await file.arrayBuffer());
+      const parsed = sheets.filter(s => s.kind === "supplier").flatMap(s => s.lines);
+
+      const byRef = new Map();
+      lines.forEach(l => {
+        const key = (l.supplier_ref || "").trim().toLowerCase();
+        if (!key) return;
+        if (!byRef.has(key)) byRef.set(key, []);
+        byRef.get(key).push(l);
+      });
+
+      const matchRows = [];
+      const miss = [];
+      for (const p of parsed) {
+        if (p.price == null) continue; // nothing to update for this row
+        const key = (p.supplier_ref || "").trim().toLowerCase();
+        const found = key ? byRef.get(key) : null;
+        if (found?.length) matchRows.push({ supplier_ref: p.supplier_ref, price: p.price, lines: found });
+        else miss.push(p);
+      }
+      setMatches(matchRows);
+      setUnmatched(miss);
+    } catch (e) {
+      setError(e.message || "Couldn't read the file.");
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const totalLines = matches?.reduce((n, m) => n + m.lines.length, 0) || 0;
+
+  const apply = () => {
+    const priceById = {};
+    matches.forEach(m => m.lines.forEach(l => { priceById[l.id] = m.price; }));
+    onApply(priceById);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-200 dark:border-darkblack-400">
+          <div>
+            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">Update prices from Excel</h2>
+            <p className="text-xs text-bgray-500 mt-0.5">Matches by supplier ref — only the price field changes. Nothing is saved until you review and click Save on the order.</p>
+          </div>
+          <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+
+          <input ref={fileRef} type="file" accept=".xlsx,.xlsm,.xls" className="hidden" onChange={e => handleFile(e.target.files?.[0])} />
+          <button onClick={() => fileRef.current?.click()} className="w-full px-4 py-6 border-2 border-dashed border-bgray-300 rounded-xl text-sm text-bgray-500 hover:border-primary hover:text-primary transition">
+            {parsing ? "Reading…" : "Choose .xlsx…"}
+          </button>
+
+          {matches && (
+            <>
+              <p className="text-sm text-bgray-600">
+                <b>{totalLines}</b> line(s) across <b>{matches.length}</b> ref(s) will get a new price.
+                {unmatched.length > 0 && <> <b>{unmatched.length}</b> row(s) in the file had no match in this order.</>}
+              </p>
+              {matches.length > 0 && (
+                <div className="border border-bgray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="bg-bgray-50 text-bgray-500 sticky top-0"><tr>
+                      <th className="px-2 py-1.5 text-left font-semibold">Ref</th>
+                      <th className="px-2 py-1.5 text-left font-semibold">Matched line(s)</th>
+                      <th className="px-2 py-1.5 text-right font-semibold">New price</th>
+                    </tr></thead>
+                    <tbody>
+                      {matches.map((m, i) => (
+                        <tr key={i} className="border-t border-bgray-100">
+                          <td className="px-2 py-1 font-mono">{m.supplier_ref}</td>
+                          <td className="px-2 py-1">{m.lines.map(l => l.name || l.supplier_ref).join(", ")}</td>
+                          <td className="px-2 py-1 text-right font-semibold">{m.price}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {unmatched.length > 0 && (
+                <details className="text-xs text-bgray-500">
+                  <summary className="cursor-pointer">{unmatched.length} unmatched row(s)</summary>
+                  <ul className="mt-1 list-disc pl-4 max-h-32 overflow-y-auto">
+                    {unmatched.map((u, i) => <li key={i}>{u.supplier_ref || "(no ref)"} — {u.name}</li>)}
+                  </ul>
+                </details>
+              )}
+            </>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-bgray-200 dark:border-darkblack-400">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-bgray-600 hover:text-bgray-800">Cancel</button>
+          <button onClick={apply} disabled={!matches || totalLines === 0} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+            Apply{totalLines > 0 ? ` (${totalLines})` : ""}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const [order, setOrder] = useState(listOrder);
   const [lines, setLines] = useState([]);
@@ -386,6 +508,13 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const navigate = useNavigate();
   const [convert, setConvert] = useState(null); // {name, workflow, publish} while the convert form is open
   const [supplierNames, setSupplierNames] = useState(null); // distinct supplier names awaiting confirmation, while that modal is open
+  const [showPriceUpdate, setShowPriceUpdate] = useState(false);
+
+  // Merges matched prices into local line state only — doesn't write to the DB itself, so the
+  // normal Save button (and its diff/history logging) handles persisting it like any other edit.
+  const applyPriceUpdates = (priceById) => {
+    setLines(prev => prev.map(l => priceById[l.id] != null ? { ...l, price: priceById[l.id] } : l));
+  };
 
   const actor = async () => {
     const { data } = await supabase.auth.getUser();
@@ -538,6 +667,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
             {Object.keys(STATUS_STYLE).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {order.source_file_url && <a href={order.source_file_url} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Original file</a>}
+          <button onClick={() => setShowPriceUpdate(true)} className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Update prices…</button>
           <button onClick={deleteOrder} disabled={busy} className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Delete order</button>
         </div>
       </div>
@@ -628,6 +758,14 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           suppliers={suppliers}
           onCancel={() => setSupplierNames(null)}
           onConfirm={map => doConvert(map)}
+        />
+      )}
+
+      {showPriceUpdate && (
+        <UpdatePricesModal
+          lines={lines}
+          onApply={applyPriceUpdates}
+          onClose={() => setShowPriceUpdate(false)}
         />
       )}
     </div>

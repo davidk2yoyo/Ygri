@@ -71,6 +71,7 @@ export default function PurchaseOrderDetailPage() {
           price: parseFloat(it.price) || 0,
           ready_at: it.ready_at || null,
           expected_ready_date: it.expected_ready_date || null,
+          notes: it.notes || null,
         }).eq("id", it.id);
         if (error) throw error;
       }
@@ -165,6 +166,8 @@ export default function PurchaseOrderDetailPage() {
               <div className="flex-1 min-w-0">
                 {it.item_number && <span className="font-mono text-xs text-bgray-500 mr-2">{it.item_number}</span>}
                 <span className="text-sm text-darkblack-700 dark:text-white">{it.description}</span>
+                <input value={it.notes || ""} onChange={e => updateItem(it._localId, "notes", e.target.value)} placeholder="Comentario de producción (interno)…"
+                  className="block mt-1 w-full max-w-sm text-xs px-1.5 py-0.5 border border-transparent hover:border-bgray-200 dark:hover:border-darkblack-400 focus:border-primary rounded bg-transparent text-bgray-500 dark:text-bgray-400" />
               </div>
               <div className="w-20 shrink-0">
                 <input type="number" min="1" value={it.quantity} onChange={e => updateItem(it._localId, "quantity", e.target.value)} onWheel={e => e.target.blur()} className={`${inputCls} text-center`} />
