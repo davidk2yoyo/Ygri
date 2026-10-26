@@ -12,6 +12,9 @@ ALTER TABLE purchase_order_items ADD COLUMN IF NOT EXISTS expected_ready_date da
 -- one entry per supplier PO on that track, each with its items and their
 -- readiness. No show_to_client gate on purchase_orders (there isn't one on
 -- the table, same as stages/progress_pct already shown unconditionally).
+-- Adding a column to a RETURNS TABLE signature is a return-type change, which
+-- Postgres won't let CREATE OR REPLACE do in place — drop it first.
+DROP FUNCTION IF EXISTS public.client_portal_get_orders(uuid);
 CREATE OR REPLACE FUNCTION public.client_portal_get_orders(p_session_id uuid)
 RETURNS TABLE(track_id uuid, track_name text, status text, workflow_kind text, progress_pct numeric,
               created_at timestamptz, stages jsonb, quotations jsonb, shipments jsonb, documents jsonb,
