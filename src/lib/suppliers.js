@@ -39,25 +39,3 @@ export function matchSupplierByName(name, suppliers) {
   }
   return bestScore >= 2 && bestScore / nameWords.size >= 0.5 ? best : null;
 }
-
-// Looks up an existing supplier by fuzzy name match before creating a new one,
-// so a client-typed supplier name (free text — clients never pick from a
-// list) ends up linked to a real supplier record instead of staying
-// unlinked. `suppliers` is the full list, fetched once by the caller (not
-// refetched per line); `cache` collects suppliers created earlier in the same
-// batch so two lines naming the same new supplier don't create it twice.
-export async function resolveOrCreateSupplier(supabase, name, suppliers, cache = []) {
-  const trimmed = (name || "").trim();
-  if (!trimmed) return null;
-
-  const cached = matchSupplierByName(trimmed, cache);
-  if (cached) return cached;
-
-  const existing = matchSupplierByName(trimmed, suppliers);
-  if (existing) return existing;
-
-  const { data: created, error } = await supabase.from("suppliers").insert({ name: trimmed }).select().single();
-  if (error) throw error;
-  cache.push(created);
-  return created;
-}

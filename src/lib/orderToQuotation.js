@@ -1,5 +1,4 @@
 import { resolveOrCreateCatalogItem } from "./catalogItems";
-import { resolveOrCreateSupplier } from "./suppliers";
 
 // What the client asked for (packaging, colour, marking, brand) becomes the item's
 // chosen options on the quotation, so staff only has to price them.
@@ -15,7 +14,7 @@ function optionsFor(l) {
 // order: client_orders row (with clients(company_name)); lines: editable lines (orderDiff shape).
 // Creates the project, a draft quotation with one item per order line, and links everything back.
 // Insert-first: the quotation is complete in the DB before staff opens it in the normal form.
-export async function createProjectAndQuotation(supabase, { order, lines, projectName, workflow, showToClient, actorName }) {
+export async function createProjectAndQuotation(supabase, { order, lines, projectName, workflow, showToClient, actorName, supplierMap }) {
   const { data: { session } } = await supabase.auth.getSession();
   const user = session?.user;
   if (!user) throw new Error("User not authenticated");
@@ -39,14 +38,11 @@ export async function createProjectAndQuotation(supabase, { order, lines, projec
   }).select().single();
   if (qErr) throw qErr;
 
-  // 3. items (catalog + supplier resolved like the form does, so products/suppliers never duplicate).
-  // Clients type a supplier name as free text — they never pick one from a list — so a line's
-  // supplier_id is usually still null here; fuzzy-match it against real suppliers (same rule the
-  // AI quotation importer uses) instead of leaving it unlinked.
+  // 3. items (catalog resolved like the form does, so products never duplicate; supplier comes from
+  // supplierMap — staff already confirmed/created each one in a review step before calling this,
+  // since clients type a supplier name as free text and auto-resolving it silently isn't safe).
   const catalogCache = [];
-  const supplierCache = [];
   const needsSupplier = String(workflow).toLowerCase() !== "service";
-  const suppliers = needsSupplier ? (await supabase.from("suppliers").select("*")).data || [] : [];
   const rows = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
@@ -60,8 +56,7 @@ export async function createProjectAndQuotation(supabase, { order, lines, projec
     }
     let supplierId = l.supplier_id || null;
     if (needsSupplier && !supplierId && l.supplier?.trim()) {
-      const sup = await resolveOrCreateSupplier(supabase, l.supplier, suppliers, supplierCache);
-      supplierId = sup?.id || null;
+      supplierId = supplierMap?.[l.supplier.trim()] || null;
     }
     rows.push({
       quotation_id: quote.id, catalog_item_id: catalogId, item_number: l.supplier_ref || null, description,

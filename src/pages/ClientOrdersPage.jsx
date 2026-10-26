@@ -7,6 +7,7 @@ import OrderLinesTable from "../components/OrderLinesTable";
 import { OrderHistoryButton } from "../components/OrderEventLog";
 import { createProjectAndQuotation, sendQuotationToClient } from "../lib/orderToQuotation";
 import { diffLines, hasChanges, describeChanges, lineFromDb, lineToDb, lineProblems } from "../lib/orderDiff";
+import { matchSupplierByName } from "../lib/suppliers";
 
 const STATUS_STYLE = {
   submitted: "bg-purple-100 text-purple-700",
@@ -282,6 +283,97 @@ function ImportWizard({ clients, suppliers, onClose, onSaved }) {
   );
 }
 
+// Shown before a project/quotation is created from an order whose lines have
+// supplier names the client typed by hand — nothing gets matched or created
+// silently; staff confirms (or fixes) each one here first.
+function SupplierMatchModal({ names, suppliers, onCancel, onConfirm }) {
+  const [rows, setRows] = useState(() => names.map(name => {
+    const match = matchSupplierByName(name, suppliers);
+    return {
+      name, mode: match ? "existing" : "new", supplierId: match?.id || "",
+      newInfo: { address: "", email: "", sales_person: "", wechat_or_whatsapp: "" },
+    };
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const patchRow = (i, p) => setRows(prev => prev.map((r, idx) => idx === i ? { ...r, ...p } : r));
+  const patchNewInfo = (i, p) => setRows(prev => prev.map((r, idx) => idx === i ? { ...r, newInfo: { ...r.newInfo, ...p } } : r));
+
+  const confirm = async () => {
+    setSaving(true); setError("");
+    try {
+      const map = {};
+      for (const r of rows) {
+        if (r.mode === "existing") {
+          if (!r.supplierId) throw new Error(`Pick a supplier for "${r.name}", or switch it to New supplier.`);
+          map[r.name] = r.supplierId;
+        } else {
+          const { data, error: e } = await supabase.from("suppliers").insert({
+            name: r.name, address: r.newInfo.address || null, email: r.newInfo.email || null,
+            sales_person: r.newInfo.sales_person || null, wechat_or_whatsapp: r.newInfo.wechat_or_whatsapp || null,
+          }).select().single();
+          if (e) throw e;
+          map[r.name] = data.id;
+        }
+      }
+      onConfirm(map);
+    } catch (e) {
+      setError(e.message);
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={saving ? undefined : onCancel}>
+      <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-200 dark:border-darkblack-400">
+          <div>
+            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">Confirm suppliers</h2>
+            <p className="text-xs text-bgray-500 mt-0.5">The client typed these supplier names by hand — confirm which real supplier each one is before the project is created.</p>
+          </div>
+          <button onClick={onCancel} disabled={saving} className="text-bgray-400 hover:text-bgray-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+          {rows.map((r, i) => (
+            <div key={r.name} className="border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4">
+              <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                <p className="text-sm font-semibold text-darkblack-700 dark:text-white">"{r.name}"</p>
+                <div className="flex items-center gap-0.5 bg-bgray-100 dark:bg-darkblack-500 rounded-lg p-0.5">
+                  <button onClick={() => patchRow(i, { mode: "existing" })} className={`px-2.5 py-1 rounded-md text-xs font-semibold ${r.mode === "existing" ? "bg-primary text-white" : "text-bgray-500"}`}>Existing supplier</button>
+                  <button onClick={() => patchRow(i, { mode: "new" })} className={`px-2.5 py-1 rounded-md text-xs font-semibold ${r.mode === "new" ? "bg-primary text-white" : "text-bgray-500"}`}>New supplier</button>
+                </div>
+              </div>
+              {r.mode === "existing" ? (
+                <select value={r.supplierId} onChange={e => patchRow(i, { supplierId: e.target.value })} className={`${inputCls} w-full py-2 text-sm`}>
+                  <option value="">Select a supplier…</option>
+                  {suppliers.map(sp => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                </select>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <input placeholder="Address" value={r.newInfo.address} onChange={e => patchNewInfo(i, { address: e.target.value })} className={`${inputCls} py-2 text-sm`} />
+                  <input placeholder="Email" value={r.newInfo.email} onChange={e => patchNewInfo(i, { email: e.target.value })} className={`${inputCls} py-2 text-sm`} />
+                  <input placeholder="Contact person" value={r.newInfo.sales_person} onChange={e => patchNewInfo(i, { sales_person: e.target.value })} className={`${inputCls} py-2 text-sm`} />
+                  <input placeholder="WeChat / WhatsApp" value={r.newInfo.wechat_or_whatsapp} onChange={e => patchNewInfo(i, { wechat_or_whatsapp: e.target.value })} className={`${inputCls} py-2 text-sm`} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-bgray-200 dark:border-darkblack-400">
+          <button onClick={onCancel} disabled={saving} className="px-4 py-2 text-sm text-bgray-600 hover:text-bgray-800">Cancel</button>
+          <button onClick={confirm} disabled={saving} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+            {saving ? "Creating…" : "Confirm & create project"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const [order, setOrder] = useState(listOrder);
   const [lines, setLines] = useState([]);
@@ -293,6 +385,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const [error, setError] = useState("");
   const navigate = useNavigate();
   const [convert, setConvert] = useState(null); // {name, workflow, publish} while the convert form is open
+  const [supplierNames, setSupplierNames] = useState(null); // distinct supplier names awaiting confirmation, while that modal is open
 
   const actor = async () => {
     const { data } = await supabase.auth.getUser();
@@ -385,13 +478,22 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
     onChanged(); onBack();
   };
 
-  const doConvert = () => run(async () => {
+  const doConvert = (supplierMap) => run(async () => {
     const t = await createProjectAndQuotation(supabase, {
-      order, lines, projectName: convert.name, workflow: convert.workflow, showToClient: convert.publish, actorName: await actor(),
+      order, lines, projectName: convert.name, workflow: convert.workflow, showToClient: convert.publish, actorName: await actor(), supplierMap,
     });
-    setConvert(null);
+    setConvert(null); setSupplierNames(null);
     sileo.success({ title: "Project and quotation created", description: t.quotation.quote_number });
   });
+
+  // Service projects don't use suppliers; a Product project only needs the review modal when
+  // at least one line actually names a supplier the client typed by hand.
+  const startConvert = () => {
+    if (convert.workflow === "Service") { doConvert(null); return; }
+    const names = [...new Set(lines.map(l => (l.supplier || "").trim()).filter(Boolean))];
+    if (names.length === 0) { doConvert({}); return; }
+    setSupplierNames(names);
+  };
 
   const doSend = () => run(async () => {
     await sendQuotationToClient(supabase, { order, note, actorName: await actor() });
@@ -454,7 +556,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
                 </select>
               </div>
               <label className="flex items-center gap-1.5 text-xs text-bgray-600 pb-2"><input type="checkbox" checked={convert.publish} onChange={e => setConvert({ ...convert, publish: e.target.checked })} />Show project to client</label>
-              <button onClick={doConvert} disabled={busy || dirty || !convert.name.trim()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
+              <button onClick={startConvert} disabled={busy || dirty || !convert.name.trim()} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">{busy ? "Creating…" : "Create"}</button>
               <button onClick={() => setConvert(null)} className="text-xs text-bgray-500 pb-2">Cancel</button>
             </div>
           ) : (
@@ -506,6 +608,15 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
         </div>
 
       </div>
+
+      {supplierNames && (
+        <SupplierMatchModal
+          names={supplierNames}
+          suppliers={suppliers}
+          onCancel={() => setSupplierNames(null)}
+          onConfirm={map => doConvert(map)}
+        />
+      )}
     </div>
   );
 }
