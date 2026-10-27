@@ -26,9 +26,25 @@ export function ProductionRing({ pct, size = 44 }) {
 // never receive them.
 export function SupplierProductionCard({ po, readOnly = true, onItemChange, openHref }) {
   const [open, setOpen] = useState(false);
+  const [bulkDate, setBulkDate] = useState("");
   const items = po.items || [];
   const readyCount = items.filter(i => i.ready_at).length;
   const pct = items.length ? (100 * readyCount / items.length) : 0;
+  const pendingItems = items.filter(i => !i.ready_at);
+
+  // Suppliers often give one date for the whole PO rather than per item, and
+  // marking 20+ items ready one by one once a shipment actually arrives is
+  // tedious — these act on every item still pending at once.
+  const markAllReady = () => {
+    const now = new Date().toISOString();
+    pendingItems.forEach(it => onItemChange(it, { ready_at: now }));
+  };
+  const applyDateToAll = () => {
+    if (!bulkDate) return;
+    pendingItems.forEach(it => onItemChange(it, { expected_ready_date: bulkDate }));
+    setBulkDate("");
+  };
+
   return (
     <div className="border border-gray-200 dark:border-darkblack-400 rounded-xl overflow-hidden">
       <button onClick={() => setOpen(o => !o)} className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-50 dark:hover:bg-darkblack-500 transition">
@@ -37,6 +53,14 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
           <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{po.supplier_name || "Supplier"}</p>
           <p className="text-xs text-gray-500 dark:text-bgray-400">{readyCount}/{items.length} listos · {po.po_number}</p>
         </div>
+        {!readOnly && pendingItems.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
+            <button onClick={markAllReady} className="px-2 py-1 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 dark:bg-green-900/30 dark:text-green-400 rounded-md whitespace-nowrap">Marcar todo listo</button>
+            <input type="date" value={bulkDate} onChange={e => setBulkDate(e.target.value)}
+              className="w-[120px] px-1.5 py-1 border border-gray-200 dark:border-darkblack-400 rounded-md text-[11px] bg-white dark:bg-darkblack-600 text-gray-700 dark:text-white" />
+            <button onClick={applyDateToAll} disabled={!bulkDate} className="px-2 py-1 text-xs font-medium text-primary bg-primary/10 hover:bg-primary/20 rounded-md disabled:opacity-40 whitespace-nowrap">Aplicar a todos</button>
+          </div>
+        )}
         {openHref && (
           <a href={openHref} onClick={e => e.stopPropagation()} className="text-xs font-medium text-primary hover:underline flex-shrink-0">Ver orden completa →</a>
         )}
