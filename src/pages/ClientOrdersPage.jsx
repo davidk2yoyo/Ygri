@@ -385,33 +385,55 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
   const [error, setError] = useState("");
   const [matches, setMatches] = useState(null);
   const [unmatched, setUnmatched] = useState([]);
+  const [ambiguous, setAmbiguous] = useState([]);
 
   const handleFile = async (file) => {
     if (!file) return;
-    setParsing(true); setError(""); setMatches(null); setUnmatched([]);
+    setParsing(true); setError(""); setMatches(null); setUnmatched([]); setAmbiguous([]);
     try {
       const { sheets } = await parseClientOrderWorkbook(await file.arrayBuffer());
       const parsed = sheets.filter(s => s.kind === "supplier").flatMap(s => s.lines);
 
-      const byRef = new Map();
+      const norm = (v) => (v || "").trim().toLowerCase();
+
+      // Same ref can repeat in the file for different color variants at different
+      // prices (confirmed in real orders), so a bare ref match isn't safe when more
+      // than one order line shares that ref — color has to disambiguate, or we skip it.
+      const byRefColor = new Map();
+      const byRefOnly = new Map();
       lines.forEach(l => {
-        const key = (l.supplier_ref || "").trim().toLowerCase();
-        if (!key) return;
-        if (!byRef.has(key)) byRef.set(key, []);
-        byRef.get(key).push(l);
+        const ref = norm(l.supplier_ref);
+        if (!ref) return;
+        const rcKey = `${ref}|${norm(l.color)}`;
+        if (!byRefColor.has(rcKey)) byRefColor.set(rcKey, []);
+        byRefColor.get(rcKey).push(l);
+        if (!byRefOnly.has(ref)) byRefOnly.set(ref, []);
+        byRefOnly.get(ref).push(l);
       });
 
       const matchRows = [];
       const miss = [];
+      const ambig = [];
       for (const p of parsed) {
         if (p.price == null) continue; // nothing to update for this row
-        const key = (p.supplier_ref || "").trim().toLowerCase();
-        const found = key ? byRef.get(key) : null;
-        if (found?.length) matchRows.push({ supplier_ref: p.supplier_ref, price: p.price, lines: found });
-        else miss.push(p);
+        const ref = norm(p.supplier_ref);
+        const refLines = ref ? byRefOnly.get(ref) : null;
+        if (!refLines?.length) { miss.push(p); continue; }
+
+        const colorMatches = byRefColor.get(`${ref}|${norm(p.color)}`);
+        if (colorMatches?.length) {
+          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: colorMatches });
+        } else if (refLines.length === 1) {
+          // only one order line has this ref — safe to apply even without a color match
+          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: refLines });
+        } else {
+          // several order lines share this ref and color didn't tell them apart — don't guess
+          ambig.push(p);
+        }
       }
       setMatches(matchRows);
       setUnmatched(miss);
+      setAmbiguous(ambig);
     } catch (e) {
       setError(e.message || "Couldn't read the file.");
     } finally {
@@ -450,14 +472,16 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
           {matches && (
             <>
               <p className="text-sm text-bgray-600">
-                <b>{totalLines}</b> line(s) across <b>{matches.length}</b> ref(s) will get a new price.
+                <b>{totalLines}</b> line(s) in this order, from <b>{matches.length}</b> matched row(s) in the file, will get a new price.
                 {unmatched.length > 0 && <> <b>{unmatched.length}</b> row(s) in the file had no match in this order.</>}
+                {ambiguous.length > 0 && <> <b>{ambiguous.length}</b> row(s) need manual review — see below.</>}
               </p>
               {matches.length > 0 && (
                 <div className="border border-bgray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-bgray-50 text-bgray-500 sticky top-0"><tr>
                       <th className="px-2 py-1.5 text-left font-semibold">Ref</th>
+                      <th className="px-2 py-1.5 text-left font-semibold">Color</th>
                       <th className="px-2 py-1.5 text-left font-semibold">Matched line(s)</th>
                       <th className="px-2 py-1.5 text-right font-semibold">New price</th>
                     </tr></thead>
@@ -465,12 +489,21 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                       {matches.map((m, i) => (
                         <tr key={i} className="border-t border-bgray-100">
                           <td className="px-2 py-1 font-mono">{m.supplier_ref}</td>
+                          <td className="px-2 py-1 text-bgray-500">{m.color || "—"}</td>
                           <td className="px-2 py-1">{m.lines.map(l => l.name || l.supplier_ref).join(", ")}</td>
                           <td className="px-2 py-1 text-right font-semibold">{m.price}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {ambiguous.length > 0 && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Needs manual review — same ref, multiple lines in this order, and the color in the file didn't match any of them:</p>
+                  <ul className="text-xs text-amber-700 list-disc pl-4 max-h-32 overflow-y-auto">
+                    {ambiguous.map((u, i) => <li key={i}>{u.supplier_ref} {u.color ? `(${u.color})` : ""} — {u.name} → {u.price}</li>)}
+                  </ul>
                 </div>
               )}
               {unmatched.length > 0 && (
