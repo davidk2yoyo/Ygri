@@ -31,6 +31,10 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
   const readyCount = items.filter(i => i.ready_at).length;
   const pct = items.length ? (100 * readyCount / items.length) : 0;
   const pendingItems = items.filter(i => !i.ready_at);
+  const pendingDates = [...new Set(pendingItems.map(i => i.expected_ready_date).filter(Boolean))].sort();
+  const dateLabel = pendingDates.length === 1 ? `Entrega est. ${fmtDate(pendingDates[0])}`
+    : pendingDates.length > 1 ? `Entrega est. ${fmtDate(pendingDates[0])} – ${fmtDate(pendingDates[pendingDates.length - 1])}`
+    : null;
 
   // Suppliers often give one date for the whole PO rather than per item, and
   // marking 20+ items ready one by one once a shipment actually arrives is
@@ -51,7 +55,9 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
         <ProductionRing pct={pct} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{po.supplier_name || "Supplier"}</p>
-          <p className="text-xs text-gray-500 dark:text-bgray-400">{readyCount}/{items.length} listos · {po.po_number}</p>
+          <p className="text-xs text-gray-500 dark:text-bgray-400 truncate">
+            {readyCount}/{items.length} listos · {po.po_number}{dateLabel && <> · {dateLabel}</>}
+          </p>
         </div>
         {!readOnly && pendingItems.length > 0 && (
           <div className="flex items-center gap-1.5 flex-shrink-0" onClick={e => e.stopPropagation()}>
