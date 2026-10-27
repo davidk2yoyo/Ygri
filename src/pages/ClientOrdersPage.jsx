@@ -379,7 +379,15 @@ function SupplierMatchModal({ names, suppliers, onCancel, onConfirm }) {
 // touched. Returns a {lineId: price} map; the caller merges it into local line state and the
 // existing Save button persists + logs it like any other edit, instead of this modal writing
 // to the DB directly.
-function UpdatePricesModal({ lines, onApply, onClose }) {
+const FIELD_UPDATE_META = {
+  price: { noun: "prices", columnHeader: "New price", instructions: "Matches by supplier ref — only the price field changes." },
+  qty: { noun: "quantities", columnHeader: "New qty", instructions: "Matches by supplier ref — only the quantity field changes, e.g. after a packing-list recount." },
+};
+
+// Shared by "Update prices…" and "Update quantities…" — same file, same matching rules,
+// just a different column of the parsed row and of the order line.
+function UpdateFieldModal({ field, lines, onApply, onClose }) {
+  const meta = FIELD_UPDATE_META[field];
   const fileRef = useRef(null);
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState("");
@@ -398,7 +406,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
       const norm = (v) => (v || "").trim().toLowerCase();
 
       // Same ref can repeat in the file for different color variants at different
-      // prices (confirmed in real orders), so a bare ref match isn't safe when more
+      // values (confirmed in real orders), so a bare ref match isn't safe when more
       // than one order line shares that ref — color has to disambiguate, or we skip it.
       const byRefColor = new Map();
       const byRefOnly = new Map();
@@ -415,7 +423,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
       const parsedByRef = new Map();
       const miss = [];
       parsed.forEach(p => {
-        if (p.price == null) return; // nothing to update for this row
+        if (p[field] == null) return; // nothing to update for this row
         const ref = norm(p.supplier_ref);
         if (!ref) { miss.push(p); return; }
         if (!parsedByRef.has(ref)) parsedByRef.set(ref, []);
@@ -433,7 +441,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
         for (const p of rows) {
           const colorMatches = (byRefColor.get(`${ref}|${norm(p.color)}`) || []).filter(l => !assigned.has(l.id));
           if (colorMatches.length) {
-            matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: colorMatches });
+            matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, value: p[field], lines: colorMatches });
             colorMatches.forEach(l => assigned.add(l.id));
           } else {
             unresolvedRows.push(p);
@@ -445,18 +453,18 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
 
         if (remainingLines.length === 1 && unresolvedRows.length === 1) {
           const p = unresolvedRows[0];
-          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: remainingLines });
+          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, value: p[field], lines: remainingLines });
           continue;
         }
 
-        const distinctPrices = new Set(unresolvedRows.map(r => r.price));
-        if (distinctPrices.size === 1) {
-          // several rows/lines left, but they'd all land on the same price anyway — no real ambiguity
-          matchRows.push({ supplier_ref: ref, color: null, price: [...distinctPrices][0], lines: remainingLines });
+        const distinctValues = new Set(unresolvedRows.map(r => r[field]));
+        if (distinctValues.size === 1) {
+          // several rows/lines left, but they'd all land on the same value anyway — no real ambiguity
+          matchRows.push({ supplier_ref: ref, color: null, value: [...distinctValues][0], lines: remainingLines });
           continue;
         }
 
-        // genuinely ambiguous: different prices, and nothing to tell rows and lines apart — let staff map it
+        // genuinely ambiguous: different values, and nothing to tell rows and lines apart — let staff map it
         ambig.push({ ref, rows: unresolvedRows, lines: remainingLines });
       }
 
@@ -474,13 +482,13 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
   const totalLines = (matches?.reduce((n, m) => n + m.lines.length, 0) || 0) + manualResolved;
 
   const apply = () => {
-    const priceById = {};
-    matches.forEach(m => m.lines.forEach(l => { priceById[l.id] = m.price; }));
+    const valueById = {};
+    matches.forEach(m => m.lines.forEach(l => { valueById[l.id] = m.value; }));
     ambiguous.forEach((g, gi) => g.rows.forEach((r, ri) => {
       const lineId = manualMap[`${gi}:${ri}`];
-      if (lineId) priceById[lineId] = r.price;
+      if (lineId) valueById[lineId] = r[field];
     }));
-    onApply(priceById);
+    onApply(valueById);
     onClose();
   };
 
@@ -489,8 +497,8 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
       <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[88vh] flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-200 dark:border-darkblack-400">
           <div>
-            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">Update prices from Excel</h2>
-            <p className="text-xs text-bgray-500 mt-0.5">Matches by supplier ref — only the price field changes. Nothing is saved until you review and click Save on the order.</p>
+            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">Update {meta.noun} from Excel</h2>
+            <p className="text-xs text-bgray-500 mt-0.5">{meta.instructions} Nothing is saved until you review and click Save on the order.</p>
           </div>
           <button onClick={onClose} className="text-bgray-400 hover:text-bgray-600 text-xl leading-none">×</button>
         </div>
@@ -506,7 +514,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
           {matches && (
             <>
               <p className="text-sm text-bgray-600">
-                <b>{totalLines}</b> line(s) in this order, from <b>{matches.length}</b> matched row(s) in the file, will get a new price.
+                <b>{totalLines}</b> line(s) in this order, from <b>{matches.length}</b> matched row(s) in the file, will get a new {field === "price" ? "price" : "quantity"}.
                 {unmatched.length > 0 && <> <b>{unmatched.length}</b> row(s) in the file had no match in this order.</>}
                 {ambiguous.length > 0 && <> <b>{manualResolved}</b>/<b>{ambiguous.reduce((n, g) => n + g.rows.length, 0)}</b> ambiguous row(s) mapped — see below.</>}
               </p>
@@ -517,7 +525,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                       <th className="px-2 py-1.5 text-left font-semibold">Ref</th>
                       <th className="px-2 py-1.5 text-left font-semibold">Color</th>
                       <th className="px-2 py-1.5 text-left font-semibold">Matched line(s)</th>
-                      <th className="px-2 py-1.5 text-right font-semibold">New price</th>
+                      <th className="px-2 py-1.5 text-right font-semibold">{meta.columnHeader}</th>
                     </tr></thead>
                     <tbody>
                       {matches.map((m, i) => (
@@ -525,7 +533,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                           <td className="px-2 py-1 font-mono">{m.supplier_ref}</td>
                           <td className="px-2 py-1 text-bgray-500">{m.color || "—"}</td>
                           <td className="px-2 py-1">{m.lines.map(l => l.name || l.supplier_ref).join(", ")}</td>
-                          <td className="px-2 py-1 text-right font-semibold">{m.price}</td>
+                          <td className="px-2 py-1 text-right font-semibold">{m.value}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -535,7 +543,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
               {ambiguous.length > 0 && (
                 <div className="border border-amber-200 rounded-lg overflow-hidden">
                   <div className="px-3 py-2 bg-amber-50">
-                    <p className="text-xs font-semibold text-amber-700">Same ref, multiple lines in this order, different prices — pick which line each row is for:</p>
+                    <p className="text-xs font-semibold text-amber-700">Same ref, multiple lines in this order, different values — pick which line each row is for:</p>
                   </div>
                   <div className="divide-y divide-amber-100 max-h-72 overflow-y-auto">
                     {ambiguous.map((g, gi) => {
@@ -548,7 +556,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                             <span className="font-mono w-20 shrink-0">{r.supplier_ref}</span>
                             <span className="w-16 shrink-0 text-bgray-500 truncate">{r.color || "—"}</span>
                             <span className="flex-1 text-bgray-600 truncate">{r.name}</span>
-                            <span className="w-14 shrink-0 text-right font-semibold">{r.price}</span>
+                            <span className="w-14 shrink-0 text-right font-semibold">{r[field]}</span>
                             <select
                               value={picked}
                               onChange={e => setManualMap(prev => ({ ...prev, [key]: e.target.value }))}
@@ -557,7 +565,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                               <option value="">Skip (don't update)</option>
                               {g.lines.map(l => (
                                 <option key={l.id} value={l.id} disabled={usedElsewhere.has(l.id) && picked !== l.id}>
-                                  {(l.name || l.supplier_ref)}{l.color ? ` (${l.color})` : ""} — was {l.price || "—"}
+                                  {(l.name || l.supplier_ref)}{l.color ? ` (${l.color})` : ""} — was {l[field] || "—"}
                                 </option>
                               ))}
                             </select>
@@ -603,12 +611,12 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const navigate = useNavigate();
   const [convert, setConvert] = useState(null); // {name, workflow, publish} while the convert form is open
   const [supplierNames, setSupplierNames] = useState(null); // distinct supplier names awaiting confirmation, while that modal is open
-  const [showPriceUpdate, setShowPriceUpdate] = useState(false);
+  const [fieldUpdateMode, setFieldUpdateMode] = useState(null); // "price" | "qty" | null, while that modal is open
 
-  // Merges matched prices into local line state only — doesn't write to the DB itself, so the
+  // Merges matched values into local line state only — doesn't write to the DB itself, so the
   // normal Save button (and its diff/history logging) handles persisting it like any other edit.
-  const applyPriceUpdates = (priceById) => {
-    setLines(prev => prev.map(l => priceById[l.id] != null ? { ...l, price: priceById[l.id] } : l));
+  const applyFieldUpdates = (field, valueById) => {
+    setLines(prev => prev.map(l => valueById[l.id] != null ? { ...l, [field]: valueById[l.id] } : l));
   };
 
   const actor = async () => {
@@ -762,7 +770,8 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
             {Object.keys(STATUS_STYLE).map(s => <option key={s} value={s}>{s}</option>)}
           </select>
           {order.source_file_url && <a href={order.source_file_url} target="_blank" rel="noreferrer" className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Original file</a>}
-          <button onClick={() => setShowPriceUpdate(true)} className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Update prices…</button>
+          <button onClick={() => setFieldUpdateMode("price")} className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Update prices…</button>
+          <button onClick={() => setFieldUpdateMode("qty")} className="px-3 py-1.5 border border-bgray-300 rounded-lg text-sm text-bgray-600 hover:border-primary">Update quantities…</button>
           <button onClick={deleteOrder} disabled={busy} className="px-3 py-1.5 border border-red-200 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 disabled:opacity-50">Delete order</button>
         </div>
       </div>
@@ -856,11 +865,12 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
         />
       )}
 
-      {showPriceUpdate && (
-        <UpdatePricesModal
+      {fieldUpdateMode && (
+        <UpdateFieldModal
+          field={fieldUpdateMode}
           lines={lines}
-          onApply={applyPriceUpdates}
-          onClose={() => setShowPriceUpdate(false)}
+          onApply={valueById => applyFieldUpdates(fieldUpdateMode, valueById)}
+          onClose={() => setFieldUpdateMode(null)}
         />
       )}
     </div>
