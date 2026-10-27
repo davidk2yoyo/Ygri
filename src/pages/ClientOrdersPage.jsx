@@ -385,11 +385,12 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
   const [error, setError] = useState("");
   const [matches, setMatches] = useState(null);
   const [unmatched, setUnmatched] = useState([]);
-  const [ambiguous, setAmbiguous] = useState([]);
+  const [ambiguous, setAmbiguous] = useState([]); // [{ ref, rows: [fileRow], lines: [orderLine] }]
+  const [manualMap, setManualMap] = useState({}); // `${groupIdx}:${rowIdx}` -> lineId | ""
 
   const handleFile = async (file) => {
     if (!file) return;
-    setParsing(true); setError(""); setMatches(null); setUnmatched([]); setAmbiguous([]);
+    setParsing(true); setError(""); setMatches(null); setUnmatched([]); setAmbiguous([]); setManualMap({});
     try {
       const { sheets } = await parseClientOrderWorkbook(await file.arrayBuffer());
       const parsed = sheets.filter(s => s.kind === "supplier").flatMap(s => s.lines);
@@ -411,26 +412,54 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
         byRefOnly.get(ref).push(l);
       });
 
-      const matchRows = [];
+      const parsedByRef = new Map();
       const miss = [];
-      const ambig = [];
-      for (const p of parsed) {
-        if (p.price == null) continue; // nothing to update for this row
+      parsed.forEach(p => {
+        if (p.price == null) return; // nothing to update for this row
         const ref = norm(p.supplier_ref);
-        const refLines = ref ? byRefOnly.get(ref) : null;
-        if (!refLines?.length) { miss.push(p); continue; }
+        if (!ref) { miss.push(p); return; }
+        if (!parsedByRef.has(ref)) parsedByRef.set(ref, []);
+        parsedByRef.get(ref).push(p);
+      });
 
-        const colorMatches = byRefColor.get(`${ref}|${norm(p.color)}`);
-        if (colorMatches?.length) {
-          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: colorMatches });
-        } else if (refLines.length === 1) {
-          // only one order line has this ref — safe to apply even without a color match
-          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: refLines });
-        } else {
-          // several order lines share this ref and color didn't tell them apart — don't guess
-          ambig.push(p);
+      const matchRows = [];
+      const ambig = [];
+      for (const [ref, rows] of parsedByRef) {
+        const refLines = byRefOnly.get(ref);
+        if (!refLines?.length) { rows.forEach(r => miss.push(r)); continue; }
+
+        const assigned = new Set();
+        const unresolvedRows = [];
+        for (const p of rows) {
+          const colorMatches = (byRefColor.get(`${ref}|${norm(p.color)}`) || []).filter(l => !assigned.has(l.id));
+          if (colorMatches.length) {
+            matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: colorMatches });
+            colorMatches.forEach(l => assigned.add(l.id));
+          } else {
+            unresolvedRows.push(p);
+          }
         }
+
+        const remainingLines = refLines.filter(l => !assigned.has(l.id));
+        if (!remainingLines.length || !unresolvedRows.length) continue;
+
+        if (remainingLines.length === 1 && unresolvedRows.length === 1) {
+          const p = unresolvedRows[0];
+          matchRows.push({ supplier_ref: p.supplier_ref, color: p.color, price: p.price, lines: remainingLines });
+          continue;
+        }
+
+        const distinctPrices = new Set(unresolvedRows.map(r => r.price));
+        if (distinctPrices.size === 1) {
+          // several rows/lines left, but they'd all land on the same price anyway — no real ambiguity
+          matchRows.push({ supplier_ref: ref, color: null, price: [...distinctPrices][0], lines: remainingLines });
+          continue;
+        }
+
+        // genuinely ambiguous: different prices, and nothing to tell rows and lines apart — let staff map it
+        ambig.push({ ref, rows: unresolvedRows, lines: remainingLines });
       }
+
       setMatches(matchRows);
       setUnmatched(miss);
       setAmbiguous(ambig);
@@ -441,11 +470,16 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
     }
   };
 
-  const totalLines = matches?.reduce((n, m) => n + m.lines.length, 0) || 0;
+  const manualResolved = Object.values(manualMap).filter(v => v).length;
+  const totalLines = (matches?.reduce((n, m) => n + m.lines.length, 0) || 0) + manualResolved;
 
   const apply = () => {
     const priceById = {};
     matches.forEach(m => m.lines.forEach(l => { priceById[l.id] = m.price; }));
+    ambiguous.forEach((g, gi) => g.rows.forEach((r, ri) => {
+      const lineId = manualMap[`${gi}:${ri}`];
+      if (lineId) priceById[lineId] = r.price;
+    }));
     onApply(priceById);
     onClose();
   };
@@ -474,7 +508,7 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
               <p className="text-sm text-bgray-600">
                 <b>{totalLines}</b> line(s) in this order, from <b>{matches.length}</b> matched row(s) in the file, will get a new price.
                 {unmatched.length > 0 && <> <b>{unmatched.length}</b> row(s) in the file had no match in this order.</>}
-                {ambiguous.length > 0 && <> <b>{ambiguous.length}</b> row(s) need manual review — see below.</>}
+                {ambiguous.length > 0 && <> <b>{manualResolved}</b>/<b>{ambiguous.reduce((n, g) => n + g.rows.length, 0)}</b> ambiguous row(s) mapped — see below.</>}
               </p>
               {matches.length > 0 && (
                 <div className="border border-bgray-200 rounded-lg overflow-hidden max-h-64 overflow-y-auto">
@@ -499,11 +533,39 @@ function UpdatePricesModal({ lines, onApply, onClose }) {
                 </div>
               )}
               {ambiguous.length > 0 && (
-                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-                  <p className="text-xs font-semibold text-amber-700 mb-1">Needs manual review — same ref, multiple lines in this order, and the color in the file didn't match any of them:</p>
-                  <ul className="text-xs text-amber-700 list-disc pl-4 max-h-32 overflow-y-auto">
-                    {ambiguous.map((u, i) => <li key={i}>{u.supplier_ref} {u.color ? `(${u.color})` : ""} — {u.name} → {u.price}</li>)}
-                  </ul>
+                <div className="border border-amber-200 rounded-lg overflow-hidden">
+                  <div className="px-3 py-2 bg-amber-50">
+                    <p className="text-xs font-semibold text-amber-700">Same ref, multiple lines in this order, different prices — pick which line each row is for:</p>
+                  </div>
+                  <div className="divide-y divide-amber-100 max-h-72 overflow-y-auto">
+                    {ambiguous.map((g, gi) => {
+                      const usedElsewhere = new Set(g.rows.map((_, ri) => manualMap[`${gi}:${ri}`]).filter(Boolean));
+                      return g.rows.map((r, ri) => {
+                        const key = `${gi}:${ri}`;
+                        const picked = manualMap[key] || "";
+                        return (
+                          <div key={key} className="flex items-center gap-2 px-3 py-2 text-xs">
+                            <span className="font-mono w-20 shrink-0">{r.supplier_ref}</span>
+                            <span className="w-16 shrink-0 text-bgray-500 truncate">{r.color || "—"}</span>
+                            <span className="flex-1 text-bgray-600 truncate">{r.name}</span>
+                            <span className="w-14 shrink-0 text-right font-semibold">{r.price}</span>
+                            <select
+                              value={picked}
+                              onChange={e => setManualMap(prev => ({ ...prev, [key]: e.target.value }))}
+                              className="w-48 shrink-0 px-1.5 py-1 border border-bgray-300 dark:border-darkblack-400 rounded text-xs bg-white dark:bg-darkblack-600"
+                            >
+                              <option value="">Skip (don't update)</option>
+                              {g.lines.map(l => (
+                                <option key={l.id} value={l.id} disabled={usedElsewhere.has(l.id) && picked !== l.id}>
+                                  {(l.name || l.supplier_ref)}{l.color ? ` (${l.color})` : ""} — was {l.price || "—"}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      });
+                    })}
+                  </div>
                 </div>
               )}
               {unmatched.length > 0 && (
