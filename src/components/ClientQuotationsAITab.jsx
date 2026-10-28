@@ -1,20 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { sendQuotationsAiMessage } from "../lib/ai/quotationsAiClient";
-
-const markdownComponents = {
-  p: (props) => <p className="mb-1.5 last:mb-0" {...props} />,
-  strong: (props) => <strong className="font-semibold text-darkblack-700 dark:text-white" {...props} />,
-  ul: (props) => <ul className="list-disc list-outside pl-4 space-y-0.5 mb-1.5 marker:text-bgray-400" {...props} />,
-  ol: (props) => <ol className="list-decimal list-outside pl-4 space-y-0.5 mb-1.5" {...props} />,
-  li: (props) => <li {...props} />,
-  table: (props) => <table className="w-full text-xs my-1.5 border border-bgray-200 dark:border-darkblack-400" {...props} />,
-  th: (props) => <th className="px-2 py-1 bg-bgray-50 dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 text-left" {...props} />,
-  td: (props) => <td className="px-2 py-1 border border-bgray-200 dark:border-darkblack-400" {...props} />,
-  code: (props) => <code className="px-1 py-0.5 bg-black/5 dark:bg-white/10 rounded text-xs font-mono" {...props} />,
-};
 
 function EnablePanel({ clientId, settings, onSaved }) {
   const [enabled, setEnabled] = useState(settings?.enabled || false);
@@ -81,90 +66,9 @@ function EnablePanel({ clientId, settings, onSaved }) {
   );
 }
 
-function ChatBubble({ message }) {
-  if (message.role === "user") {
-    return (
-      <div className="flex justify-end mb-3">
-        <div className="max-w-[85%] px-3 py-2 rounded-2xl rounded-br-sm bg-primary text-white text-sm">{message.content}</div>
-      </div>
-    );
-  }
-  return (
-    <div className="flex justify-start mb-3">
-      <div className="max-w-[90%] w-full">
-        <div className="px-3 py-2 rounded-2xl rounded-bl-sm bg-bgray-100 dark:bg-darkblack-500 text-darkblack-700 dark:text-white text-sm">
-          {message.error ? (
-            <span className="text-red-600">{message.content}</span>
-          ) : (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{message.content}</ReactMarkdown>
-          )}
-        </div>
-        {message.citations?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mt-1.5 px-1">
-            {message.citations.map((c, i) => (
-              <span key={i} className="text-[11px] px-2 py-0.5 bg-bgray-50 dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-full text-bgray-500 dark:text-bgray-400">
-                📄 {c.document}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function ChatPanel({ clientId }) {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [conversationId, setConversationId] = useState(null);
-  const bottomRef = useRef(null);
-
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
-  const send = async () => {
-    const text = input.trim();
-    if (!text || busy) return;
-    setInput("");
-    setMessages(prev => [...prev, { role: "user", content: text }]);
-    setBusy(true);
-    try {
-      const { answer, conversationId: nextId, citations } = await sendQuotationsAiMessage({ clientId, message: text, conversationId });
-      setConversationId(nextId);
-      setMessages(prev => [...prev, { role: "assistant", content: answer, citations }]);
-    } catch (e) {
-      setMessages(prev => [...prev, { role: "assistant", content: e.message || "Error al consultar.", error: true }]);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col h-[520px]">
-      <div className="flex-1 overflow-y-auto p-6">
-        {messages.length === 0 && (
-          <p className="text-sm text-bgray-400">Pregunta por una referencia, un proveedor, o pide comparar precios entre cotizaciones. Ej: "¿Cuánto cuesta la referencia XM156?"</p>
-        )}
-        {messages.map((m, i) => <ChatBubble key={i} message={m} />)}
-        {busy && <div className="text-xs text-bgray-400 px-1">Buscando en las cotizaciones…</div>}
-        <div ref={bottomRef} />
-      </div>
-      <div className="flex items-center gap-2 p-4 border-t border-bgray-200 dark:border-darkblack-400">
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter") send(); }}
-          placeholder="Busca una referencia, precio o proveedor…"
-          className="flex-1 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary"
-        />
-        <button onClick={send} disabled={busy || !input.trim()} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition">
-          Enviar
-        </button>
-      </div>
-    </div>
-  );
-}
-
+// The chat itself lives in the client portal (ConsultarCotizacionesPage) —
+// this tab is staff-only: it's the admin control for which Dify dataset a
+// client is mapped to and whether the module is switched on for them.
 export default function ClientQuotationsAITab({ clientId }) {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -181,11 +85,11 @@ export default function ClientQuotationsAITab({ clientId }) {
   return (
     <div>
       <EnablePanel clientId={clientId} settings={settings} onSaved={setSettings} />
-      {settings?.enabled && settings?.dify_dataset_id ? (
-        <ChatPanel clientId={clientId} />
-      ) : (
-        <p className="p-6 text-sm text-bgray-400">Habilita el módulo y pega el Dataset ID de Dify arriba para empezar a consultar.</p>
-      )}
+      <p className="p-6 text-sm text-bgray-400">
+        {settings?.enabled && settings?.dify_dataset_id
+          ? "El cliente ya puede consultarlo desde su portal, en \"Consultar Cotizaciones\"."
+          : "Habilita el módulo y pega el Dataset ID de Dify arriba — el chat aparece en el portal del cliente, no aquí."}
+      </p>
     </div>
   );
 }
