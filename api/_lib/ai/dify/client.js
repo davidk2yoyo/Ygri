@@ -19,20 +19,17 @@ function requireEnv(name) {
 // client". The caller must have already verified, against Supabase, that
 // datasetId belongs to the client the request is authorized for. That check
 // is the actual isolation boundary; this is just the HTTP call.
-export async function retrieveFromDataset({ datasetId, query, topK = 6 }) {
+export async function retrieveFromDataset({ datasetId, query, retrievalModel }) {
   const apiKey = requireEnv("DIFY_KNOWLEDGE_API_KEY");
   const res = await fetch(`${DIFY_BASE_URL}/v1/datasets/${encodeURIComponent(datasetId)}/retrieve`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({
-      query,
-      retrieval_model: {
-        search_method: "hybrid_search",
-        reranking_enable: false,
-        top_k: topK,
-        score_threshold_enabled: false,
-      },
-    }),
+    // retrieval_model is omitted unless the caller explicitly overrides it —
+    // sending it at all replaces whatever hybrid-search/rerank/top_k setup
+    // was already tuned for this dataset in Dify Studio with these defaults.
+    // Leaving it out makes Dify use the dataset's own configured retrieval
+    // settings, same as the existing tested Chatflow already does.
+    body: JSON.stringify({ query, ...(retrievalModel ? { retrieval_model: retrievalModel } : {}) }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
