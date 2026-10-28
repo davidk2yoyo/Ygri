@@ -86,7 +86,7 @@ export default function ConsultarCotizacionesPage() {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-bold text-gray-900">Consultar Cotizaciones</h1>
         <p className="text-sm text-gray-500 mt-0.5">Pregunta por una referencia, un precio o un proveedor en tus cotizaciones.</p>
@@ -101,7 +101,7 @@ export default function ConsultarCotizacionesPage() {
           <p className="text-sm text-gray-500">Este módulo aún no está disponible para tu cuenta. Contacta a tu asesor para habilitarlo.</p>
         </div>
       ) : (
-        <div className="bg-white border border-gray-200 rounded-2xl flex flex-col h-[560px]">
+        <div className="bg-white border border-gray-200 rounded-2xl flex flex-col h-[calc(100vh-11rem)]">
           <div className="flex-1 overflow-y-auto p-5">
             {messages.length === 0 && (
               <p className="text-sm text-gray-400">Ej: "¿Cuánto cuesta la referencia XM156?" o "¿Qué productos recargables tienes?"</p>
