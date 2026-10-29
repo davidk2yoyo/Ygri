@@ -16,7 +16,7 @@ export default function ProjectProductionSection({ trackId }) {
     try {
       const [{ data: pos, error: poErr }, { data: quotes }] = await Promise.all([
         supabase.from("purchase_orders")
-          .select("id, po_number, status, supplier_id, suppliers(name), purchase_order_items(id, description, picture_url, ready_at, expected_ready_date, notes)")
+          .select("id, po_number, status, supplier_id, suppliers(name), purchase_order_items(id, item_number, description, picture_url, ready_at, expected_ready_date, notes)")
           .eq("track_id", trackId).order("created_at"),
         supabase.from("quotations").select("id").eq("track_id", trackId).order("created_at", { ascending: false }).limit(1),
       ]);

@@ -80,7 +80,10 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
                 ? <img src={it.picture_url} alt="" className="w-9 h-9 object-contain rounded border border-gray-200 bg-white flex-shrink-0" />
                 : <span className="w-9 h-9 rounded border border-dashed border-gray-200 flex-shrink-0" />}
               <div className="min-w-0 flex-1">
-                <p className="text-sm text-gray-700 dark:text-bgray-200 truncate">{it.description || "—"}</p>
+                <p className="text-sm text-gray-700 dark:text-bgray-200 truncate">
+                  {it.item_number && <span className="font-mono text-xs text-gray-400 mr-1.5">{it.item_number}</span>}
+                  {it.description || "—"}
+                </p>
                 {!readOnly && (
                   <input value={it.notes || ""} onChange={e => onItemChange(it, { notes: e.target.value })} placeholder="Comentario (solo para tu equipo)…"
                     className="mt-1 w-full text-xs px-1.5 py-0.5 border border-transparent hover:border-gray-200 dark:hover:border-darkblack-400 focus:border-primary rounded bg-transparent text-gray-600 dark:text-bgray-300" />
