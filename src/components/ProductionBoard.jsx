@@ -104,7 +104,15 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, onPh
             {!readOnly && onPhotoAdd && (
               <label className={`w-16 h-16 flex-shrink-0 rounded-lg border-2 border-dashed border-gray-300 dark:border-darkblack-400 flex items-center justify-center cursor-pointer text-gray-400 hover:border-primary hover:text-primary transition ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
                 <span className="text-xl leading-none">{uploading ? "…" : "+"}</span>
-                <input type="file" accept="image/*" multiple className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ""; }} />
+                <input type="file" accept="image/*" multiple className="hidden" onChange={e => {
+                  // copy out of the live FileList before resetting value — in
+                  // some browsers clearing .value invalidates a still-held
+                  // reference to .files mid-iteration, silently dropping every
+                  // file after the first in the upload loop below
+                  const picked = Array.from(e.target.files || []);
+                  e.target.value = "";
+                  handleFiles(picked);
+                }} />
               </label>
             )}
           </div>
