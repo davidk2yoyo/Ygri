@@ -24,10 +24,12 @@ export function ProductionRing({ pct, size = 44 }) {
 // notes field per item — notes are staff-only, never sent to the client RPC,
 // so there's no need to guard their display here; readOnly callers simply
 // never receive them.
-export function SupplierProductionCard({ po, readOnly = true, onItemChange, openHref }) {
+export function SupplierProductionCard({ po, readOnly = true, onItemChange, onPhotoAdd, onPhotoDelete, openHref }) {
   const [open, setOpen] = useState(false);
   const [bulkDate, setBulkDate] = useState("");
+  const [uploading, setUploading] = useState(false);
   const items = po.items || [];
+  const photos = po.photos || [];
   const readyCount = items.filter(i => i.ready_at).length;
   const pct = items.length ? (100 * readyCount / items.length) : 0;
   const pendingItems = items.filter(i => !i.ready_at);
@@ -47,6 +49,16 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
     if (!bulkDate) return;
     pendingItems.forEach(it => onItemChange(it, { expected_ready_date: bulkDate }));
     setBulkDate("");
+  };
+
+  const handleFiles = async (files) => {
+    if (!files?.length || !onPhotoAdd) return;
+    setUploading(true);
+    try {
+      for (const file of files) await onPhotoAdd(po, file);
+    } finally {
+      setUploading(false);
+    }
   };
 
   return (
@@ -72,6 +84,32 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, open
         )}
         <span className="text-gray-300 text-xs flex-shrink-0">{open ? "▲" : "▼"}</span>
       </button>
+      {open && (photos.length > 0 || !readOnly) && (
+        <div className="border-t border-gray-100 dark:border-darkblack-500 p-3">
+          <p className="text-xs font-semibold text-gray-500 dark:text-bgray-400 mb-2">Fotos de mercancía</p>
+          <div className="flex flex-wrap gap-2">
+            {photos.map(p => (
+              <div key={p.id} className="relative group w-16 h-16 flex-shrink-0">
+                <a href={p.photo_url} target="_blank" rel="noreferrer">
+                  <img src={p.photo_url} alt={p.caption || ""} className="w-16 h-16 object-cover rounded-lg border border-gray-200 dark:border-darkblack-400" />
+                </a>
+                {!readOnly && onPhotoDelete && (
+                  <button onClick={() => onPhotoDelete(po, p)} title="Eliminar foto"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white text-xs leading-none flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {!readOnly && onPhotoAdd && (
+              <label className={`w-16 h-16 flex-shrink-0 rounded-lg border-2 border-dashed border-gray-300 dark:border-darkblack-400 flex items-center justify-center cursor-pointer text-gray-400 hover:border-primary hover:text-primary transition ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+                <span className="text-xl leading-none">{uploading ? "…" : "+"}</span>
+                <input type="file" accept="image/*" multiple className="hidden" onChange={e => { handleFiles(e.target.files); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
+        </div>
+      )}
       {open && (
         <ul className="border-t border-gray-100 dark:border-darkblack-500 divide-y divide-gray-50 dark:divide-darkblack-500">
           {items.map(it => (
