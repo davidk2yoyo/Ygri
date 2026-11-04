@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import { supabase } from "../supabaseClient";
 import PackingListPDF from "../components/PackingListPDF";
+import PackingListImportModal from "../components/PackingListImportModal";
 import { goBack } from "../lib/navigateBack";
 
 const emptyRow = () => ({
@@ -19,9 +20,23 @@ const emptyRow = () => ({
   cbm: "",
   nw: "",
   gw: "",
+  supplier_id: null,
+  supplier_name: "",
+});
+
+const emptySupplierTotal = (supplier_id, supplier_name) => ({
+  _localId: Math.random().toString(36).slice(2),
+  id: null,
+  supplier_id: supplier_id || null,
+  supplier_name: supplier_name || "Sin proveedor",
+  carton_qty: "",
+  cbm: "",
+  nw: "",
+  gw: "",
 });
 
 const num = (v) => (v === "" || v == null ? 0 : parseFloat(v) || 0);
+const supplierKey = (supplier_id, supplier_name) => supplier_id || `raw:${supplier_name || "Sin proveedor"}`;
 
 const DOC_LABELS = {
   quotation: { linked: "Linked to quotation", ref: "Quote Ref" },
@@ -37,6 +52,7 @@ export default function PackingListEditorPage() {
 
   const [packingList, setPackingList] = useState(null);
   const [items, setItems] = useState([]);
+  const [supplierTotals, setSupplierTotals] = useState([]);
   const [quotation, setQuotation] = useState(null);
   const [quotationItems, setQuotationItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -46,6 +62,7 @@ export default function PackingListEditorPage() {
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState("");
   const [showPDF, setShowPDF] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const fileRef = useRef(null);
   const containerRef = useRef(null);
@@ -55,15 +72,18 @@ export default function PackingListEditorPage() {
     try {
       const [{ data: quot }, { data: qItems }] = await Promise.all([
         supabase.from("quotations").select("id, quote_number, client_name, project_name, document_type").eq("id", quotationId).single(),
-        supabase.from("quotation_items").select("id, item_number, description, quantity").eq("quotation_id", quotationId).order("sort_order"),
+        supabase.from("quotation_items").select("id, item_number, description, quantity, supplier_id, suppliers(name)").eq("quotation_id", quotationId).order("sort_order"),
       ]);
       setQuotation(quot);
-      setQuotationItems(qItems || []);
+      setQuotationItems((qItems || []).map(qi => ({ ...qi, supplier_name: qi.suppliers?.name || "" })));
 
       const { data: existing } = await supabase.from("packing_lists").select("*").eq("quotation_id", quotationId).single();
       if (existing) {
         setPackingList(existing);
-        const { data: rows } = await supabase.from("packing_list_items").select("*").eq("packing_list_id", existing.id).order("sort_order");
+        const [{ data: rows }, { data: totalsRows }] = await Promise.all([
+          supabase.from("packing_list_items").select("*, suppliers(name)").eq("packing_list_id", existing.id).order("sort_order"),
+          supabase.from("packing_list_supplier_totals").select("*").eq("packing_list_id", existing.id).order("sort_order"),
+        ]);
 
         const qiIds = [...new Set((rows || []).map(r => r.quotation_item_id).filter(Boolean))];
         let optionsByQiId = {};
@@ -78,12 +98,14 @@ export default function PackingListEditorPage() {
         setItems((rows || []).map(r => ({
           ...r,
           _localId: Math.random().toString(36).slice(2),
+          supplier_name: r.suppliers?.name || r.supplier_name_raw || "",
           options: optionsByQiId[r.quotation_item_id] || [],
         })));
+        setSupplierTotals((totalsRows || []).map(r => ({ ...r, _localId: Math.random().toString(36).slice(2) })));
       } else {
         const { data: newPL, error } = await supabase.from("packing_lists").insert({ quotation_id: quotationId }).select().single();
         if (error) { setSaveError(`Could not create packing list: ${error.message}`); }
-        else { setPackingList(newPL); setItems([]); }
+        else { setPackingList(newPL); setItems([]); setSupplierTotals([]); }
       }
     } finally {
       setLoading(false);
@@ -106,20 +128,44 @@ export default function PackingListEditorPage() {
     }));
   };
 
-  const importFromQuotation = () => {
-    const existingIds = new Set(items.map(r => r.quotation_item_id).filter(Boolean));
+  const importSelected = (selectedIds) => {
+    const idSet = new Set(selectedIds);
     const toAdd = quotationItems
-      .filter(qi => !existingIds.has(qi.id))
+      .filter(qi => idSet.has(qi.id))
       .map(qi => ({
         ...emptyRow(),
         quotation_item_id: qi.id,
         item_number: qi.item_number || "",
         description: qi.description || "",
         qty: qi.quantity ? String(qi.quantity) : "",
+        supplier_id: qi.supplier_id || null,
+        supplier_name: qi.supplier_name || "",
       }));
-    if (toAdd.length === 0) return;
     setItems(prev => [...prev, ...toAdd]);
+    setShowImportModal(false);
   };
+
+  // "By supplier" mode: items stay grouped for display, but cartons/CBM/
+  // weights are one combined figure per group, typed directly — not summed
+  // from individual items (suppliers usually give one number for the whole
+  // consolidated shipment, not box-by-box).
+  const itemsBySupplier = items.reduce((acc, it) => {
+    const key = supplierKey(it.supplier_id, it.supplier_name);
+    if (!acc[key]) acc[key] = { supplier_id: it.supplier_id || null, supplier_name: it.supplier_name || "Sin proveedor", items: [] };
+    acc[key].items.push(it);
+    return acc;
+  }, {});
+
+  useEffect(() => {
+    if (packingList?.mode !== "by_supplier") return;
+    const existingKeys = new Set(supplierTotals.map(t => supplierKey(t.supplier_id, t.supplier_name)));
+    const missing = Object.values(itemsBySupplier).filter(g => !existingKeys.has(supplierKey(g.supplier_id, g.supplier_name)));
+    if (missing.length) setSupplierTotals(prev => [...prev, ...missing.map(g => emptySupplierTotal(g.supplier_id, g.supplier_name))]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [packingList?.mode, items]);
+
+  const updateSupplierTotal = (localId, field, value) =>
+    setSupplierTotals(prev => prev.map(t => t._localId === localId ? { ...t, [field]: value } : t));
 
   const runScan = async (file) => {
     if (!file?.type.startsWith("image/")) return;
@@ -190,13 +236,21 @@ export default function PackingListEditorPage() {
     return acc;
   }, { carton_qty: 0, qty: 0, cbm: 0, nw: 0, gw: 0 });
 
+  const supplierGrandTotals = supplierTotals.reduce((acc, t) => {
+    acc.carton_qty += num(t.carton_qty);
+    acc.cbm += num(t.cbm);
+    acc.nw += num(t.nw);
+    acc.gw += num(t.gw);
+    return acc;
+  }, { carton_qty: 0, cbm: 0, nw: 0, gw: 0 });
+
   const handleSave = async () => {
     if (!packingList) return;
     setSaving(true);
     setSaveError("");
     try {
       const { error: titleErr } = await supabase.from("packing_lists")
-        .update({ title: packingList.title, notes: packingList.notes })
+        .update({ title: packingList.title, notes: packingList.notes, mode: packingList.mode || "detailed", show_to_client: !!packingList.show_to_client })
         .eq("id", packingList.id);
       if (titleErr) throw new Error(titleErr.message);
 
@@ -225,6 +279,8 @@ export default function PackingListEditorPage() {
             cbm: r.cbm !== "" ? parseFloat(r.cbm) || null : null,
             nw: r.nw !== "" ? parseFloat(r.nw) || null : null,
             gw: r.gw !== "" ? parseFloat(r.gw) || null : null,
+            supplier_id: r.supplier_id || null,
+            supplier_name_raw: r.supplier_id ? null : (r.supplier_name || null),
             sort_order: i,
           }))
         );
@@ -235,6 +291,34 @@ export default function PackingListEditorPage() {
         const { error: delErr } = await supabase.from("packing_list_items").delete().in("id", oldRows.map(r => r.id));
         if (delErr) throw new Error(delErr.message);
       }
+
+      const { data: oldTotals, error: oldTotalsErr } = await supabase
+        .from("packing_list_supplier_totals").select("id").eq("packing_list_id", packingList.id);
+      if (oldTotalsErr) throw new Error(oldTotalsErr.message);
+
+      const validTotals = supplierTotals.filter(t =>
+        num(t.carton_qty) > 0 || num(t.cbm) > 0 || num(t.nw) > 0 || num(t.gw) > 0
+      );
+      if (validTotals.length > 0) {
+        const { error: insTotalsErr } = await supabase.from("packing_list_supplier_totals").insert(
+          validTotals.map((t, i) => ({
+            packing_list_id: packingList.id,
+            supplier_id: t.supplier_id || null,
+            supplier_name: t.supplier_name || null,
+            carton_qty: t.carton_qty !== "" ? parseInt(t.carton_qty) || null : null,
+            cbm: t.cbm !== "" ? parseFloat(t.cbm) || null : null,
+            nw: t.nw !== "" ? parseFloat(t.nw) || null : null,
+            gw: t.gw !== "" ? parseFloat(t.gw) || null : null,
+            sort_order: i,
+          }))
+        );
+        if (insTotalsErr) throw new Error(insTotalsErr.message);
+      }
+      if (oldTotals?.length) {
+        const { error: delTotalsErr } = await supabase.from("packing_list_supplier_totals").delete().in("id", oldTotals.map(t => t.id));
+        if (delTotalsErr) throw new Error(delTotalsErr.message);
+      }
+
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (e) {
@@ -245,19 +329,38 @@ export default function PackingListEditorPage() {
   };
 
   const exportExcel = () => {
-    const rows = items.map(r => ({
-      "Item #": r.item_number || "",
-      "Description": r.description || "",
-      "Cartons": r.carton_qty || "",
-      "Qty": r.qty || "",
-      "L (cm)": r.length_cm || "",
-      "W (cm)": r.width_cm || "",
-      "H (cm)": r.height_cm || "",
-      "CBM": r.cbm || "",
-      "N.W. (kg)": r.nw || "",
-      "G.W. (kg)": r.gw || "",
-    }));
-    rows.push({
+    const bySupplier = packingList?.mode === "by_supplier";
+    const rows = bySupplier
+      ? Object.values(itemsBySupplier).flatMap(g => {
+          const t = supplierTotals.find(st => supplierKey(st.supplier_id, st.supplier_name) === supplierKey(g.supplier_id, g.supplier_name));
+          return g.items.map((it, i) => ({
+            "Supplier": i === 0 ? g.supplier_name : "",
+            "Item #": it.item_number || "", "Description": it.description || "", "Qty": it.qty || "",
+            "Cartons": i === 0 ? (t?.carton_qty || "") : "",
+            "CBM": i === 0 && t?.cbm ? Number(t.cbm) : "",
+            "N.W. (kg)": i === 0 && t?.nw ? Number(t.nw) : "",
+            "G.W. (kg)": i === 0 && t?.gw ? Number(t.gw) : "",
+          }));
+        })
+      : items.map(r => ({
+          "Item #": r.item_number || "",
+          "Description": r.description || "",
+          "Cartons": r.carton_qty || "",
+          "Qty": r.qty || "",
+          "L (cm)": r.length_cm || "",
+          "W (cm)": r.width_cm || "",
+          "H (cm)": r.height_cm || "",
+          "CBM": r.cbm || "",
+          "N.W. (kg)": r.nw || "",
+          "G.W. (kg)": r.gw || "",
+        }));
+    rows.push(bySupplier ? {
+      "Supplier": "TOTAL", "Item #": "", "Description": "", "Qty": "",
+      "Cartons": supplierGrandTotals.carton_qty || "",
+      "CBM": supplierGrandTotals.cbm ? Number(supplierGrandTotals.cbm.toFixed(4)) : "",
+      "N.W. (kg)": supplierGrandTotals.nw ? Number(supplierGrandTotals.nw.toFixed(2)) : "",
+      "G.W. (kg)": supplierGrandTotals.gw ? Number(supplierGrandTotals.gw.toFixed(2)) : "",
+    } : {
       "Item #": "", "Description": "TOTAL",
       "Cartons": totals.carton_qty || "", "Qty": totals.qty || "",
       "L (cm)": "", "W (cm)": "", "H (cm)": "",
@@ -287,6 +390,8 @@ export default function PackingListEditorPage() {
       <PackingListPDF
         packingList={packingList}
         items={items}
+        itemsBySupplier={itemsBySupplier}
+        supplierTotals={supplierTotals}
         clientName={quotation?.client_name}
         projectName={quotation?.project_name}
         quoteNumber={quotation?.quote_number}
@@ -349,7 +454,7 @@ export default function PackingListEditorPage() {
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-4" ref={containerRef}>
         {/* Quotation reference card */}
         {quotation && (
-          <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center justify-between">
+          <div className="bg-white border border-gray-200 rounded-2xl px-6 py-4 flex items-center justify-between flex-wrap gap-4">
             <div>
               <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">{docLabels(quotation.document_type).linked}</p>
               <p className="font-bold text-gray-800 mt-0.5">{quotation.quote_number}</p>
@@ -357,12 +462,29 @@ export default function PackingListEditorPage() {
                 <p className="text-sm text-gray-500">{[quotation.client_name, quotation.project_name].filter(Boolean).join(" · ")}</p>
               )}
             </div>
-            {packingList && (
-              <div className="text-right">
-                <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Packing List</p>
-                <p className="font-bold text-blue-600 mt-0.5">{packingList.pl_number}</p>
+            <div className="flex items-center gap-4 flex-wrap">
+              <div className="flex items-center bg-gray-100 rounded-lg p-1 text-xs font-medium">
+                <button onClick={() => setPackingList(pl => ({ ...pl, mode: "detailed" }))}
+                  className={`px-3 py-1.5 rounded-md transition ${(packingList?.mode || "detailed") === "detailed" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
+                  Detailed
+                </button>
+                <button onClick={() => setPackingList(pl => ({ ...pl, mode: "by_supplier" }))}
+                  className={`px-3 py-1.5 rounded-md transition ${packingList?.mode === "by_supplier" ? "bg-white text-gray-800 shadow-sm" : "text-gray-500"}`}>
+                  By supplier
+                </button>
               </div>
-            )}
+              <label className="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer">
+                <input type="checkbox" checked={!!packingList?.show_to_client} onChange={e => setPackingList(pl => ({ ...pl, show_to_client: e.target.checked }))}
+                  className="w-3.5 h-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                Visible to client
+              </label>
+              {packingList && (
+                <div className="text-right">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide font-semibold">Packing List</p>
+                  <p className="font-bold text-blue-600 mt-0.5">{packingList.pl_number}</p>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -371,7 +493,7 @@ export default function PackingListEditorPage() {
           <button onClick={addRow} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600 transition">
             + Add row
           </button>
-          <button onClick={importFromQuotation} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600 transition">
+          <button onClick={() => setShowImportModal(true)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:border-blue-400 hover:text-blue-600 transition">
             Import items from quote
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleScanFile} />
@@ -396,6 +518,7 @@ export default function PackingListEditorPage() {
         {scanError && <p className="text-xs text-red-500">{scanError}</p>}
 
         {/* Items table */}
+        {(packingList?.mode || "detailed") === "detailed" ? (
         <div className="bg-white border border-gray-200 rounded-2xl overflow-x-auto">
           <table className="w-full border-collapse text-sm min-w-[1000px]">
             <thead>
@@ -482,6 +605,66 @@ export default function PackingListEditorPage() {
             )}
           </table>
         </div>
+        ) : (
+          <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+            {Object.values(itemsBySupplier).length === 0 ? (
+              <p className="p-8 text-center text-gray-400 text-sm">No items yet — import from the quote to group them by supplier.</p>
+            ) : (
+              <>
+                {Object.values(itemsBySupplier).map(group => {
+                  const key = supplierKey(group.supplier_id, group.supplier_name);
+                  const t = supplierTotals.find(st => supplierKey(st.supplier_id, st.supplier_name) === key);
+                  return (
+                    <div key={key} className="border-b border-gray-100 last:border-b-0">
+                      <div className="flex items-center justify-between gap-4 px-5 py-3 bg-gray-50 flex-wrap">
+                        <p className="text-sm font-bold text-gray-800">{group.supplier_name}</p>
+                        {t && (
+                          <div className="flex items-center gap-4 text-xs">
+                            <label className="flex items-center gap-1.5 text-gray-500">Cartons
+                              <input type="number" min="0" value={t.carton_qty} onChange={e => updateSupplierTotal(t._localId, "carton_qty", e.target.value)} onWheel={e => e.target.blur()}
+                                className="w-16 px-2 py-1 border border-gray-200 rounded text-center" />
+                            </label>
+                            <label className="flex items-center gap-1.5 text-gray-500">CBM
+                              <input type="number" min="0" step="0.0001" value={t.cbm} onChange={e => updateSupplierTotal(t._localId, "cbm", e.target.value)} onWheel={e => e.target.blur()}
+                                className="w-20 px-2 py-1 border border-gray-200 rounded text-center" />
+                            </label>
+                            <label className="flex items-center gap-1.5 text-gray-500">N.W. (kg)
+                              <input type="number" min="0" step="0.01" value={t.nw} onChange={e => updateSupplierTotal(t._localId, "nw", e.target.value)} onWheel={e => e.target.blur()}
+                                className="w-20 px-2 py-1 border border-gray-200 rounded text-center" />
+                            </label>
+                            <label className="flex items-center gap-1.5 text-gray-500">G.W. (kg)
+                              <input type="number" min="0" step="0.01" value={t.gw} onChange={e => updateSupplierTotal(t._localId, "gw", e.target.value)} onWheel={e => e.target.blur()}
+                                className="w-20 px-2 py-1 border border-gray-200 rounded text-center" />
+                            </label>
+                          </div>
+                        )}
+                      </div>
+                      <ul className="divide-y divide-gray-50">
+                        {group.items.map(it => (
+                          <li key={it._localId} className="px-5 py-2 text-sm text-gray-700 flex items-center gap-3">
+                            {it.item_number && <span className="font-mono text-xs text-gray-400">{it.item_number}</span>}
+                            <span className="flex-1 truncate">{it.description || "—"}</span>
+                            {it.qty && <span className="text-xs text-gray-400">qty {it.qty}</span>}
+                            <button onClick={() => removeRow(it._localId)} className="text-gray-300 hover:text-red-500 transition">
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })}
+                <div className="flex items-center justify-end gap-4 px-5 py-3 bg-gray-50 border-t-2 border-gray-300 text-xs font-bold text-gray-700">
+                  <span>TOTAL</span>
+                  <span>{supplierGrandTotals.carton_qty || 0} cartons</span>
+                  <span>{supplierGrandTotals.cbm.toFixed(4)} CBM</span>
+                  <span>{supplierGrandTotals.nw.toFixed(2)} kg NW</span>
+                  <span>{supplierGrandTotals.gw.toFixed(2)} kg GW</span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
         {/* Notes */}
         <div className="bg-white border border-gray-200 rounded-2xl p-4">
@@ -495,6 +678,15 @@ export default function PackingListEditorPage() {
           />
         </div>
       </div>
+
+      {showImportModal && (
+        <PackingListImportModal
+          quotationItems={quotationItems}
+          alreadyImportedIds={new Set(items.map(r => r.quotation_item_id).filter(Boolean))}
+          onConfirm={importSelected}
+          onClose={() => setShowImportModal(false)}
+        />
+      )}
     </div>
   );
 }

@@ -10,7 +10,8 @@ const COMPANY_INFO = {
   website: "www.interasia.com.co",
 };
 
-export default function PackingListPDF({ packingList, items, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, onClose }) {
+export default function PackingListPDF({ packingList, items, itemsBySupplier, supplierTotals, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, onClose }) {
+  const bySupplier = packingList?.mode === "by_supplier";
   const printRef = useRef(null);
   const [clientLogo, setClientLogo] = useState("");
 
@@ -36,6 +37,17 @@ export default function PackingListPDF({ packingList, items, clientName, project
     acc.gw += parseFloat(it.gw) || 0;
     return acc;
   }, { carton_qty: 0, qty: 0, cbm: 0, nw: 0, gw: 0 });
+
+  const supplierGroups = Object.values(itemsBySupplier || {});
+  const supplierGrandTotals = (supplierTotals || []).reduce((acc, t) => {
+    acc.carton_qty += parseInt(t.carton_qty) || 0;
+    acc.cbm += parseFloat(t.cbm) || 0;
+    acc.nw += parseFloat(t.nw) || 0;
+    acc.gw += parseFloat(t.gw) || 0;
+    return acc;
+  }, { carton_qty: 0, cbm: 0, nw: 0, gw: 0 });
+  const totalFor = (groupKey) => (supplierTotals || []).find(t =>
+    (t.supplier_id || `raw:${t.supplier_name || "Sin proveedor"}`) === groupKey);
 
   const handleDownloadPDF = async () => {
     const el = printRef.current;
@@ -191,6 +203,7 @@ export default function PackingListPDF({ packingList, items, clientName, project
       </div>
 
       {/* Items table */}
+      {!bySupplier ? (
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
         <thead>
           <tr style={{ backgroundColor: "#1e3a5f" }}>
@@ -243,6 +256,56 @@ export default function PackingListPDF({ packingList, items, clientName, project
           </tr>
         </tfoot>
       </table>
+      ) : (
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: "24px" }}>
+        <thead>
+          <tr style={{ backgroundColor: "#1e3a5f" }}>
+            <th style={{ padding: "8px 8px", textAlign: "left", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Supplier</th>
+            <th style={{ padding: "8px 8px", textAlign: "left", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Ref</th>
+            <th style={{ padding: "8px 8px", textAlign: "center", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Cartons</th>
+            <th style={{ padding: "8px 8px", textAlign: "right", color: "#fff", fontSize: "11px", fontWeight: "700" }}>N.W. (kg)</th>
+            <th style={{ padding: "8px 8px", textAlign: "right", color: "#fff", fontSize: "11px", fontWeight: "700" }}>G.W. (kg)</th>
+            <th style={{ padding: "8px 8px", textAlign: "right", color: "#fff", fontSize: "11px", fontWeight: "700" }}>CBM</th>
+          </tr>
+        </thead>
+        <tbody>
+          {supplierGroups.map((group, gi) => {
+            const key = group.supplier_id || `raw:${group.supplier_name || "Sin proveedor"}`;
+            const t = totalFor(key);
+            return group.items.map((it, idx) => (
+              <tr key={`${key}-${it.id || it._localId || idx}`} style={{ backgroundColor: gi % 2 === 0 ? "#ffffff" : "#f9fafb", borderBottom: idx === group.items.length - 1 ? "2px solid #e0e4ea" : "1px solid #e8eaed" }}>
+                {idx === 0 && (
+                  <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", fontWeight: "700", color: "#1a1a1a", verticalAlign: "top", borderRight: "1px solid #e8eaed" }}>
+                    {group.supplier_name}
+                  </td>
+                )}
+                <td style={{ padding: "6px 8px", fontSize: "11px", color: "#555" }}>
+                  {it.item_number && <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{it.item_number} · </span>}
+                  {it.description || "—"}
+                </td>
+                {idx === 0 && (
+                  <>
+                    <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "center", verticalAlign: "top", borderLeft: "1px solid #e8eaed" }}>{t?.carton_qty || "—"}</td>
+                    <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top" }}>{t?.nw ? fmt(t.nw) : "—"}</td>
+                    <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top" }}>{t?.gw ? fmt(t.gw) : "—"}</td>
+                    <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "right", verticalAlign: "top" }}>{t?.cbm ? fmt(t.cbm, 4) : "—"}</td>
+                  </>
+                )}
+              </tr>
+            ));
+          })}
+        </tbody>
+        <tfoot>
+          <tr style={{ backgroundColor: "#eef2f7", borderTop: "2px solid #1e3a5f" }}>
+            <td colSpan={2} style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a" }}>TOTAL</td>
+            <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "center" }}>{supplierGrandTotals.carton_qty}</td>
+            <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "right" }}>{fmt(supplierGrandTotals.nw)}</td>
+            <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "right" }}>{fmt(supplierGrandTotals.gw)}</td>
+            <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "right" }}>{fmt(supplierGrandTotals.cbm, 4)}</td>
+          </tr>
+        </tfoot>
+      </table>
+      )}
 
       {notes?.trim() && (
         <div className="pdf-block" style={{ marginBottom: "24px", padding: "12px 16px", backgroundColor: "#f7f8fa", border: "1px solid #e0e4ea", borderRadius: "8px" }}>

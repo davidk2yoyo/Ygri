@@ -75,6 +75,7 @@ function OrderCard({ order }) {
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
     ["quotes", `Cotizaciones y facturas (${order.quotations.length})`],
+    ["packing", `Packing List (${order.packing_lists.length})`],
     ["shipments", `Envíos y muestras (${order.shipments.length})`],
     ["docs", `Documentos (${order.documents.length})`],
   ];
@@ -137,6 +138,82 @@ function OrderCard({ order }) {
                 ))}
               </div>)}
 
+          {tab === "packing" && (order.packing_lists.length === 0
+            ? <p className="text-sm text-gray-400">Aún no hay packing list publicado.</p>
+            : <div className="space-y-4">
+                {order.packing_lists.map(pl => (
+                  <div key={pl.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50">
+                      <p className="text-sm font-semibold text-gray-900">{pl.pl_number}</p>
+                      <p className="text-xs text-gray-500">{pl.quote_number}</p>
+                    </div>
+                    {pl.mode === "by_supplier" ? (
+                      <div className="divide-y divide-gray-100">
+                        {(() => {
+                          const bySupplier = pl.items.reduce((acc, it) => {
+                            const key = it.supplier_name || "Sin proveedor";
+                            if (!acc[key]) acc[key] = [];
+                            acc[key].push(it);
+                            return acc;
+                          }, {});
+                          return Object.entries(bySupplier).map(([supplierName, groupItems]) => {
+                            const t = pl.supplier_totals.find(st => (st.supplier_name || "Sin proveedor") === supplierName);
+                            return (
+                              <div key={supplierName}>
+                                <div className="flex items-center justify-between gap-3 px-4 py-2 bg-gray-50/60 flex-wrap">
+                                  <p className="text-xs font-bold text-gray-700">{supplierName}</p>
+                                  {t && (
+                                    <p className="text-xs text-gray-500">
+                                      {[t.carton_qty && `${t.carton_qty} cartons`, t.cbm && `${t.cbm} CBM`, t.nw && `${t.nw} kg NW`, t.gw && `${t.gw} kg GW`].filter(Boolean).join(" · ")}
+                                    </p>
+                                  )}
+                                </div>
+                                <ul className="px-4 py-1">
+                                  {groupItems.map(it => (
+                                    <li key={it.id} className="py-1 text-xs text-gray-600 flex items-center gap-2">
+                                      {it.item_number && <span className="font-mono text-gray-400">{it.item_number}</span>}
+                                      <span>{it.description}</span>
+                                      {it.qty && <span className="text-gray-400">· qty {it.qty}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead className="bg-gray-50 text-gray-500"><tr>
+                            <th className="px-3 py-1.5 text-left">Item #</th>
+                            <th className="px-3 py-1.5 text-left">Description</th>
+                            <th className="px-3 py-1.5 text-center">Cartons</th>
+                            <th className="px-3 py-1.5 text-center">Qty</th>
+                            <th className="px-3 py-1.5 text-right">CBM</th>
+                            <th className="px-3 py-1.5 text-right">N.W.</th>
+                            <th className="px-3 py-1.5 text-right">G.W.</th>
+                          </tr></thead>
+                          <tbody>
+                            {pl.items.map(it => (
+                              <tr key={it.id} className="border-t border-gray-50">
+                                <td className="px-3 py-1.5 font-mono text-gray-500">{it.item_number}</td>
+                                <td className="px-3 py-1.5 text-gray-700">{it.description}</td>
+                                <td className="px-3 py-1.5 text-center">{it.carton_qty}</td>
+                                <td className="px-3 py-1.5 text-center">{it.qty}</td>
+                                <td className="px-3 py-1.5 text-right">{it.cbm}</td>
+                                <td className="px-3 py-1.5 text-right">{it.nw}</td>
+                                <td className="px-3 py-1.5 text-right">{it.gw}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>)}
+
           {tab === "shipments" && (order.shipments.length === 0
             ? <p className="text-sm text-gray-400">Aún no hay envíos ni muestras.</p>
             : <div className="space-y-3">{order.shipments.map(s => <ShipmentCard key={s.id} row={s} />)}</div>)}
@@ -175,7 +252,7 @@ export default function MisOrdenesPage() {
       else setOrders((data || []).map(o => ({
         ...o,
         stages: o.stages || [], quotations: o.quotations || [], shipments: o.shipments || [], documents: o.documents || [],
-        purchase_orders: o.purchase_orders || [],
+        purchase_orders: o.purchase_orders || [], packing_lists: o.packing_lists || [],
       })));
       setLoading(false);
     }
