@@ -162,6 +162,18 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
   });
   const add = () => { const n = emptyLine(lines[lines.length - 1]?.sheet_name || ""); onChange([...lines, n]); setExpanded(n._key); };
   const totals = useMemo(() => orderTotals(lines), [lines]);
+  const bySupplier = useMemo(() => {
+    const map = new Map();
+    for (const l of lines) {
+      const key = (l.supplier || "").trim() || "Sin proveedor";
+      const q = Number(l.qty) || 0, p = Number(l.price) || 0;
+      if (!map.has(key)) map.set(key, { count: 0, units: 0, value: 0 });
+      const row = map.get(key);
+      row.count++; row.units += q; if (p > 0) row.value += q * p;
+    }
+    return [...map.entries()].sort((a, b) => b[1].value - a[1].value);
+  }, [lines]);
+  const [showSupplierSummary, setShowSupplierSummary] = useState(false);
   const canPhoto = !readOnly && !!uploadPhoto;
 
   const shown = useMemo(() => {
@@ -208,10 +220,39 @@ export default function OrderLinesTable({ lines, onChange, readOnly = false, upl
   return (
     <div>
       <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-        <div className="flex items-center gap-x-5 gap-y-1 flex-wrap text-sm text-gray-600">
+        <div className="relative flex items-center gap-x-5 gap-y-1 flex-wrap text-sm text-gray-600">
           <span><b className="text-gray-900">{totals.count}</b> productos</span>
           <span><b className="text-gray-900">{totals.units.toLocaleString()}</b> unidades</span>
           {totals.priced > 0 && <span>Total objetivo <b className="text-gray-900">{totals.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b></span>}
+          {bySupplier.length > 1 && totals.priced > 0 && (
+            <button type="button" onClick={() => setShowSupplierSummary(v => !v)}
+              className="flex items-center gap-1 text-blue-600 hover:text-blue-700 font-medium">
+              Por proveedor
+              <svg className={`w-3 h-3 transition-transform ${showSupplierSummary ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
+            </button>
+          )}
+          {showSupplierSummary && (
+            <div className="absolute top-full left-0 mt-2 z-20 w-72 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+              <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                <p className="text-xs font-semibold text-gray-700">Monto total por proveedor</p>
+              </div>
+              <ul className="max-h-72 overflow-y-auto divide-y divide-gray-50">
+                {bySupplier.map(([name, s]) => (
+                  <li key={name} className="flex items-center justify-between gap-3 px-4 py-2 text-sm">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-800 truncate">{name}</p>
+                      <p className="text-xs text-gray-400">{s.count} productos · {s.units.toLocaleString()} unidades</p>
+                    </div>
+                    <span className="font-bold text-gray-900 whitespace-nowrap">{s.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50 border-t border-gray-100 text-sm font-bold text-gray-900">
+                <span>Total</span>
+                <span>{totals.value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {lines.length > 8 && <input value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar…" className="w-40 px-2.5 py-1.5 border border-gray-200 rounded-lg text-sm" />}
