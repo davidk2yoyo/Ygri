@@ -49,7 +49,7 @@ export const lineToDb = (l, order_id, sort_order) => ({
   notes: l.notes || null, photo_url: l.photo_url || null, sort_order,
 });
 
-const norm = (field, v) => {
+export const norm = (field, v) => {
   if (v === "" || v == null) return null;
   if (field === "qty" || field === "price") return Number(v);
   if (field === "marking") return v === true || v === "true";
@@ -96,3 +96,44 @@ export const lineProblems = (l) => ({
   id: !(l.name?.trim() || l.supplier_ref?.trim() || l.client_ref?.trim()),
   qty: !(Number(l.qty) > 0),
 });
+
+const sameLine = (a, b) => ORDER_FIELDS.every(([f]) => norm(f, a?.[f]) === norm(f, b?.[f]));
+
+// Staff saves fail outright (nothing written) when the client saved the same order
+// first — the revision lock exists to stop a silent overwrite, but the failed save
+// used to just discard whatever staff had drafted. This rebuilds a safe retry: new
+// lines staff added are never a conflict (they don't exist in the DB yet), and an
+// edit/delete to an existing line is only reapplied automatically when nobody else
+// touched that exact line since staff started editing — otherwise it's left as the
+// client's version and surfaced in `needsReview` instead of guessed at.
+// staffLines/baseline/freshLines are all arrays of editable lines (orderDiff shape).
+export function mergeAfterConflict(staffLines, baseline, freshLines) {
+  const baselineById = new Map(baseline.filter(l => l.id).map(l => [l.id, l]));
+  const staffById = new Map(staffLines.filter(l => l.id).map(l => [l.id, l]));
+  const staffNew = staffLines.filter(l => !l.id);
+
+  const merged = [];
+  const needsReview = [];
+
+  freshLines.forEach(freshLine => {
+    const staffEdit = staffById.get(freshLine.id);
+    const base = baselineById.get(freshLine.id);
+
+    if (!staffEdit) {
+      // staff removed this line in their draft
+      if (base && sameLine(freshLine, base)) return; // nobody else touched it — safe to drop
+      needsReview.push({ type: "delete_conflict", line: freshLine });
+      merged.push(freshLine);
+      return;
+    }
+    if (sameLine(staffEdit, base)) { merged.push(freshLine); return; } // staff didn't actually change this one
+    if (sameLine(freshLine, base)) { merged.push(staffEdit); return; } // only staff changed it — safe to reapply
+
+    // both sides changed the same line — keep the client's version, staff must redo manually
+    needsReview.push({ type: "edit_conflict", staffEdit, freshLine });
+    merged.push(freshLine);
+  });
+
+  merged.push(...staffNew);
+  return { merged, needsReview };
+}

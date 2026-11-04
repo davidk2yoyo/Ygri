@@ -6,7 +6,7 @@ import { parseClientOrderWorkbook } from "../lib/clientOrderParser";
 import OrderLinesTable from "../components/OrderLinesTable";
 import { OrderHistoryButton } from "../components/OrderEventLog";
 import { createProjectAndQuotation, sendQuotationToClient, syncQuotationFromOrder } from "../lib/orderToQuotation";
-import { diffLines, hasChanges, describeChanges, lineFromDb, lineToDb, lineProblems } from "../lib/orderDiff";
+import { diffLines, hasChanges, describeChanges, lineFromDb, lineToDb, lineProblems, mergeAfterConflict, lineLabel } from "../lib/orderDiff";
 import { matchSupplierByName } from "../lib/suppliers";
 
 const STATUS_STYLE = {
@@ -567,6 +567,62 @@ function SyncQuotationModal({ order, suppliers, onApplied, onClose }) {
 // touched. Returns a {lineId: price} map; the caller merges it into local line state and the
 // existing Save button persists + logs it like any other edit, instead of this modal writing
 // to the DB directly.
+// Shown when bumpRevision fails because the client saved first — rather than just
+// discarding staff's draft, this previews what's safe to replay automatically
+// (new lines, and edits to lines the client didn't also touch) vs. what needs a
+// manual look (both sides edited the same line), then retries with the merge.
+function ConflictResolutionModal({ conflict, busy, onRetry, onCancel }) {
+  const clientChangeLines = describeChanges(conflict.clientChanges);
+  const safeCount = conflict.merged.length - conflict.needsReview.length;
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={busy ? undefined : onCancel}>
+      <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-200 dark:border-darkblack-400">
+          <div>
+            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">The client changed this order while you were editing</h2>
+            <p className="text-xs text-bgray-500 mt-0.5">Nothing was lost — review below, then save your changes on top of theirs.</p>
+          </div>
+          <button onClick={onCancel} disabled={busy} className="text-bgray-400 hover:text-bgray-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {clientChangeLines.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">What the client just changed</p>
+              <ul className="list-disc pl-4 space-y-0.5 text-sm text-bgray-600">
+                {clientChangeLines.map((t, i) => <li key={i}>{t}</li>)}
+              </ul>
+            </div>
+          )}
+
+          {conflict.needsReview.length > 0 ? (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs font-semibold text-amber-700 mb-1">These {conflict.needsReview.length} line(s) were touched by both of you — the client's version was kept, redo your change manually after saving:</p>
+              <ul className="text-xs text-amber-700 list-disc pl-4 space-y-0.5">
+                {conflict.needsReview.map((r, i) => (
+                  <li key={i}>{lineLabel(r.type === "edit_conflict" ? r.staffEdit : r.line)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">None of your changes overlap with what the client touched — everything can be saved as-is.</p>
+          )}
+
+          <p className="text-xs text-bgray-500">{safeCount} line(s) will reflect your changes (including anything you added); the rest come from the client's latest version.</p>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-bgray-200 dark:border-darkblack-400">
+          <button onClick={onCancel} disabled={busy} className="px-4 py-2 text-sm text-bgray-600 hover:text-bgray-800">Cancel</button>
+          <button onClick={onRetry} disabled={busy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+            {busy ? "Saving…" : "Save my changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const FIELD_UPDATE_META = {
   price: { noun: "prices", columnHeader: "New price", instructions: "Matches by supplier ref — only the price field changes." },
   qty: { noun: "quantities", columnHeader: "New qty", instructions: "Matches by supplier ref — only the quantity field changes, e.g. after a packing-list recount." },
@@ -801,6 +857,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const [supplierNames, setSupplierNames] = useState(null); // distinct supplier names awaiting confirmation, while that modal is open
   const [fieldUpdateMode, setFieldUpdateMode] = useState(null); // "price" | "qty" | null, while that modal is open
   const [showSync, setShowSync] = useState(false);
+  const [conflict, setConflict] = useState(null); // { freshOrder, freshLines, merged, needsReview, clientChanges } while open
 
   // Merges matched values into local line state only — doesn't write to the DB itself, so the
   // normal Save button (and its diff/history logging) handles persisting it like any other edit.
@@ -846,23 +903,29 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
     finally { setBusy(false); }
   };
 
-  // optimistic lock: only bump when nobody else (e.g. the client) saved in between
-  const bumpRevision = async () => {
+  // optimistic lock: only bump when nobody else (e.g. the client) saved in between.
+  // Takes the revision explicitly (not read from `order` state) so a retry after a
+  // conflict can bump from the just-fetched fresh revision without waiting on a
+  // React re-render to see it.
+  const bumpRevision = async (fromRevision) => {
     const { data, error: e } = await supabase.from("client_orders")
-      .update({ revision: order.revision + 1, updated_at: new Date().toISOString() })
-      .eq("id", order.id).eq("revision", order.revision).select("id");
+      .update({ revision: fromRevision + 1, updated_at: new Date().toISOString() })
+      .eq("id", order.id).eq("revision", fromRevision).select("id");
     if (e) throw e;
-    if (!data?.length) throw new Error("The client changed this order while you were editing. Reload to see their changes, then redo yours.");
+    if (!data?.length) {
+      const err = new Error("The client changed this order while you were editing.");
+      err.isRevisionConflict = true;
+      throw err;
+    }
   };
 
-  const save = () => run(async () => {
-    await bumpRevision();
-    const keepIds = new Set(lines.filter(l => l.id).map(l => l.id));
-    const removed = original.filter(l => !keepIds.has(l.id)).map(l => l.id);
+  const writeLines = async (lineList, baseline) => {
+    const keepIds = new Set(lineList.filter(l => l.id).map(l => l.id));
+    const removed = baseline.filter(l => !keepIds.has(l.id)).map(l => l.id);
     if (removed.length) await supabase.from("client_order_lines").delete().in("id", removed);
-    for (let i = 0; i < lines.length; i++) {
-      const l = { ...lines[i] };
-      const prev = original.find(o => o.id === l.id);
+    for (let i = 0; i < lineList.length; i++) {
+      const l = { ...lineList[i] };
+      const prev = baseline.find(o => o.id === l.id);
       if (!l.supplier_id || !prev || prev.supplier !== l.supplier) l.supplier_id = matchSupplier(suppliers, l.supplier)?.id || null;
       const row = lineToDb(l, order.id, i);
       const { error: e } = l.id
@@ -870,8 +933,42 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
         : await supabase.from("client_order_lines").insert(row);
       if (e) throw e;
     }
-    await logEvent("lines_edited", { changes: diff });
+    await logEvent("lines_edited", { changes: diffLines(baseline, lineList) });
+  };
+
+  // Fetches what's actually in the DB now and works out which of the staff's
+  // in-progress edits can be safely replayed on top of it: brand-new lines always
+  // can (they don't exist in the DB yet to conflict with), and an edit/delete to an
+  // existing line only replays automatically if the client didn't also touch that
+  // same line — otherwise it's left as the client's version, surfaced in needsReview
+  // instead of guessed at. Nothing is written here — just prepares the retry.
+  const openConflict = async () => {
+    const [{ data: freshOrder }, { data: freshRows }] = await Promise.all([
+      supabase.from("client_orders").select("*, clients(company_name)").eq("id", order.id).single(),
+      supabase.from("client_order_lines").select("*, suppliers(name)").eq("order_id", order.id).order("sort_order"),
+    ]);
+    const freshLines = (freshRows || []).map(lineFromDb);
+    const { merged, needsReview } = mergeAfterConflict(lines, original, freshLines);
+    setConflict({ freshOrder, freshLines, merged, needsReview, clientChanges: diffLines(original, freshLines) });
+  };
+
+  const save = () => run(async () => {
+    try {
+      await bumpRevision(order.revision);
+    } catch (e) {
+      if (e.isRevisionConflict) { await openConflict(); }
+      throw e;
+    }
+    await writeLines(lines, original);
     sileo.success({ title: "Saved — the client will see it" });
+  });
+
+  const retryAfterConflict = () => run(async () => {
+    const { merged, freshOrder, freshLines } = conflict;
+    await bumpRevision(freshOrder.revision);
+    await writeLines(merged, freshLines);
+    setConflict(null);
+    sileo.success({ title: "Saved — merged with the client's changes" });
   });
 
   const comment = () => run(async () => {
@@ -971,7 +1068,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           {lastClient.note && <p className="mt-0.5 whitespace-pre-wrap">{lastClient.note}</p>}
         </div>
       )}
-      {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex justify-between gap-3"><span>{error}</span><button onClick={load} className="underline text-xs">Reload</button></div>}
+      {error && !conflict && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm flex justify-between gap-3"><span>{error}</span><button onClick={load} className="underline text-xs">Reload</button></div>}
 
       <div className="mb-4 bg-white dark:bg-darkblack-600 border border-bgray-200 dark:border-darkblack-400 rounded-xl p-4">
         {!order.track_id ? (
@@ -1077,6 +1174,15 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           suppliers={suppliers}
           onApplied={() => { setShowSync(false); load(); }}
           onClose={() => setShowSync(false)}
+        />
+      )}
+
+      {conflict && (
+        <ConflictResolutionModal
+          conflict={conflict}
+          busy={busy}
+          onRetry={retryAfterConflict}
+          onCancel={() => setConflict(null)}
         />
       )}
     </div>
