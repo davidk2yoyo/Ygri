@@ -3,6 +3,7 @@ import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import { ShipmentCard } from "./MisEnviosPage";
 import { SupplierProductionCard } from "../../components/ProductionBoard";
+import PackingListPDF from "../../components/PackingListPDF";
 
 // track_stages.status is one of these four — NOT "pending" (that key never matched,
 // so a not-yet-started stage leaked the raw DB string straight into the UI).
@@ -69,8 +70,10 @@ function StageTimeline({ stages }) {
 }
 
 function OrderCard({ order }) {
+  const { session } = useClientPortal();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("progress");
+  const [pdfPacking, setPdfPacking] = useState(null); // the packing list currently shown as PDF, or null
   const tabs = [
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
@@ -144,8 +147,11 @@ function OrderCard({ order }) {
                 {order.packing_lists.map(pl => (
                   <div key={pl.id} className="border border-gray-100 rounded-lg overflow-hidden">
                     <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50">
-                      <p className="text-sm font-semibold text-gray-900">{pl.pl_number}</p>
-                      <p className="text-xs text-gray-500">{pl.quote_number}</p>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">{pl.pl_number}</p>
+                        <p className="text-xs text-gray-500">{pl.quote_number}</p>
+                      </div>
+                      <button onClick={() => setPdfPacking(pl)} className="text-xs font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap">Descargar PDF →</button>
                     </div>
                     {pl.mode === "by_supplier" ? (
                       <div className="divide-y divide-gray-100">
@@ -234,6 +240,28 @@ function OrderCard({ order }) {
               </div>)}
         </div>
       )}
+
+      {pdfPacking && (() => {
+        const itemsBySupplier = pdfPacking.items.reduce((acc, it) => {
+          const key = it.supplier_name || "Sin proveedor";
+          if (!acc[key]) acc[key] = { supplier_id: null, supplier_name: key, items: [] };
+          acc[key].items.push(it);
+          return acc;
+        }, {});
+        return (
+          <PackingListPDF
+            packingList={pdfPacking}
+            items={pdfPacking.items}
+            itemsBySupplier={itemsBySupplier}
+            supplierTotals={pdfPacking.supplier_totals}
+            clientName={session.client_name}
+            projectName={order.track_name}
+            quoteNumber={pdfPacking.quote_number}
+            notes={pdfPacking.notes}
+            onClose={() => setPdfPacking(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
