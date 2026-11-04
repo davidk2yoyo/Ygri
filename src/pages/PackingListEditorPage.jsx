@@ -292,9 +292,13 @@ export default function PackingListEditorPage() {
         if (delErr) throw new Error(delErr.message);
       }
 
-      const { data: oldTotals, error: oldTotalsErr } = await supabase
-        .from("packing_list_supplier_totals").select("id").eq("packing_list_id", packingList.id);
-      if (oldTotalsErr) throw new Error(oldTotalsErr.message);
+      // Delete-then-insert here (the reverse of the items block above) — this table
+      // has a uniqueness constraint per (packing_list_id, supplier), so inserting a
+      // new row for a supplier while its old row still exists always violates it.
+      // Items have no such constraint, so insert-first stays safer there.
+      const { error: delTotalsErr } = await supabase
+        .from("packing_list_supplier_totals").delete().eq("packing_list_id", packingList.id);
+      if (delTotalsErr) throw new Error(delTotalsErr.message);
 
       const validTotals = supplierTotals.filter(t =>
         num(t.carton_qty) > 0 || num(t.cbm) > 0 || num(t.nw) > 0 || num(t.gw) > 0
@@ -313,10 +317,6 @@ export default function PackingListEditorPage() {
           }))
         );
         if (insTotalsErr) throw new Error(insTotalsErr.message);
-      }
-      if (oldTotals?.length) {
-        const { error: delTotalsErr } = await supabase.from("packing_list_supplier_totals").delete().in("id", oldTotals.map(t => t.id));
-        if (delTotalsErr) throw new Error(delTotalsErr.message);
       }
 
       setSaved(true);
