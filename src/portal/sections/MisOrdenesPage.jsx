@@ -145,16 +145,24 @@ function OrderCard({ order }) {
             ? <p className="text-sm text-gray-400">Aún no hay packing list publicado.</p>
             : <div className="space-y-4">
                 {order.packing_lists.map(pl => (
-                  <div key={pl.id} className="border border-gray-100 rounded-lg overflow-hidden">
-                    <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-gray-50">
-                      <div>
-                        <p className="text-sm font-semibold text-gray-900">{pl.pl_number}</p>
-                        <p className="text-xs text-gray-500">{pl.quote_number}</p>
+                  <div key={pl.id} className="border border-gray-200 rounded-2xl overflow-hidden shadow-sm">
+                    <div className="flex items-center justify-between gap-3 px-5 py-3.5 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-9 h-9 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center flex-shrink-0">
+                          <svg className="w-4.5 h-4.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" /><path d="m3.3 7 8.7 5 8.7-5M12 22V12" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-gray-900">{pl.pl_number}</p>
+                          <p className="text-xs text-gray-500">Cotización {pl.quote_number}</p>
+                        </div>
                       </div>
-                      <button onClick={() => setPdfPacking(pl)} className="text-xs font-medium text-blue-600 hover:text-blue-700 whitespace-nowrap">Descargar PDF →</button>
+                      <button onClick={() => setPdfPacking(pl)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:border-blue-400 hover:text-blue-600 transition shadow-sm whitespace-nowrap">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1M7 11l5 5 5-5M12 15V4" /></svg>
+                        PDF
+                      </button>
                     </div>
                     {pl.mode === "by_supplier" ? (
-                      <div className="divide-y divide-gray-100">
+                      <div className="p-4 space-y-3 bg-gray-50/40">
                         {(() => {
                           const bySupplier = pl.items.reduce((acc, it) => {
                             const key = it.supplier_name || "Sin proveedor";
@@ -164,22 +172,39 @@ function OrderCard({ order }) {
                           }, {});
                           return Object.entries(bySupplier).map(([supplierName, groupItems]) => {
                             const t = pl.supplier_totals.find(st => (st.supplier_name || "Sin proveedor") === supplierName);
+                            const stats = t ? [
+                              t.carton_qty && { label: "cartones", value: t.carton_qty },
+                              t.cbm && { label: "CBM", value: t.cbm },
+                              t.nw && { label: "kg NW", value: t.nw },
+                              t.gw && { label: "kg GW", value: t.gw },
+                            ].filter(Boolean) : [];
                             return (
-                              <div key={supplierName}>
-                                <div className="flex items-center justify-between gap-3 px-4 py-2 bg-gray-50/60 flex-wrap">
-                                  <p className="text-xs font-bold text-gray-700">{supplierName}</p>
-                                  {t && (
-                                    <p className="text-xs text-gray-500">
-                                      {[t.carton_qty && `${t.carton_qty} cartons`, t.cbm && `${t.cbm} CBM`, t.nw && `${t.nw} kg NW`, t.gw && `${t.gw} kg GW`].filter(Boolean).join(" · ")}
-                                    </p>
+                              <div key={supplierName} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                                <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap border-b border-gray-100">
+                                  <div className="flex items-center gap-2.5">
+                                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
+                                      {supplierName.charAt(0).toUpperCase()}
+                                    </div>
+                                    <p className="text-sm font-bold text-gray-900">{supplierName}</p>
+                                  </div>
+                                  {stats.length > 0 && (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      {stats.map((s, i) => (
+                                        <span key={i} className="px-2 py-1 bg-gray-50 border border-gray-100 rounded-md text-[11px] font-medium text-gray-600">
+                                          <span className="font-bold text-gray-800">{s.value}</span> {s.label}
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
                                 </div>
-                                <ul className="px-4 py-1">
+                                <ul className="divide-y divide-gray-50">
                                   {groupItems.map(it => (
-                                    <li key={it.id} className="py-1 text-xs text-gray-600 flex items-center gap-2">
-                                      {it.item_number && <span className="font-mono text-gray-400">{it.item_number}</span>}
-                                      <span>{it.description}</span>
-                                      {it.qty && <span className="text-gray-400">· qty {it.qty}</span>}
+                                    <li key={it.id} className="px-4 py-2 text-sm text-gray-700 flex items-center gap-3 hover:bg-gray-50/70 transition">
+                                      {it.item_number && (
+                                        <span className="flex-shrink-0 px-1.5 py-0.5 bg-gray-100 rounded text-[11px] font-mono text-gray-500">{it.item_number}</span>
+                                      )}
+                                      <span className="flex-1 truncate">{it.description}</span>
+                                      {it.qty && <span className="flex-shrink-0 text-xs font-semibold text-gray-500">×{it.qty}</span>}
                                     </li>
                                   ))}
                                 </ul>
@@ -191,25 +216,25 @@ function OrderCard({ order }) {
                     ) : (
                       <div className="overflow-x-auto">
                         <table className="w-full text-xs">
-                          <thead className="bg-gray-50 text-gray-500"><tr>
-                            <th className="px-3 py-1.5 text-left">Item #</th>
-                            <th className="px-3 py-1.5 text-left">Description</th>
-                            <th className="px-3 py-1.5 text-center">Cartons</th>
-                            <th className="px-3 py-1.5 text-center">Qty</th>
-                            <th className="px-3 py-1.5 text-right">CBM</th>
-                            <th className="px-3 py-1.5 text-right">N.W.</th>
-                            <th className="px-3 py-1.5 text-right">G.W.</th>
+                          <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide text-[10px]"><tr>
+                            <th className="px-4 py-2 text-left font-semibold">Item #</th>
+                            <th className="px-4 py-2 text-left font-semibold">Descripción</th>
+                            <th className="px-4 py-2 text-center font-semibold">Cartones</th>
+                            <th className="px-4 py-2 text-center font-semibold">Cant.</th>
+                            <th className="px-4 py-2 text-right font-semibold">CBM</th>
+                            <th className="px-4 py-2 text-right font-semibold">N.W.</th>
+                            <th className="px-4 py-2 text-right font-semibold">G.W.</th>
                           </tr></thead>
                           <tbody>
-                            {pl.items.map(it => (
-                              <tr key={it.id} className="border-t border-gray-50">
-                                <td className="px-3 py-1.5 font-mono text-gray-500">{it.item_number}</td>
-                                <td className="px-3 py-1.5 text-gray-700">{it.description}</td>
-                                <td className="px-3 py-1.5 text-center">{it.carton_qty}</td>
-                                <td className="px-3 py-1.5 text-center">{it.qty}</td>
-                                <td className="px-3 py-1.5 text-right">{it.cbm}</td>
-                                <td className="px-3 py-1.5 text-right">{it.nw}</td>
-                                <td className="px-3 py-1.5 text-right">{it.gw}</td>
+                            {pl.items.map((it, i) => (
+                              <tr key={it.id} className={`border-t border-gray-50 ${i % 2 === 1 ? "bg-gray-50/40" : ""}`}>
+                                <td className="px-4 py-2 font-mono text-gray-500">{it.item_number}</td>
+                                <td className="px-4 py-2 text-gray-800 font-medium">{it.description}</td>
+                                <td className="px-4 py-2 text-center text-gray-600">{it.carton_qty}</td>
+                                <td className="px-4 py-2 text-center text-gray-600">{it.qty}</td>
+                                <td className="px-4 py-2 text-right text-gray-600">{it.cbm}</td>
+                                <td className="px-4 py-2 text-right text-gray-600">{it.nw}</td>
+                                <td className="px-4 py-2 text-right text-gray-600">{it.gw}</td>
                               </tr>
                             ))}
                           </tbody>
