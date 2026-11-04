@@ -5,7 +5,7 @@ import { supabase } from "../supabaseClient";
 import { parseClientOrderWorkbook } from "../lib/clientOrderParser";
 import OrderLinesTable from "../components/OrderLinesTable";
 import { OrderHistoryButton } from "../components/OrderEventLog";
-import { createProjectAndQuotation, sendQuotationToClient } from "../lib/orderToQuotation";
+import { createProjectAndQuotation, sendQuotationToClient, syncQuotationFromOrder } from "../lib/orderToQuotation";
 import { diffLines, hasChanges, describeChanges, lineFromDb, lineToDb, lineProblems } from "../lib/orderDiff";
 import { matchSupplierByName } from "../lib/suppliers";
 
@@ -374,6 +374,194 @@ function SupplierMatchModal({ names, suppliers, onCancel, onConfirm }) {
   );
 }
 
+// Reviews what changed in the order since its quotation was created (client_order_line_id is
+// the stable link, set when each quotation item was first made) and lets staff pick exactly
+// which new items / quantity changes / removals to apply — nothing happens automatically.
+function SyncQuotationModal({ order, suppliers, onApplied, onClose }) {
+  const [step, setStep] = useState("loading"); // loading | pick-quotation | review | applying
+  const [error, setError] = useState("");
+  const [quotations, setQuotations] = useState([]);
+  const [quotationId, setQuotationId] = useState(order.quotation_id || "");
+  const [diff, setDiff] = useState(null); // { newLines, qtyChanges, removed }
+  const [selected, setSelected] = useState(new Set());
+  const [supplierNames, setSupplierNames] = useState(null);
+  const [applying, setApplying] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error: e } = await supabase.from("quotations").select("id, quote_number, document_type, created_at")
+        .eq("track_id", order.track_id).order("created_at", { ascending: false });
+      if (e) { setError(e.message); return; }
+      setQuotations(data || []);
+      if ((data || []).length > 1) setStep("pick-quotation");
+      else loadDiff((data || [])[0]?.id || order.quotation_id);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const loadDiff = async (qId) => {
+    setQuotationId(qId);
+    setStep("loading");
+    setError("");
+    const [{ data: qItems, error: qErr }, { data: rawLines, error: lErr }] = await Promise.all([
+      supabase.from("quotation_items").select("id, client_order_line_id, item_number, description, quantity").eq("quotation_id", qId),
+      supabase.from("client_order_lines").select("*, suppliers(name)").eq("order_id", order.id).order("sort_order"),
+    ]);
+    if (qErr || lErr) { setError((qErr || lErr).message); return; }
+
+    const currentLines = (rawLines || []).map(lineFromDb);
+    const byLineId = new Map(currentLines.map(l => [l.id, l]));
+    const matchedLineIds = new Set((qItems || []).filter(qi => qi.client_order_line_id).map(qi => qi.client_order_line_id));
+
+    const newLines = currentLines.filter(l => l.id && !matchedLineIds.has(l.id));
+    const qtyChanges = (qItems || [])
+      .filter(qi => qi.client_order_line_id && byLineId.has(qi.client_order_line_id))
+      .map(qi => ({ quotationItemId: qi.id, label: qi.description || qi.item_number || "—", oldQty: qi.quantity, newQty: Number(byLineId.get(qi.client_order_line_id).qty) || 0 }))
+      .filter(c => c.oldQty !== c.newQty);
+    const removed = (qItems || [])
+      .filter(qi => qi.client_order_line_id && !byLineId.has(qi.client_order_line_id))
+      .map(qi => ({ id: qi.id, label: qi.description || qi.item_number || "—" }));
+
+    setDiff({ newLines, qtyChanges, removed });
+    setSelected(new Set([...newLines.map(l => `new:${l.id}`), ...qtyChanges.map(c => `qty:${c.quotationItemId}`)]));
+    setStep("review");
+  };
+
+  const toggle = (key) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const apply = () => {
+    const selectedNewLines = diff.newLines.filter(l => selected.has(`new:${l.id}`));
+    const names = [...new Set(selectedNewLines.filter(l => !l.supplier_id).map(l => (l.supplier || "").trim()).filter(Boolean))];
+    if (names.length) { setSupplierNames(names); return; }
+    doApply({});
+  };
+
+  const doApply = async (supplierMap) => {
+    setApplying(true); setError("");
+    try {
+      const selectedNewLines = diff.newLines.filter(l => selected.has(`new:${l.id}`));
+      const selectedQtyChanges = diff.qtyChanges.filter(c => selected.has(`qty:${c.quotationItemId}`)).map(c => ({ quotationItemId: c.quotationItemId, newQty: c.newQty }));
+      const selectedRemovedIds = diff.removed.filter(r => selected.has(`rm:${r.id}`)).map(r => r.id);
+      const { data: { user } } = await supabase.auth.getUser();
+      await syncQuotationFromOrder(supabase, {
+        quotationId, order, newLines: selectedNewLines, qtyChanges: selectedQtyChanges, removedIds: selectedRemovedIds, supplierMap,
+        actorName: user?.email || "Staff",
+      });
+      onApplied();
+    } catch (e) {
+      setError(e.message);
+      setApplying(false);
+      setSupplierNames(null);
+    }
+  };
+
+  const totalSelected = diff ? [...selected].length : 0;
+  const quote = quotations.find(q => q.id === quotationId);
+
+  if (supplierNames) {
+    return (
+      <SupplierMatchModal names={supplierNames} suppliers={suppliers} onCancel={() => setSupplierNames(null)} onConfirm={map => doApply(map)} />
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={applying ? undefined : onClose}>
+      <div className="bg-white dark:bg-darkblack-600 rounded-2xl shadow-2xl w-full max-w-xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bgray-200 dark:border-darkblack-400">
+          <div>
+            <h2 className="text-lg font-bold text-darkblack-700 dark:text-white">Update quotation from order</h2>
+            {quote && <p className="text-xs text-bgray-500 mt-0.5">Comparing against {quote.quote_number}</p>}
+          </div>
+          <button onClick={onClose} disabled={applying} className="text-bgray-400 hover:text-bgray-600 text-xl leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {error && <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
+
+          {step === "loading" && <p className="text-sm text-bgray-500">Loading…</p>}
+
+          {step === "pick-quotation" && (
+            <div className="space-y-2">
+              <p className="text-sm text-bgray-600">This project has more than one quotation — which one should be updated?</p>
+              {quotations.map(q => (
+                <button key={q.id} onClick={() => loadDiff(q.id)}
+                  className="w-full flex items-center justify-between px-4 py-3 border border-bgray-200 dark:border-darkblack-400 rounded-lg text-sm hover:border-primary transition">
+                  <span className="font-semibold text-darkblack-700 dark:text-white">{q.quote_number}</span>
+                  <span className="text-xs text-bgray-500">{q.document_type}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {step === "review" && diff && (
+            diff.newLines.length + diff.qtyChanges.length + diff.removed.length === 0 ? (
+              <p className="text-sm text-bgray-500">No differences found — the quotation already matches the order.</p>
+            ) : (
+              <>
+                {diff.newLines.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">New items ({diff.newLines.length})</p>
+                    <div className="space-y-1">
+                      {diff.newLines.map(l => (
+                        <label key={l.id} className="flex items-center gap-2 px-3 py-2 border border-bgray-100 dark:border-darkblack-500 rounded-lg cursor-pointer">
+                          <input type="checkbox" checked={selected.has(`new:${l.id}`)} onChange={() => toggle(`new:${l.id}`)} className="w-3.5 h-3.5" />
+                          <span className="text-sm flex-1 truncate">{l.name || l.supplier_ref || "—"}</span>
+                          <span className="text-xs text-bgray-400">qty {l.qty}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {diff.qtyChanges.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">Quantity changed ({diff.qtyChanges.length})</p>
+                    <div className="space-y-1">
+                      {diff.qtyChanges.map(c => (
+                        <label key={c.quotationItemId} className="flex items-center gap-2 px-3 py-2 border border-bgray-100 dark:border-darkblack-500 rounded-lg cursor-pointer">
+                          <input type="checkbox" checked={selected.has(`qty:${c.quotationItemId}`)} onChange={() => toggle(`qty:${c.quotationItemId}`)} className="w-3.5 h-3.5" />
+                          <span className="text-sm flex-1 truncate">{c.label}</span>
+                          <span className="text-xs text-bgray-500">{c.oldQty} → <b>{c.newQty}</b></span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {diff.removed.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-bgray-500 uppercase tracking-wide mb-2">No longer in the order ({diff.removed.length}) — unchecked by default</p>
+                    <div className="space-y-1">
+                      {diff.removed.map(r => (
+                        <label key={r.id} className="flex items-center gap-2 px-3 py-2 border border-amber-100 bg-amber-50 rounded-lg cursor-pointer">
+                          <input type="checkbox" checked={selected.has(`rm:${r.id}`)} onChange={() => toggle(`rm:${r.id}`)} className="w-3.5 h-3.5" />
+                          <span className="text-sm flex-1 truncate text-amber-800">{r.label}</span>
+                          <span className="text-xs text-amber-600">remove from quotation</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )
+          )}
+        </div>
+
+        {step === "review" && (
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-bgray-200 dark:border-darkblack-400">
+            <button onClick={onClose} disabled={applying} className="px-4 py-2 text-sm text-bgray-600 hover:text-bgray-800">Cancel</button>
+            <button onClick={apply} disabled={applying || totalSelected === 0} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold disabled:opacity-50">
+              {applying ? "Applying…" : `Apply (${totalSelected})`}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Re-upload an Excel (same template/parser as importing a new order) purely to backfill the
 // "price" field on lines the order already has — matched by supplier ref, nothing else is
 // touched. Returns a {lineId: price} map; the caller merges it into local line state and the
@@ -612,6 +800,7 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
   const [convert, setConvert] = useState(null); // {name, workflow, publish} while the convert form is open
   const [supplierNames, setSupplierNames] = useState(null); // distinct supplier names awaiting confirmation, while that modal is open
   const [fieldUpdateMode, setFieldUpdateMode] = useState(null); // "price" | "qty" | null, while that modal is open
+  const [showSync, setShowSync] = useState(false);
 
   // Merges matched values into local line state only — doesn't write to the DB itself, so the
   // normal Save button (and its diff/history logging) handles persisting it like any other edit.
@@ -827,7 +1016,15 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
             </div>
           </div>
         )}
-        {staleQuotation && <p className="mt-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">The order changed after the quotation was created — review the quotation in the project and update it before sending.</p>}
+        {staleQuotation && (
+          <div className="mt-3 flex items-center justify-between gap-3 flex-wrap text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+            <span>The order changed after the quotation was created — review and update it before sending.</span>
+            <button onClick={() => setShowSync(true)} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition shrink-0">Update quotation…</button>
+          </div>
+        )}
+        {!staleQuotation && order.track_id && (
+          <button onClick={() => setShowSync(true)} className="mt-3 text-xs text-bgray-500 hover:text-primary underline">Check for changes to sync…</button>
+        )}
       </div>
 
       <div>
@@ -871,6 +1068,15 @@ function OrderDetail({ order: listOrder, suppliers, onBack, onChanged }) {
           lines={lines}
           onApply={valueById => applyFieldUpdates(fieldUpdateMode, valueById)}
           onClose={() => setFieldUpdateMode(null)}
+        />
+      )}
+
+      {showSync && (
+        <SyncQuotationModal
+          order={order}
+          suppliers={suppliers}
+          onApplied={() => { setShowSync(false); load(); }}
+          onClose={() => setShowSync(false)}
         />
       )}
     </div>
