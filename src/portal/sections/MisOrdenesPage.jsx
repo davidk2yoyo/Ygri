@@ -129,8 +129,15 @@ function OrderCard({ order }) {
                   const total = Number(q.total_amount || 0);
                   const paid = Number(q.paid_total || 0);
                   const readyValue = Number(q.ready_value || 0);
+                  const depositPct = Number(q.deposit_pct || 0) / 100;
                   const balanceTotal = Math.max(total - paid, 0);
-                  const readyBalance = Math.max(readyValue - paid, 0);
+                  // The deposit is a down payment on the WHOLE order, not specifically on
+                  // the items that happen to be ready — so it isn't fair to subtract the
+                  // full paid amount from readyValue. Only payments beyond what the
+                  // deposit covers ("extra") count against the ready items' non-deposit share.
+                  const depositDue = total * depositPct;
+                  const extraPaid = Math.max(paid - depositDue, 0);
+                  const readyBalance = Math.max(readyValue * (1 - depositPct) - extraPaid, 0);
                   return (
                     <div key={q.id} className="border border-gray-100 rounded-lg overflow-hidden">
                       <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap">
@@ -138,7 +145,10 @@ function OrderCard({ order }) {
                           <p className="text-sm font-semibold text-gray-900">{q.quote_number}
                             <span className="ml-2 text-xs font-medium text-gray-500">{DOC_LABEL[q.document_type] || "Cotización"}</span>
                           </p>
-                          <p className="text-xs text-gray-500">{[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}</p>
+                          <p className="text-xs text-gray-500">
+                            {[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}
+                            {depositPct > 0 && <span className="text-gray-400"> · Anticipo {q.deposit_pct}%</span>}
+                          </p>
                         </div>
                         <div className="flex items-center gap-4">
                           <span className="text-sm font-bold text-gray-900">{money(total, q.currency)}</span>

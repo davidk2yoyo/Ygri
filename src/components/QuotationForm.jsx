@@ -52,6 +52,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [supplierExchangeRate, setSupplierExchangeRate] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [negotiationTerm, setNegotiationTerm] = useState("");
+  const [depositPct, setDepositPct] = useState("");
   const [notes, setNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [commissionPct, setCommissionPct] = useState(0);
@@ -146,6 +147,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         setSupplierExchangeRate(quotData.supplier_exchange_rate?.toString() || "");
         setValidUntil(quotData.valid_until || "");
         setNegotiationTerm(quotData.negotiation_term || "");
+        setDepositPct(quotData.deposit_pct != null ? String(quotData.deposit_pct) : "");
         setNotes(quotData.notes || "");
         setInternalNotes(quotData.internal_notes || "");
         setCommissionPct(parseFloat(quotData.commission_pct) || 0);
@@ -640,6 +642,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
         incoterm_location: type === "product" ? incotermLocation : null,
         delivery_time: type === "product" ? deliveryTime : null,
         negotiation_term: negotiationTerm,
+        deposit_pct: depositPct !== "" ? parseFloat(depositPct) || 0 : null,
         notes,
         internal_notes: internalNotes,
         commission_pct: parseFloat(commissionPct) || 0,
@@ -1157,6 +1160,27 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           placeholder="e.g. 30% deposit, 70% before shipment"
           className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
         />
+      </div>
+
+      {/* Deposit % — drives the client portal's "balance for items already ready in
+          production" figure: once an item is ready, the client owes the non-deposit
+          share of it, since the deposit already covers that portion of the whole order. */}
+      <div className="max-w-xs">
+        <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">Deposit %</label>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0"
+            max="100"
+            step="1"
+            value={depositPct}
+            onChange={e => setDepositPct(e.target.value)}
+            onWheel={e => e.target.blur()}
+            placeholder="e.g. 30"
+            className="w-24 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+          />
+          <span className="text-xs text-bgray-400 dark:text-bgray-500">% paid upfront — leave blank if this order has no deposit structure</span>
+        </div>
       </div>
 
       {/* Line Items */}
