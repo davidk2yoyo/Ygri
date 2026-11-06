@@ -69,6 +69,7 @@ export default function PackingListImportModal({ quotationItems, alreadyImported
                         <span className="text-xs text-gray-700 truncate">
                           {qi.item_number && <span className="font-mono text-gray-400 mr-1.5">{qi.item_number}</span>}
                           {qi.description}
+                          {qi.color && <span className="text-gray-400"> · {qi.color}</span>}
                         </span>
                       </label>
                     ))}

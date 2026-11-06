@@ -2,6 +2,7 @@ import React, { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
+import { colorToHex } from "../lib/colorUtil";
 
 const COMPANY_INFO = {
   name: "INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED",
@@ -9,6 +10,18 @@ const COMPANY_INFO = {
   mobile: "+86-18616329307",
   website: "www.interasia.com.co",
 };
+
+function ColorBadge({ color }) {
+  if (!color) return null;
+  const hex = colorToHex(color);
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontSize: "10px", color: "#666", backgroundColor: "#f3f4f6", borderRadius: "999px", padding: "1px 7px 1px 1px" }}>
+      {hex && <span style={{ display: "inline-block", width: "9px", height: "9px", borderRadius: "999px", backgroundColor: hex, border: "1px solid #d1d5db" }} />}
+      {!hex && <span style={{ display: "inline-block", width: "9px", height: "9px", borderRadius: "999px", border: "1px dashed #c0c4cc", marginLeft: "1px" }} />}
+      {color}
+    </span>
+  );
+}
 
 export default function PackingListPDF({ packingList, items, itemsBySupplier, supplierTotals, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, onClose }) {
   const bySupplier = packingList?.mode === "by_supplier";
@@ -222,13 +235,14 @@ export default function PackingListPDF({ packingList, items, itemsBySupplier, su
             <tr key={it.id || it._localId || idx} style={{ backgroundColor: idx % 2 === 0 ? "#ffffff" : "#f9fafb", borderBottom: "1px solid #e8eaed" }}>
               <td style={{ padding: "8px", fontSize: "11px", color: "#555" }}>{it.item_number || "—"}</td>
               <td style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a" }}>
-                {it.description || "—"}
-                {it.options?.length > 0 && (
-                  <div style={{ marginTop: "3px" }}>
-                    {it.options.map((o, oi) => (
-                      <div key={o.id || oi} style={{ fontSize: "10px", color: "#777" }}>
+                <div style={{ fontWeight: "500" }}>{it.description || "—"}</div>
+                {(it.color || it.options?.length > 0) && (
+                  <div style={{ marginTop: "4px", display: "flex", flexWrap: "wrap", gap: "4px", alignItems: "center" }}>
+                    {it.color && <ColorBadge color={it.color} />}
+                    {it.options?.filter(o => o.option_type !== "color").map((o, oi) => (
+                      <span key={o.id || oi} style={{ fontSize: "10px", color: "#777", backgroundColor: "#f3f4f6", borderRadius: "999px", padding: "1px 7px" }}>
                         <span style={{ textTransform: "uppercase", fontSize: "9px", color: "#aaa" }}>{o.option_type}:</span> {o.label}
-                      </div>
+                      </span>
                     ))}
                   </div>
                 )}
@@ -261,7 +275,8 @@ export default function PackingListPDF({ packingList, items, itemsBySupplier, su
         <thead>
           <tr style={{ backgroundColor: "#1e3a5f" }}>
             <th style={{ padding: "8px 8px", textAlign: "left", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Supplier</th>
-            <th style={{ padding: "8px 8px", textAlign: "left", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Ref</th>
+            <th style={{ padding: "8px 8px", textAlign: "left", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Ref / Description</th>
+            <th style={{ padding: "8px 8px", textAlign: "center", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Qty</th>
             <th style={{ padding: "8px 8px", textAlign: "center", color: "#fff", fontSize: "11px", fontWeight: "700" }}>Cartons</th>
             <th style={{ padding: "8px 8px", textAlign: "right", color: "#fff", fontSize: "11px", fontWeight: "700" }}>N.W. (kg)</th>
             <th style={{ padding: "8px 8px", textAlign: "right", color: "#fff", fontSize: "11px", fontWeight: "700" }}>G.W. (kg)</th>
@@ -280,9 +295,13 @@ export default function PackingListPDF({ packingList, items, itemsBySupplier, su
                   </td>
                 )}
                 <td style={{ padding: "6px 8px", fontSize: "11px", color: "#555" }}>
-                  {it.item_number && <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{it.item_number} · </span>}
-                  {it.description || "—"}
+                  <div>
+                    {it.item_number && <span style={{ fontWeight: "600", color: "#1a1a1a" }}>{it.item_number} · </span>}
+                    {it.description || "—"}
+                  </div>
+                  {it.color && <div style={{ marginTop: "3px" }}><ColorBadge color={it.color} /></div>}
                 </td>
+                <td style={{ padding: "6px 8px", fontSize: "11px", color: "#1a1a1a", textAlign: "center" }}>{it.qty || "—"}</td>
                 {idx === 0 && (
                   <>
                     <td rowSpan={group.items.length} style={{ padding: "8px", fontSize: "11px", color: "#1a1a1a", textAlign: "center", verticalAlign: "top", borderLeft: "1px solid #e8eaed" }}>{t?.carton_qty || "—"}</td>
@@ -297,7 +316,7 @@ export default function PackingListPDF({ packingList, items, itemsBySupplier, su
         </tbody>
         <tfoot>
           <tr style={{ backgroundColor: "#eef2f7", borderTop: "2px solid #1e3a5f" }}>
-            <td colSpan={2} style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a" }}>TOTAL</td>
+            <td colSpan={3} style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a" }}>TOTAL</td>
             <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "center" }}>{supplierGrandTotals.carton_qty}</td>
             <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "right" }}>{fmt(supplierGrandTotals.nw)}</td>
             <td style={{ padding: "10px 8px", fontSize: "11px", fontWeight: "800", color: "#1a1a1a", textAlign: "right" }}>{fmt(supplierGrandTotals.gw)}</td>

@@ -12,6 +12,7 @@ const emptyRow = () => ({
   quotation_item_id: null,
   item_number: "",
   description: "",
+  color: "",
   carton_qty: "",
   qty: "",
   length_cm: "",
@@ -75,7 +76,16 @@ export default function PackingListEditorPage() {
         supabase.from("quotation_items").select("id, item_number, description, quantity, supplier_id, suppliers(name)").eq("quotation_id", quotationId).order("sort_order"),
       ]);
       setQuotation(quot);
-      setQuotationItems((qItems || []).map(qi => ({ ...qi, supplier_name: qi.suppliers?.name || "" })));
+
+      // so "Import items from quote" can pre-fill color too, not just name/ref/qty
+      let colorByQiId = {};
+      const allQiIds = (qItems || []).map(qi => qi.id);
+      if (allQiIds.length > 0) {
+        const { data: colorOpts } = await supabase.from("quotation_item_options")
+          .select("quotation_item_id, label").eq("option_type", "color").in("quotation_item_id", allQiIds);
+        (colorOpts || []).forEach(o => { if (!colorByQiId[o.quotation_item_id]) colorByQiId[o.quotation_item_id] = o.label; });
+      }
+      setQuotationItems((qItems || []).map(qi => ({ ...qi, supplier_name: qi.suppliers?.name || "", color: colorByQiId[qi.id] || "" })));
 
       const { data: existing } = await supabase.from("packing_lists").select("*").eq("quotation_id", quotationId).single();
       if (existing) {
@@ -137,6 +147,7 @@ export default function PackingListEditorPage() {
         quotation_item_id: qi.id,
         item_number: qi.item_number || "",
         description: qi.description || "",
+        color: qi.color || "",
         qty: qi.quantity ? String(qi.quantity) : "",
         supplier_id: qi.supplier_id || null,
         supplier_name: qi.supplier_name || "",
@@ -271,6 +282,7 @@ export default function PackingListEditorPage() {
             quotation_item_id: r.quotation_item_id || null,
             item_number: r.item_number || null,
             description: r.description || null,
+            color: r.color || null,
             carton_qty: r.carton_qty !== "" ? parseInt(r.carton_qty) || null : null,
             qty: r.qty !== "" ? parseInt(r.qty) || null : null,
             length_cm: r.length_cm !== "" ? parseFloat(r.length_cm) || null : null,
@@ -335,7 +347,7 @@ export default function PackingListEditorPage() {
           const t = supplierTotals.find(st => supplierKey(st.supplier_id, st.supplier_name) === supplierKey(g.supplier_id, g.supplier_name));
           return g.items.map((it, i) => ({
             "Supplier": i === 0 ? g.supplier_name : "",
-            "Item #": it.item_number || "", "Description": it.description || "", "Qty": it.qty || "",
+            "Item #": it.item_number || "", "Description": it.description || "", "Color": it.color || "", "Qty": it.qty || "",
             "Cartons": i === 0 ? (t?.carton_qty || "") : "",
             "CBM": i === 0 && t?.cbm ? Number(t.cbm) : "",
             "N.W. (kg)": i === 0 && t?.nw ? Number(t.nw) : "",
@@ -345,6 +357,7 @@ export default function PackingListEditorPage() {
       : items.map(r => ({
           "Item #": r.item_number || "",
           "Description": r.description || "",
+          "Color": r.color || "",
           "Cartons": r.carton_qty || "",
           "Qty": r.qty || "",
           "L (cm)": r.length_cm || "",
@@ -524,7 +537,8 @@ export default function PackingListEditorPage() {
             <thead>
               <tr className="bg-gray-50 text-[10px] font-semibold text-gray-500 uppercase tracking-wide">
                 <th className="p-2 text-left w-[110px]">Item #</th>
-                <th className="p-2 text-left min-w-[200px]">Description</th>
+                <th className="p-2 text-left min-w-[180px]">Description</th>
+                <th className="p-2 text-left w-[100px]">Color</th>
                 <th className="p-2 text-center w-[80px]">Cartons</th>
                 <th className="p-2 text-center w-[80px]">Qty</th>
                 <th className="p-2 text-center w-[70px]">L (cm)</th>
@@ -544,6 +558,9 @@ export default function PackingListEditorPage() {
                   </td>
                   <td className="p-1.5">
                     <input value={row.description} onChange={e => updateRow(row._localId, "description", e.target.value)} className={inputCls} placeholder="Description" />
+                  </td>
+                  <td className="p-1.5">
+                    <input value={row.color} onChange={e => updateRow(row._localId, "color", e.target.value)} className={inputCls} placeholder="Color" />
                   </td>
                   <td className="p-1.5">
                     <input type="number" min="0" value={row.carton_qty} onChange={e => updateRow(row._localId, "carton_qty", e.target.value)} onWheel={e => e.target.blur()} className={`${inputCls} text-center`} />
@@ -583,7 +600,7 @@ export default function PackingListEditorPage() {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-gray-400 text-sm">
+                  <td colSpan={12} className="p-8 text-center text-gray-400 text-sm">
                     No items yet — add a row, import from the quote, or AI-scan a packing list photo.
                   </td>
                 </tr>
@@ -592,7 +609,7 @@ export default function PackingListEditorPage() {
             {items.length > 0 && (
               <tfoot>
                 <tr className="bg-gray-50 border-t-2 border-gray-300 font-bold text-gray-700 text-xs">
-                  <td className="p-2" colSpan={2}>TOTAL</td>
+                  <td className="p-2" colSpan={3}>TOTAL</td>
                   <td className="p-2 text-center">{totals.carton_qty || ""}</td>
                   <td className="p-2 text-center">{totals.qty || ""}</td>
                   <td colSpan={3} />
@@ -643,7 +660,7 @@ export default function PackingListEditorPage() {
                         {group.items.map(it => (
                           <li key={it._localId} className="px-5 py-2 text-sm text-gray-700 flex items-center gap-3">
                             {it.item_number && <span className="font-mono text-xs text-gray-400">{it.item_number}</span>}
-                            <span className="flex-1 truncate">{it.description || "—"}</span>
+                            <span className="flex-1 truncate">{it.description || "—"}{it.color && <span className="text-gray-400"> · {it.color}</span>}</span>
                             {it.qty && <span className="text-xs text-gray-400">qty {it.qty}</span>}
                             <button onClick={() => removeRow(it._localId)} className="text-gray-300 hover:text-red-500 transition">
                               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
