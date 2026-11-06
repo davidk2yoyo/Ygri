@@ -124,21 +124,44 @@ function OrderCard({ order }) {
 
           {tab === "quotes" && (order.quotations.length === 0
             ? <p className="text-sm text-gray-400">Aún no hay cotizaciones publicadas.</p>
-            : <div className="space-y-2">
-                {order.quotations.map(q => (
-                  <div key={q.id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-4 py-3">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-900">{q.quote_number}
-                        <span className="ml-2 text-xs font-medium text-gray-500">{DOC_LABEL[q.document_type] || "Cotización"}</span>
-                      </p>
-                      <p className="text-xs text-gray-500">{[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}</p>
+            : <div className="space-y-3">
+                {order.quotations.map(q => {
+                  const total = Number(q.total_amount || 0);
+                  const paid = Number(q.paid_total || 0);
+                  const readyValue = Number(q.ready_value || 0);
+                  const balanceTotal = Math.max(total - paid, 0);
+                  const readyBalance = Math.max(readyValue - paid, 0);
+                  return (
+                    <div key={q.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-900">{q.quote_number}
+                            <span className="ml-2 text-xs font-medium text-gray-500">{DOC_LABEL[q.document_type] || "Cotización"}</span>
+                          </p>
+                          <p className="text-xs text-gray-500">{[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className="text-sm font-bold text-gray-900">{money(total, q.currency)}</span>
+                          <a href={`/q/${q.quote_number}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver</a>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100 border-t border-gray-100 text-xs">
+                        <div className="bg-white px-4 py-2.5">
+                          <p className="text-gray-400">Pagado</p>
+                          <p className="font-semibold text-green-700">{money(paid, q.currency)}</p>
+                        </div>
+                        <div className="bg-white px-4 py-2.5">
+                          <p className="text-gray-400">Balance total</p>
+                          <p className="font-semibold text-gray-900">{money(balanceTotal, q.currency)}</p>
+                        </div>
+                        <div className="bg-white px-4 py-2.5 col-span-2 sm:col-span-2">
+                          <p className="text-gray-400">Balance de lo ya listo en producción</p>
+                          <p className="font-semibold text-amber-700">{readyValue > 0 ? money(readyBalance, q.currency) : "—"}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm font-bold text-gray-900">{money(q.total_amount, q.currency)}</span>
-                      <a href={`/q/${q.quote_number}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver</a>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>)}
 
           {tab === "packing" && (order.packing_lists.length === 0
