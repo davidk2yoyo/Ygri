@@ -3,6 +3,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
 import { colorToHex } from "../lib/colorUtil";
+import { exportPackingListExcel, fetchClientDetails } from "../lib/packingListExcel";
 
 const COMPANY_INFO = {
   name: "INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED",
@@ -23,19 +24,34 @@ function ColorBadge({ color }) {
   );
 }
 
-export default function PackingListPDF({ packingList, items, itemsBySupplier, supplierTotals, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, onClose }) {
+export default function PackingListPDF({ packingList, items, itemsBySupplier, supplierTotals, clientName, projectName, quoteNumber, quoteRefLabel = "Quote Ref", notes, clientDetails: clientDetailsProp, onClose }) {
   const bySupplier = packingList?.mode === "by_supplier";
   const printRef = useRef(null);
   const [clientLogo, setClientLogo] = useState("");
+  const [fetchedDetails, setFetchedDetails] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const clientDetails = clientDetailsProp || fetchedDetails;
 
+  // staff can read the clients table; the portal passes the client's own details in instead
   useEffect(() => {
-    if (!clientName) { setClientLogo(""); return; }
+    if (clientDetailsProp || !clientName) { setFetchedDetails(null); return; }
     let cancelled = false;
-    supabase.from("clients").select("logo_url").eq("company_name", clientName).maybeSingle().then(({ data }) => {
-      if (!cancelled) setClientLogo(data?.logo_url || "");
-    });
+    fetchClientDetails(supabase, clientName).then(d => { if (!cancelled) setFetchedDetails(d); });
     return () => { cancelled = true; };
-  }, [clientName]);
+  }, [clientName, clientDetailsProp]);
+  useEffect(() => { setClientLogo(clientDetails?.logo_url || ""); }, [clientDetails]);
+
+  const handleDownloadExcel = async () => {
+    setExporting(true);
+    try {
+      await exportPackingListExcel({
+        packingList, items, supplierTotals, clientName, clientDetails, projectName, quoteNumber, quoteRefLabel, notes,
+      });
+    } catch (e) {
+      console.error("Excel export failed", e);
+      window.alert("No se pudo generar el Excel: " + (e.message || e));
+    } finally { setExporting(false); }
+  };
 
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
@@ -352,6 +368,12 @@ export default function PackingListPDF({ packingList, items, itemsBySupplier, su
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
           </svg>
           Print
+        </button>
+        <button onClick={handleDownloadExcel} disabled={exporting} className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-medium hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 3v18M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z" />
+          </svg>
+          {exporting ? "Generating…" : "Download Excel"}
         </button>
         <button onClick={handleDownloadPDF} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition shadow flex items-center gap-1.5">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -4,6 +4,7 @@ import { useClientPortal } from "../ClientPortalContext";
 import { ShipmentCard } from "./MisEnviosPage";
 import { SupplierProductionCard } from "../../components/ProductionBoard";
 import PackingListPDF from "../../components/PackingListPDF";
+import { exportPackingListExcel } from "../../lib/packingListExcel";
 
 // track_stages.status is one of these four — NOT "pending" (that key never matched,
 // so a not-yet-started stage leaked the raw DB string straight into the UI).
@@ -69,11 +70,22 @@ function StageTimeline({ stages }) {
   );
 }
 
-function OrderCard({ order }) {
+function OrderCard({ order, profile }) {
   const { session } = useClientPortal();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("progress");
   const [pdfPacking, setPdfPacking] = useState(null); // the packing list currently shown as PDF, or null
+  const [excelBusy, setExcelBusy] = useState(null);
+  const downloadExcel = async (pl) => {
+    setExcelBusy(pl.id);
+    try {
+      await exportPackingListExcel({
+        packingList: pl, items: pl.items, supplierTotals: pl.supplier_totals || [], clientName: session.client_name,
+        clientDetails: profile, projectName: order.track_name, quoteNumber: pl.quote_number, notes: pl.notes,
+      });
+    } catch (e) { window.alert("No pudimos generar el Excel: " + (e.message || e)); }
+    finally { setExcelBusy(null); }
+  };
   const tabs = [
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
@@ -189,10 +201,16 @@ function OrderCard({ order }) {
                           <p className="text-xs text-gray-500">Cotización {pl.quote_number}</p>
                         </div>
                       </div>
+                      <div className="flex items-center gap-2">
+                      <button onClick={() => downloadExcel(pl)} disabled={excelBusy === pl.id} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:border-green-500 hover:text-green-600 transition shadow-sm whitespace-nowrap disabled:opacity-60">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1M7 11l5 5 5-5M12 15V4" /></svg>
+                        {excelBusy === pl.id ? "Generando…" : "Excel"}
+                      </button>
                       <button onClick={() => setPdfPacking(pl)} className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-semibold text-gray-700 hover:border-blue-400 hover:text-blue-600 transition shadow-sm whitespace-nowrap">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1M7 11l5 5 5-5M12 15V4" /></svg>
                         PDF
                       </button>
+                      </div>
                     </div>
                     {pl.mode === "by_supplier" ? (
                       <div className="p-4 space-y-3 bg-gray-50/40">
@@ -316,6 +334,7 @@ function OrderCard({ order }) {
             itemsBySupplier={itemsBySupplier}
             supplierTotals={pdfPacking.supplier_totals}
             clientName={session.client_name}
+            clientDetails={profile}
             projectName={order.track_name}
             quoteNumber={pdfPacking.quote_number}
             notes={pdfPacking.notes}
@@ -332,6 +351,12 @@ export default function MisOrdenesPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState(null);
+
+  // the client's own company details, for the documents generated here (null if unavailable)
+  useEffect(() => {
+    supabase.rpc("client_portal_get_profile", { p_session_id: session.session_id }).then(({ data }) => setProfile(data || null));
+  }, [session.session_id]);
 
   useEffect(() => {
     async function load() {
@@ -363,7 +388,7 @@ export default function MisOrdenesPage() {
           <p className="text-xs mt-1">Tu asesor las publicará a medida que avance el proceso</p>
         </div>
       )}
-      <div className="space-y-3">{orders.map(o => <OrderCard key={o.track_id} order={o} />)}</div>
+      <div className="space-y-3">{orders.map(o => <OrderCard key={o.track_id} order={o} profile={profile} />)}</div>
     </div>
   );
 }

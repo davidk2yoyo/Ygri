@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import * as XLSX from "xlsx";
 import { supabase } from "../supabaseClient";
 import PackingListPDF from "../components/PackingListPDF";
+import { exportPackingListExcel, fetchClientDetails } from "../lib/packingListExcel";
 import PackingListImportModal from "../components/PackingListImportModal";
 import { goBack } from "../lib/navigateBack";
 
@@ -340,51 +340,17 @@ export default function PackingListEditorPage() {
     }
   };
 
-  const exportExcel = () => {
-    const bySupplier = packingList?.mode === "by_supplier";
-    const rows = bySupplier
-      ? Object.values(itemsBySupplier).flatMap(g => {
-          const t = supplierTotals.find(st => supplierKey(st.supplier_id, st.supplier_name) === supplierKey(g.supplier_id, g.supplier_name));
-          return g.items.map((it, i) => ({
-            "Supplier": i === 0 ? g.supplier_name : "",
-            "Item #": it.item_number || "", "Description": it.description || "", "Color": it.color || "", "Qty": it.qty || "",
-            "Cartons": i === 0 ? (t?.carton_qty || "") : "",
-            "CBM": i === 0 && t?.cbm ? Number(t.cbm) : "",
-            "N.W. (kg)": i === 0 && t?.nw ? Number(t.nw) : "",
-            "G.W. (kg)": i === 0 && t?.gw ? Number(t.gw) : "",
-          }));
-        })
-      : items.map(r => ({
-          "Item #": r.item_number || "",
-          "Description": r.description || "",
-          "Color": r.color || "",
-          "Cartons": r.carton_qty || "",
-          "Qty": r.qty || "",
-          "L (cm)": r.length_cm || "",
-          "W (cm)": r.width_cm || "",
-          "H (cm)": r.height_cm || "",
-          "CBM": r.cbm || "",
-          "N.W. (kg)": r.nw || "",
-          "G.W. (kg)": r.gw || "",
-        }));
-    rows.push(bySupplier ? {
-      "Supplier": "TOTAL", "Item #": "", "Description": "", "Qty": "",
-      "Cartons": supplierGrandTotals.carton_qty || "",
-      "CBM": supplierGrandTotals.cbm ? Number(supplierGrandTotals.cbm.toFixed(4)) : "",
-      "N.W. (kg)": supplierGrandTotals.nw ? Number(supplierGrandTotals.nw.toFixed(2)) : "",
-      "G.W. (kg)": supplierGrandTotals.gw ? Number(supplierGrandTotals.gw.toFixed(2)) : "",
-    } : {
-      "Item #": "", "Description": "TOTAL",
-      "Cartons": totals.carton_qty || "", "Qty": totals.qty || "",
-      "L (cm)": "", "W (cm)": "", "H (cm)": "",
-      "CBM": totals.cbm ? Number(totals.cbm.toFixed(4)) : "",
-      "N.W. (kg)": totals.nw ? Number(totals.nw.toFixed(2)) : "",
-      "G.W. (kg)": totals.gw ? Number(totals.gw.toFixed(2)) : "",
-    });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Packing List");
-    XLSX.writeFile(wb, `PackingList_${packingList?.pl_number || "draft"}_${quotation?.quote_number || ""}.xlsx`);
+  const exportExcel = async () => {
+    try {
+      const clientDetails = await fetchClientDetails(supabase, quotation?.client_name);
+      await exportPackingListExcel({
+        packingList, items, supplierTotals, clientName: quotation?.client_name, clientDetails, projectName: quotation?.project_name,
+        quoteNumber: quotation?.quote_number, quoteRefLabel: docLabels(quotation?.document_type).ref, notes: packingList?.notes,
+      });
+    } catch (e) {
+      console.error("Excel export failed", e);
+      window.alert("Could not generate the Excel: " + (e.message || e));
+    }
   };
 
   const inputCls = "w-full px-2 py-1.5 border border-gray-200 rounded-lg text-xs bg-white text-gray-800 focus:ring-1 focus:ring-blue-400";
