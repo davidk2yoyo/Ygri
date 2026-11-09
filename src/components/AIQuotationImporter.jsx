@@ -1,6 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { matchSupplierByName } from "../lib/suppliers";
 
+const toBase64 = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+
 export default function AIQuotationImporter({ currency, suppliers = [], supabase, onSupplierCreated, onImport, onClose }) {
   const [step, setStep] = useState("pick"); // pick | loading | review | error
   const [dragOver, setDragOver] = useState(false);
