@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { SupplierProductionCard } from "./ProductionBoard";
+import { findProductionGaps, applyProductionSync } from "../lib/productionSync";
 
 // "Production" tab of a project: one card per supplier purchase order, with a
 // ready checklist staff can edit directly (no need to open each PO). This is
@@ -10,6 +11,8 @@ export default function ProjectProductionSection({ trackId }) {
   const [quotationId, setQuotationId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [gaps, setGaps] = useState(null);      // quotation products that are not in any purchase order yet
+  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -27,6 +30,7 @@ export default function ProjectProductionSection({ trackId }) {
         photos: (po.purchase_order_photos || []).sort((a, b) => a.created_at.localeCompare(b.created_at)),
       })));
       setQuotationId(quotes?.[0]?.id || null);
+      try { setGaps(await findProductionGaps(supabase, trackId)); } catch { setGaps(null); }
     } catch (e) {
       setError(e.message || "Couldn't load production data.");
     } finally {
@@ -69,6 +73,14 @@ export default function ProjectProductionSection({ trackId }) {
     if (e) { setError(e.message); load(); }
   };
 
+  const missingCount = gaps?.groups?.reduce((n, g) => n + g.items.length, 0) || 0;
+  const syncNow = async () => {
+    setSyncing(true); setError("");
+    try { await applyProductionSync(supabase, trackId, gaps); await load(); }
+    catch (e) { setError(e.message || "No se pudo sincronizar con la cotización."); }
+    finally { setSyncing(false); }
+  };
+
   const newPoHref = quotationId ? `/purchase-orders/new?quotationId=${quotationId}` : "/purchase-orders/new";
 
   if (loading) return <div className="p-6 text-sm text-bgray-500">Loading…</div>;
@@ -82,6 +94,21 @@ export default function ProjectProductionSection({ trackId }) {
         </div>
         <a href={newPoHref} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition">+ New purchase order</a>
       </div>
+
+      {missingCount > 0 && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-900 flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p className="font-semibold">{missingCount} {missingCount === 1 ? "producto de la cotización no está" : "productos de la cotización no están"} en producción</p>
+            <p className="text-xs mt-0.5">
+              {gaps.groups.map(g => `${g.supplier_name}: ${g.items.length}${g.po ? "" : " (sin orden de compra)"}`).join(" · ")}.
+              {" "}Mientras no estén aquí no se pueden marcar como listos ni salen en el Excel de lo listo.
+            </p>
+          </div>
+          <button onClick={syncNow} disabled={syncing} className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-semibold hover:bg-amber-700 transition disabled:opacity-60">
+            {syncing ? "Agregando…" : "Agregar a producción"}
+          </button>
+        </div>
+      )}
 
       {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
 
