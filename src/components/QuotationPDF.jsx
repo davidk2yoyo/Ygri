@@ -3,23 +3,14 @@ import { useNavigate } from "react-router-dom";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
+import { BANK_DETAILS } from "../lib/companyInfo";
+import { exportQuotationExcel, fetchStaffQuotationExtras } from "../lib/quotationExcel";
 
 const formatDateLong = (iso) => {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
   return `${months[parseInt(m, 10) - 1]} ${parseInt(d, 10)}, ${y}`;
-};
-
-// Bank details — fixed for Interasia
-const BANK_DETAILS = {
-  company: "INTERASIA SAS (HONGKONG) TRADE COMPANY LIMITED",
-  address: "ROOM 1102-1103 KOWLOON BUILDING 555 NATHAN ROAD, MONGKOK KLN",
-  accountNumber: "015-829856-838",
-  bankName: "HSBC Hong Kong",
-  bankAddress: "1 Queen's Road Central",
-  bankCode: "004",
-  swift: "HSBCHKHHHKH",
 };
 
 const COMPANY_INFO = {
@@ -341,6 +332,19 @@ export default function QuotationPDF({
     pdf.save(`Quotation_${quotation.quote_number || "draft"}_${clientName?.replace(/\s+/g, "_") || "client"}.pdf`);
   };
 
+  const [excelBusy, setExcelBusy] = useState(null); // "all" | "ready" | null
+  const downloadExcel = async (readyOnly) => {
+    setExcelBusy(readyOnly ? "ready" : "all");
+    try {
+      const extras = await fetchStaffQuotationExtras(supabase, { quotation, items });
+      await exportQuotationExcel({
+        quotation, items: extras.items, payments, clientName, clientDetails, projectName,
+        readyNumbers: extras.readyNumbers, readyOnly, commissionPct, showCommission,
+      });
+    } catch (e) { window.alert("Could not generate the Excel: " + (e.message || e)); }
+    finally { setExcelBusy(null); }
+  };
+
   const handlePrint = () => {
     const el = printRef.current;
     if (!el) return;
@@ -385,6 +389,25 @@ export default function QuotationPDF({
         </svg>
         Download PDF
       </button>
+      {!readOnly && (
+        <button
+          onClick={() => downloadExcel(false)}
+          disabled={!!excelBusy}
+          className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
+        >
+          {excelBusy === "all" ? "Generating…" : "Download Excel"}
+        </button>
+      )}
+      {!readOnly && quotation?.track_id && quotation.document_type !== "quotation" && (
+        <button
+          onClick={() => downloadExcel(true)}
+          disabled={!!excelBusy}
+          title="Only the items already finished in production, with the balance for those"
+          className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
+        >
+          {excelBusy === "ready" ? "Generating…" : "Excel · ready items only"}
+        </button>
+      )}
       {!readOnly && (
         <button
           onClick={() => setShowWhatsApp(true)}

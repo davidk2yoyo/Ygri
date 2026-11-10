@@ -5,6 +5,7 @@ import { ShipmentCard } from "./MisEnviosPage";
 import { SupplierProductionCard } from "../../components/ProductionBoard";
 import PackingListPDF from "../../components/PackingListPDF";
 import { exportPackingListExcel } from "../../lib/packingListExcel";
+import { exportQuotationExcel, fetchPortalQuotation, readyNumbersFromPOs } from "../../lib/quotationExcel";
 
 // track_stages.status is one of these four — NOT "pending" (that key never matched,
 // so a not-yet-started stage leaked the raw DB string straight into the UI).
@@ -86,6 +87,19 @@ function OrderCard({ order, profile }) {
     } catch (e) { window.alert("No pudimos generar el Excel: " + (e.message || e)); }
     finally { setExcelBusy(null); }
   };
+  const [quoteBusy, setQuoteBusy] = useState(null); // `${quotationId}:all|ready`
+  const downloadQuoteExcel = async (q, readyOnly) => {
+    setQuoteBusy(`${q.id}:${readyOnly ? "ready" : "all"}`);
+    try {
+      const detail = await fetchPortalQuotation(supabase, session.session_id, q.id);
+      await exportQuotationExcel({
+        quotation: detail.quotation, items: detail.items, payments: detail.payments,
+        clientName: session.client_name, clientDetails: profile, projectName: order.track_name,
+        readyNumbers: readyNumbersFromPOs(order.purchase_orders), readyOnly,
+      });
+    } catch (e) { window.alert("No pudimos generar el Excel: " + (e.message || e)); }
+    finally { setQuoteBusy(null); }
+  };
   const tabs = [
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
@@ -166,6 +180,19 @@ function OrderCard({ order, profile }) {
                           <span className="text-sm font-bold text-gray-900">{money(total, q.currency)}</span>
                           <a href={`/q/${q.quote_number}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver</a>
                         </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap px-4 pb-3">
+                        <button onClick={() => downloadQuoteExcel(q, false)} disabled={!!quoteBusy}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-60">
+                          {quoteBusy === `${q.id}:all` ? "Generando…" : "⬇ Excel completo"}
+                        </button>
+                        {readyValue > 0 && (
+                          <button onClick={() => downloadQuoteExcel(q, true)} disabled={!!quoteBusy}
+                            title="Solo los productos que ya están listos en producción, con su balance"
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
+                            {quoteBusy === `${q.id}:ready` ? "Generando…" : "⬇ Excel de lo ya listo"}
+                          </button>
+                        )}
                       </div>
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100 border-t border-gray-100 text-xs">
                         <div className="bg-white px-4 py-2.5">

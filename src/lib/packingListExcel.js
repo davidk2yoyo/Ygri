@@ -14,7 +14,7 @@ export async function fetchClientDetails(supabase, clientName) {
 }
 
 // logo as PNG data URL, shrunk (the source image is ~6000px wide)
-async function loadLogo(url = "/images/interasia-logo.png") {
+export async function loadLogo(url = "/images/interasia-logo.png") {
   try {
     const blob = await (await fetch(url)).blob();
     const bmp = await createImageBitmap(blob);
@@ -27,17 +27,17 @@ async function loadLogo(url = "/images/interasia-logo.png") {
 }
 
 // Excel does not size rows for wrapped text reliably, so give each row a height from its text length
-const rowHeight = (text, charsPerLine) => {
+export const rowHeight = (text, charsPerLine) => {
   const lines = String(text || "").split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / charsPerLine)), 0);
   return Math.max(24, lines * 14 + 10);
 };
 
-const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
+export const num = (v) => (v === "" || v == null || isNaN(Number(v)) ? null : Number(v));
 const sum = (arr, f) => arr.reduce((n, x) => n + (num(f(x)) || 0), 0);
 const groupKey = (id, name) => id || `raw:${name || "Sin proveedor"}`;
-const safeName = (s) => String(s || "").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "");
+export const safeName = (s) => String(s || "").replace(/[^\w-]+/g, "_").replace(/^_+|_+$/g, "");
 
-function download(buffer, filename) {
+export function download(buffer, filename) {
   const url = URL.createObjectURL(new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
   const a = document.createElement("a");
   a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
