@@ -115,7 +115,13 @@ export default function InvoicesPage() {
       })),
       clientName: q.company_name,
       projectName: q.track_name,
-      totalAmount: Number(q.total_amount || 0),
+      // stored total already includes the commission; the PDF wants the subtotal and adds it itself
+      totalAmount: (() => {
+        const pct = parseFloat(q.commission_pct) || 0, grand = Number(q.total_amount || 0);
+        return pct > 0 ? grand / (1 + pct / 100) : grand;
+      })(),
+      commissionPct: parseFloat(q.commission_pct) || 0,
+      showCommission: q.show_commission || false,
       payments,
     });
   };
@@ -128,6 +134,8 @@ export default function InvoicesPage() {
         clientName={pdfData.clientName}
         projectName={pdfData.projectName}
         totalAmount={pdfData.totalAmount}
+        commissionPct={pdfData.commissionPct}
+        showCommission={pdfData.showCommission}
         payments={pdfData.payments}
         onClose={() => setPdfData(null)}
       />

@@ -62,9 +62,12 @@ export default function PublicQuotationPage() {
         priceTiers: tiersByItem[it.id] || [],
       }));
 
+      // total_amount is stored WITH the commission already added (subtotal x (1 + pct)). QuotationPDF
+      // expects the subtotal and adds the commission itself, so back it out — passing the stored
+      // total as-is made the PDF add the commission a second time.
       const commissionPct = parseFloat(quotation.commission_pct) || 0;
-      const totalAmount = Number(quotation.total_amount || 0);
-      const grandTotal = totalAmount + totalAmount * (commissionPct / 100);
+      const grandTotal = Number(quotation.total_amount || 0);
+      const totalAmount = commissionPct > 0 ? grandTotal / (1 + commissionPct / 100) : grandTotal;
 
       let payments = [];
       if (quotation.document_type === "proforma" || quotation.document_type === "invoice") {
