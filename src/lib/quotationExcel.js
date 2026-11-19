@@ -125,7 +125,7 @@ export async function exportQuotationExcel({
 
   // ---- columns: # | Photo | Description | [Status] | Qty | [MOQ] | Price | Amount
   const cols = [
-    { key: "no", label: "#", width: 9 }, { key: "photo", label: "Image", width: 12 }, { key: "desc", label: "Description", width: 50 },
+    { key: "no", label: "#", width: 13 }, { key: "photo", label: "Image", width: 12 }, { key: "desc", label: "Description", width: 50 },
     ...(showStatus ? [{ key: "status", label: "Production", width: 14, center: true }] : []),
     { key: "qty", label: "Qty", width: 9, num: "#,##0" },
     ...(showMoq ? [{ key: "moq", label: "MOQ", width: 9, num: "#,##0" }] : []),
@@ -239,10 +239,50 @@ export async function exportQuotationExcel({
   });
   ws.pageSetup.printTitlesRow = `${headRow}:${headRow}`;
 
-  const photos = await loadPhotos(rows.map(i => i.picturePreview || i.picture_url || ""));
+  // Group by brand ("Marca: X" / "Brand: X" option) so each brand's products sit together, brands A→Z and
+  // products by item number inside each brand. Products with no brand go last. No brands at all = keep order.
+  const brandOf = (it) => {
+    const o = (it.selectedOptions || []).find(o => /^\s*(marca|brand)\s*:/i.test(o.label || ""));
+    return o ? o.label.replace(/^\s*(marca|brand)\s*:\s*/i, "").trim() : "";
+  };
+  const natural = (a, b) => String(a || "").localeCompare(String(b || ""), undefined, { numeric: true, sensitivity: "base" });
+  let sorted = rows;
+  const groupAt = new Map();                                   // index in `sorted` where a brand band starts
+  if (rows.some(i => brandOf(i))) {
+    const groups = new Map();
+    rows.forEach(it => {
+      const b = brandOf(it), k = b.toLowerCase();
+      if (!groups.has(k)) groups.set(k, { name: b, items: [] });
+      groups.get(k).items.push(it);
+    });
+    const list = [...groups.values()].sort((a, b) => (!a.name) - (!b.name) || natural(a.name, b.name));
+    sorted = [];
+    list.forEach(g => {
+      g.items.sort((x, y) => (!x.item_number) - (!y.item_number) || natural(x.item_number, y.item_number));
+      groupAt.set(sorted.length, { name: g.name ? g.name.toUpperCase() : "OTHER PRODUCTS", count: g.items.length, subtotal: subtotalOf(g.items) });
+      sorted.push(...g.items);
+    });
+  }
+
+  const photos = await loadPhotos(sorted.map(i => i.picturePreview || i.picture_url || ""));
   const thin = { style: "thin", color: { argb: LINE } };
-  let r = headRow + 1;
-  rows.forEach((it, idx) => {
+  let r = headRow + 1, zebra = 0;
+  sorted.forEach((it, idx) => {
+    const band = groupAt.get(idx);
+    if (band) {
+      zebra = 0;
+      const br = ws.getRow(r); br.height = 22;
+      const t = merge(r, 1, N - 1);
+      t.value = `${band.name}   ·   ${band.count} ${band.count === 1 ? "product" : "products"}`;
+      const sub = ws.getCell(r, N); sub.value = band.subtotal; sub.numFmt = "#,##0.00";
+      for (let c = 1; c <= N; c++) {
+        const cell = ws.getCell(r, c); fill(cell, LIGHT);
+        cell.border = { top: { style: "thin", color: { argb: NAVY } }, bottom: thin };
+        cell.font = { name: FONT, size: 10.5, bold: true, color: { argb: NAVY } };
+        cell.alignment = { vertical: "middle", horizontal: c === N ? "right" : "left", indent: c === N ? 0 : 1 };
+      }
+      r++;
+    }
     const row = ws.getRow(r);
     const options = it.selectedOptions || [];
     const tiers = it.priceTiers || [];
@@ -268,7 +308,7 @@ export async function exportQuotationExcel({
       cell.font = { name: FONT, size: 10, color: { argb: "FF1A1A1A" } };
       cell.alignment = { vertical: "middle", wrapText: true, horizontal: c.num ? "right" : c.center ? "center" : "left", indent: c.num || c.center ? 0 : 1 };
       cell.border = { bottom: thin };
-      if (idx % 2) fill(cell, ZEBRA);
+      if (zebra % 2) fill(cell, ZEBRA);
       if (c.num) cell.numFmt = c.num;
     });
     row.getCell(ci("no")).value = it.item_number || idx + 1;
@@ -300,6 +340,7 @@ export async function exportQuotationExcel({
       const colPx = cols[1].width * 7 + 5, rowPx = (row.height * 96) / 72;
       ws.addImage(id, { tl: { col: 1 + Math.max(0, (colPx - w) / 2) / colPx, row: r - 1 + Math.max(0, (rowPx - h) / 2) / rowPx }, ext: { width: w, height: h } });
     }
+    zebra++;
     r++;
   });
 
