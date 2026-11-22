@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
-import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, NavLink, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { useClientPortal } from "./ClientPortalContext";
 import interasiaLogo from "../assets/images/logo/interasialogo.png";
+import { ROLE_LABEL } from "./permissions";
 
 const NAV = [
   {
@@ -18,6 +19,7 @@ const NAV = [
   },
   {
     to: "/clientes/envios",
+    perm: "envios",
     label: "Mis Envíos",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -28,6 +30,7 @@ const NAV = [
   },
   {
     to: "/clientes/ordenes",
+    perm: "ordenes",
     label: "Mis Órdenes",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,6 +41,7 @@ const NAV = [
   },
   {
     to: "/clientes/pedidos",
+    perm: "pedidos",
     label: "Subir pedido",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -48,6 +52,7 @@ const NAV = [
   },
   {
     to: "/clientes/documentos",
+    perm: "documentos",
     label: "Documentos",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -58,6 +63,7 @@ const NAV = [
   },
   {
     to: "/clientes/reportes",
+    perm: "reportes",
     label: "Reportes",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,6 +74,7 @@ const NAV = [
   },
   {
     to: "/clientes/asistente",
+    perm: "asistente",
     label: "Asistente de Importación",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -78,6 +85,7 @@ const NAV = [
   },
   {
     to: "/clientes/cotizaciones-ia",
+    perm: "cotizaciones_ia",
     label: "Consultar Cotizaciones",
     icon: (
       <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -110,7 +118,7 @@ function NavItem({ item, onClick, badge }) {
 }
 
 export default function ClientLayout() {
-  const { session, logout } = useClientPortal();
+  const { session, logout, me, can } = useClientPortal();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(0);
@@ -126,13 +134,18 @@ export default function ClientLayout() {
       .then(({ data }) => setUnreadDocs(location.pathname.endsWith("/documentos") ? 0 : (data || 0)));
   }, [session?.session_id, location.pathname]);
 
+  // Only the modules this user may use; the page behind a hidden entry redirects home.
+  const nav = NAV.filter(n => !n.perm || can(n.perm));
+  const blocked = NAV.find(n => n.perm && !can(n.perm) && location.pathname.startsWith(n.to));
+
   function handleLogout() {
     logout();
     navigate("/clientes/login", { replace: true });
   }
 
-  const initials = session?.client_name
-    ? session.client_name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()
+  const userLabel = me?.name || session?.client_name;
+  const initials = userLabel
+    ? userLabel.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()
     : "?";
 
   return (
@@ -147,7 +160,7 @@ export default function ClientLayout() {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {NAV.map(item => (
+          {nav.map(item => (
             <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} />
           ))}
         </nav>
@@ -159,8 +172,8 @@ export default function ClientLayout() {
               {initials}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{session?.client_name}</p>
-              <p className="text-xs text-gray-400">Cliente</p>
+              <p className="text-sm font-semibold text-gray-900 truncate">{userLabel}</p>
+              <p className="text-xs text-gray-400 truncate">{me?.name ? `${session?.client_name} · ` : ""}{ROLE_LABEL[me?.role] || "Cliente"}</p>
             </div>
           </div>
           <button
@@ -198,7 +211,7 @@ export default function ClientLayout() {
               <p className="text-xs font-semibold text-blue-200">{session?.client_name}</p>
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              {NAV.map(item => (
+              {nav.map(item => (
                 <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} onClick={() => setMobileOpen(false)} />
               ))}
             </nav>
@@ -218,7 +231,7 @@ export default function ClientLayout() {
 
       {/* ── Main content ── */}
       <main className="flex-1 md:ml-64 pt-14 md:pt-0 min-h-screen">
-        <Outlet />
+        {blocked ? <Navigate to="/clientes" replace /> : <Outlet />}
       </main>
     </div>
   );

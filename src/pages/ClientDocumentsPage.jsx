@@ -295,6 +295,14 @@ export default function ClientDocumentsPage() {
     load();
   };
 
+  // who inside the client company may open it: everyone with Documentos, or only users allowed to see prices
+  const toggleAudience = async (d) => {
+    const next = d.audience === "commercial" ? "all" : "commercial";
+    const { error } = await supabase.from("client_documents").update({ audience: next }).eq("id", d.id);
+    if (error) { sileo.error({ title: error.message }); return; }
+    load();
+  };
+
   const removeDocs = async (list) => {
     if (!window.confirm(`Delete ${list.length} document(s)? This cannot be undone.`)) return;
     const paths = list.map(d => d.file_url?.split("/client-documents/")[1]).filter(Boolean);
@@ -417,6 +425,8 @@ export default function ClientDocumentsPage() {
                 </select>
                 <button onClick={() => bulk({ show_to_client: true }, "shown")} className={btn}>Show to client</button>
                 <button onClick={() => bulk({ show_to_client: false }, "hidden")} className={btn}>Hide</button>
+                <button onClick={() => bulk({ audience: "commercial" }, "edited")} className={btn} title="Only client users who can see prices">Commercial only</button>
+                <button onClick={() => bulk({ audience: "all" }, "edited")} className={btn} title="Every client user with Documentos">All users</button>
                 <button onClick={() => removeDocs(docs.filter(d => picked.has(d.id)))} className={btnDanger}>Delete</button>
                 <button onClick={() => setPicked(new Set())} className="text-xs text-bgray-500 ml-auto">Clear</button>
               </div>
@@ -447,6 +457,11 @@ export default function ClientDocumentsPage() {
                       <button onClick={() => toggleVisible(d)} title="Show / hide for the client"
                         className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${eff === "visible" ? "bg-green-100 text-green-700" : eff === "hidden" ? "bg-bgray-100 text-bgray-500" : "bg-amber-100 text-amber-700"}`}>
                         {eff === "visible" ? "Visible" : eff === "hidden" ? "Hidden" : eff === "folder" ? "Hidden by folder" : "Hidden by project"}
+                      </button>
+                      <button onClick={() => toggleAudience(d)}
+                        title={d.audience === "commercial" ? "Only client users who can see prices open it — click to open it to everyone" : "Every client user with Documentos opens it — click to restrict to users who can see prices"}
+                        className={`text-[11px] font-semibold px-2.5 py-1 rounded-full flex-shrink-0 ${d.audience === "commercial" ? "bg-violet-100 text-violet-700" : "bg-bgray-100 text-bgray-500"}`}>
+                        {d.audience === "commercial" ? "Commercial only" : "All users"}
                       </button>
                       <a href={d.file_url} target="_blank" rel="noreferrer" className={btn}>Open</a>
                       <button onClick={() => setDocModal(d)} className={btn}>Edit</button>

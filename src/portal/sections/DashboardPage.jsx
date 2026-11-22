@@ -46,7 +46,7 @@ const STAGE_COLOR = {
 };
 
 export default function DashboardPage() {
-  const { session } = useClientPortal();
+  const { session, can } = useClientPortal();
   const [summary, setSummary] = useState(null);
   const [shipments, setShipments] = useState([]);
   const [tracks, setTracks] = useState([]);
@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
+        {can("envios") && <StatCard
           label="Envíos activos"
           value={summary?.active_shipments ?? 0}
           to="/clientes/envios"
@@ -102,8 +102,8 @@ export default function DashboardPage() {
                 d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
             </svg>
           }
-        />
-        <StatCard
+        />}
+        {can("prices") && <StatCard
           label="Cotizaciones"
           value={summary?.total_quotations ?? 0}
           to="/clientes/ordenes"
@@ -114,8 +114,8 @@ export default function DashboardPage() {
                 d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
           }
-        />
-        <StatCard
+        />}
+        {can("documentos") && <StatCard
           label="Documentos"
           value={summary?.total_documents ?? 0}
           to="/clientes/documentos"
@@ -126,8 +126,8 @@ export default function DashboardPage() {
                 d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
             </svg>
           }
-        />
-        <StatCard
+        />}
+        {can("reportes") && <StatCard
           label="Reportes"
           value={summary?.total_reports ?? 0}
           to="/clientes/reportes"
@@ -138,11 +138,11 @@ export default function DashboardPage() {
                 d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
             </svg>
           }
-        />
+        />}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent shipments */}
+        {can("envios") && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">Envíos recientes</h2>
@@ -166,8 +166,9 @@ export default function DashboardPage() {
               </div>
             )}
         </div>
+        )}
 
-        {/* Active tracks / stages */}
+        {can("ordenes") && (
         <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-gray-900">Estado de tus proyectos</h2>
@@ -200,6 +201,7 @@ export default function DashboardPage() {
               </div>
             )}
         </div>
+        )}
       </div>
     </div>
   );

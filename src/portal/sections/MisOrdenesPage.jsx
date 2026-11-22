@@ -72,7 +72,7 @@ function StageTimeline({ stages }) {
 }
 
 function OrderCard({ order, profile }) {
-  const { session } = useClientPortal();
+  const { session, can } = useClientPortal();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("progress");
   const [pdfPacking, setPdfPacking] = useState(null); // the packing list currently shown as PDF, or null
@@ -103,7 +103,7 @@ function OrderCard({ order, profile }) {
   const tabs = [
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
-    ["quotes", `Cotizaciones y facturas (${order.quotations.length})`],
+    ...(can("prices") ? [["quotes", `Cotizaciones y facturas (${order.quotations.length})`]] : []),
     ["packing", `Packing List (${order.packing_lists.length})`],
     ["shipments", `Envíos y muestras (${order.shipments.length})`],
     ["docs", `Documentos (${order.documents.length})`],
