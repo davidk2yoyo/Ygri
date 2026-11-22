@@ -28,6 +28,8 @@ export default function Layout() {
   const { t, i18n } = useTranslation();
   const [unreadOrders, setUnreadOrders] = useState(0);
   const [unreadDocs, setUnreadDocs] = useState(0);
+  const [openCases, setOpenCases] = useState(0);
+  const [openClaims, setOpenClaims] = useState(0);
 
   // client orders the client touched since staff last opened them
   useEffect(() => {
@@ -35,6 +37,11 @@ export default function Layout() {
       .then(({ count }) => setUnreadOrders(count || 0));
     supabase.from("v_client_documents_unread").select("unread")
       .then(({ data }) => setUnreadDocs((data || []).reduce((n, r) => n + (r.unread || 0), 0)));
+    // client conversations waiting for our reply / new warranty claims (stay 0 until their migrations are applied)
+    supabase.from("client_cases").select("id", { count: "exact", head: true }).eq("status", "open")
+      .then(({ count, error }) => setOpenCases(error ? 0 : (count || 0)));
+    supabase.from("warranty_claims").select("id", { count: "exact", head: true }).eq("status", "open")
+      .then(({ count, error }) => setOpenClaims(error ? 0 : (count || 0)));
   }, [location.pathname]);
 
   useEffect(() => {
@@ -256,6 +263,16 @@ export default function Layout() {
     },
     {
       section: "Pipeline",
+      path: "/attention",
+      label: "Customer attention",
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      )
+    },
+    {
+      section: "Pipeline",
       path: "/warranties",
       label: "Warranties",
       icon: (
@@ -437,9 +454,10 @@ export default function Layout() {
                         {isActive && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-green-600 dark:bg-green-400" />}
                         {item.icon}
                         <span className="flex-1">{item.label}</span>
-                        {((item.path === "/client-orders" && unreadOrders > 0) || (item.path === "/client-documents" && unreadDocs > 0)) && (
-                          <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{item.path === "/client-orders" ? unreadOrders : unreadDocs}</span>
-                        )}
+                        {(() => {
+                          const n = { "/client-orders": unreadOrders, "/client-documents": unreadDocs, "/attention": openCases, "/warranties": openClaims }[item.path] || 0;
+                          return n > 0 ? <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{n}</span> : null;
+                        })()}
                       </Link>
                     </li>
                   );

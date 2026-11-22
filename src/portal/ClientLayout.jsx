@@ -51,6 +51,18 @@ const NAV = [
     ),
   },
   {
+    to: "/clientes/consultas",
+    perm: "consultas",
+    label: "Consultas",
+    badge: "cases",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    ),
+  },
+  {
     to: "/clientes/garantias",
     perm: "garantias",
     label: "Garantías",
@@ -134,6 +146,7 @@ export default function ClientLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [unread, setUnread] = useState(0);
   const [unreadDocs, setUnreadDocs] = useState(0);
+  const [unreadCases, setUnreadCases] = useState(0);
   const location = useLocation();
 
   useEffect(() => {
@@ -143,6 +156,8 @@ export default function ClientLayout() {
     // the Documentos page marks them seen when it loads, so this is read before that on navigation
     supabase.rpc("client_portal_documents_unread", { p_session_id: session.session_id })
       .then(({ data }) => setUnreadDocs(location.pathname.endsWith("/documentos") ? 0 : (data || 0)));
+    supabase.rpc("client_portal_cases_unread", { p_session_id: session.session_id })
+      .then(({ data, error }) => setUnreadCases(error ? 0 : (data || 0)));
   }, [session?.session_id, location.pathname]);
 
   // Only the modules this user may use; the page behind a hidden entry redirects home.
@@ -172,7 +187,7 @@ export default function ClientLayout() {
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {nav.map(item => (
-            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} />
+            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : item.to === "/clientes/consultas" ? unreadCases : 0} />
           ))}
         </nav>
 
@@ -223,7 +238,7 @@ export default function ClientLayout() {
             </div>
             <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
               {nav.map(item => (
-                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : 0} onClick={() => setMobileOpen(false)} />
+                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : item.to === "/clientes/consultas" ? unreadCases : 0} onClick={() => setMobileOpen(false)} />
               ))}
             </nav>
             <div className="px-3 py-4 border-t border-gray-100">

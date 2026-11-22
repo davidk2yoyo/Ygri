@@ -10,6 +10,7 @@ export const PERMISSIONS = [
   { key: "pedidos",         label: "Subir pedido",              hint: "Crear y enviar pedidos" },
   { key: "documentos",      label: "Documentos",                hint: "Carpetas y archivos compartidos" },
   { key: "reportes",        label: "Reportes de inspección",    hint: "Informes de inspección" },
+  { key: "consultas",       label: "Consultas",                 hint: "Preguntas técnicas, fichas técnicas, aprobación de diseños y comentarios" },
   { key: "garantias",       label: "Garantías",                 hint: "Reclamar productos con problemas y ver su estado" },
   { key: "asistente",       label: "Asistente de Importación",  hint: "Calculadora de costos de importación" },
   { key: "cotizaciones_ia", label: "Consultar Cotizaciones",    hint: "Asistente de IA (requiere ver precios)" },
@@ -21,8 +22,8 @@ const only = (...on) => Object.fromEntries(ALL_KEYS.map(k => [k, on.includes(k)]
 export const ROLES = {
   admin:     { label: "Administrador", desc: "Todo, incluidos precios",                  perms: only(...ALL_KEYS) },
   comercial: { label: "Comercial",     desc: "Compra y negocia: todo, incluidos precios", perms: only(...ALL_KEYS) },
-  bodega:    { label: "Bodega",        desc: "Producción, envíos, documentos y garantías, sin precios", perms: only("ordenes", "envios", "documentos", "reportes", "garantias") },
-  disenos:   { label: "Diseños",       desc: "Producción y documentos, sin precios",     perms: only("ordenes", "documentos", "reportes") },
+  bodega:    { label: "Bodega",        desc: "Producción, envíos, documentos y garantías, sin precios", perms: only("ordenes", "envios", "documentos", "reportes", "garantias", "consultas") },
+  disenos:   { label: "Diseños",       desc: "Producción, documentos y consultas de diseño, sin precios",     perms: only("ordenes", "documentos", "reportes", "consultas") },
   finanzas:  { label: "Finanzas",      desc: "Precios, órdenes, envíos y documentos",    perms: only("prices", "ordenes", "envios", "documentos") },
   custom:    { label: "Personalizado", desc: "Permisos elegidos uno a uno",              perms: only("ordenes", "documentos") },
 };

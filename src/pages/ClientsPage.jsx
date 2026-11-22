@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import ClientDocumentsTab from "../components/ClientDocumentsTab";
 import ClientQuotationsAITab from "../components/ClientQuotationsAITab";
 import WarrantyRulesPanel from "../components/warranty/WarrantyRulesPanel";
+import CasesBoard from "../components/cases/CasesBoard";
 import PortalUsersPanel from "../components/PortalUsersPanel";
 import AIClientScanner from "../components/AIClientScanner";
 import CountrySelect from "../components/CountrySelect";
@@ -225,6 +226,18 @@ function ClientDrawer({ client, onClose, onSaved }) {
           )}
           {!isNew && (
             <button
+              onClick={() => setActiveTab("attention")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "attention"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Attention
+            </button>
+          )}
+          {!isNew && (
+            <button
               onClick={() => setActiveTab("warranty")}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
                 activeTab === "warranty"
@@ -336,6 +349,8 @@ function ClientDrawer({ client, onClose, onSaved }) {
             </div>
           ) : activeTab === "portal" ? (
             <PortalUsersPanel client={client} />
+          ) : activeTab === "attention" ? (
+            <CasesBoard clientId={client.id} />
           ) : activeTab === "warranty" ? (
             <WarrantyRulesPanel client={client} />
           ) : activeTab === "quotations-ai" ? (
