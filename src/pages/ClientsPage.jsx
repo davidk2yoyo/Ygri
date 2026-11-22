@@ -233,7 +233,7 @@ function ClientDrawer({ client, onClose, onSaved }) {
                   : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
               }`}
             >
-              Attention
+              Consultas
             </button>
           )}
           {!isNew && (

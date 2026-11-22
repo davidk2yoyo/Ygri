@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import CaseThread, { AttachPicker } from "./CaseThread";
+import CaseLinkFields from "./CaseLinkFields";
 import { CASE_KIND, CASE_STATUS, CHANNEL, APPROVAL, fmtDateTime, waitLabel } from "../../lib/cases";
 
 // Staff: every conversation with clients (portal questions, technical queries, design approvals) plus the
@@ -14,15 +15,29 @@ async function staffName() {
   return data?.user?.user_metadata?.full_name || data?.user?.user_metadata?.name || e.split("@")[0];
 }
 
+// A client's orders and ordered products, to link a conversation to
+async function loadLinks(clientId) {
+  const [t, o] = await Promise.all([
+    supabase.from("tracks").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }),
+    supabase.from("client_orders").select("track_id, client_order_lines(name, client_ref)").eq("client_id", clientId),
+  ]);
+  const seen = new Set(), products = [];
+  (o.data || []).forEach(ord => (ord.client_order_lines || []).forEach(l => {
+    const key = `${(l.name || "").toLowerCase()}|${(l.client_ref || "").toLowerCase()}`;
+    if (l.name && !seen.has(key)) { seen.add(key); products.push({ name: l.name, ref: l.client_ref, track_id: ord.track_id }); }
+  }));
+  return { orders: t.data || [], products };
+}
+
 function NewInteraction({ clientId, clients, onCancel, onCreated }) {
   const [cid, setCid] = useState(clientId || "");
-  const [tracks, setTracks] = useState([]);
-  const [f, setF] = useState({ kind: "question", channel: "phone", subject: "", body: "", track_id: "", visible: false, closed: true, attachments: [] });
+  const [links, setLinks] = useState({ orders: [], products: [] });
+  const [f, setF] = useState({ kind: "question", channel: "phone", subject: "", body: "", track_id: "", product_name: "", product_ref: "", visible: false, closed: true, attachments: [] });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => {
-    setTracks([]);
-    if (cid) supabase.from("tracks").select("id, name").eq("client_id", cid).order("created_at", { ascending: false }).then(({ data }) => setTracks(data || []));
+    setLinks({ orders: [], products: [] });
+    if (cid) loadLinks(cid).then(setLinks);
   }, [cid]);
 
   async function create() {
@@ -32,7 +47,7 @@ function NewInteraction({ clientId, clients, onCancel, onCreated }) {
     const name = await staffName();
     const now = new Date().toISOString();
     const { data, error } = await supabase.from("client_cases").insert({
-      client_id: cid, track_id: f.track_id || null, kind: f.kind, subject: f.subject.trim(), channel: f.channel,
+      client_id: cid, track_id: f.track_id || null, product_name: f.product_name?.trim() || null, product_ref: f.product_ref?.trim() || null, kind: f.kind, subject: f.subject.trim(), channel: f.channel,
       status: f.closed ? "closed" : (f.visible ? "answered" : "open"), visible_to_client: f.visible,
       created_by_type: "staff", created_by_name: name, last_author_type: "staff", last_message_at: now, closed_at: f.closed ? now : null,
     }).select("id").single();
@@ -57,9 +72,8 @@ function NewInteraction({ clientId, clients, onCancel, onCreated }) {
         <div><label className={labelCls}>Channel</label>
           <select className={inputCls} value={f.channel} onChange={e => setF({ ...f, channel: e.target.value })}>{Object.entries(CHANNEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
         <div className="col-span-2"><label className={labelCls}>Subject *</label><input className={inputCls} value={f.subject} onChange={e => setF({ ...f, subject: e.target.value })} /></div>
-        <div className="col-span-2"><label className={labelCls}>Order (optional)</label>
-          <select className={inputCls} value={f.track_id} onChange={e => setF({ ...f, track_id: e.target.value })}><option value="">None</option>{tracks.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
       </div>
+      <CaseLinkFields value={f} onChange={v => setF({ ...f, ...v })} orders={links.orders} products={links.products} />
       <div><label className={labelCls}>What was said / agreed</label><textarea rows={3} className={inputCls} value={f.body} onChange={e => setF({ ...f, body: e.target.value })} /></div>
       <AttachPicker value={f.attachments} onChange={a => setF({ ...f, attachments: a })} disabled={busy} />
       <div className="flex flex-wrap gap-4 text-sm">
@@ -81,6 +95,17 @@ function CaseCard({ c, onChanged, showClient }) {
   const st = CASE_STATUS[c.status];
   const msgs = (c.client_case_messages || []).slice().sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   const wait = waitLabel(c.created_at, c.first_reply_at);
+  const [edit, setEdit] = useState(null);
+  const [links, setLinks] = useState({ orders: [], products: [] });
+  const startEdit = async () => {
+    setEdit({ subject: c.subject, track_id: c.track_id || "", product_name: c.product_name || "", product_ref: c.product_ref || "" });
+    setLinks(await loadLinks(c.client_id));
+  };
+  const saveEdit = async () => {
+    if (!edit.subject.trim()) return;
+    await patch({ subject: edit.subject.trim(), track_id: edit.track_id || null, product_name: edit.product_name?.trim() || null, product_ref: edit.product_ref?.trim() || null });
+    setEdit(null);
+  };
 
   const patch = async (p) => { const { error } = await supabase.from("client_cases").update(p).eq("id", c.id); if (error) alert(error.message); else onChanged(); };
 
@@ -109,9 +134,12 @@ function CaseCard({ c, onChanged, showClient }) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-darkblack-700 dark:text-white truncate">{c.subject}</p>
           <p className="text-xs text-bgray-500 truncate">
-            {c.case_number}{showClient ? ` · ${c.clients?.company_name}` : ""} · {c.tracks?.name || "No order"} · {CHANNEL[c.channel]} · {c.created_by_type === "staff" ? `logged by ${c.created_by_name}` : c.created_by_name} · {fmtDateTime(c.last_message_at)}
+            {c.case_number}{showClient ? ` · ${c.clients?.company_name}` : ""} · {CHANNEL[c.channel]} · {c.created_by_type === "staff" ? `logged by ${c.created_by_name}` : `asked by ${c.created_by_name}`} on {fmtDateTime(c.created_at)}
             {!c.visible_to_client && " · internal"}
           </p>
+          {(c.tracks?.name || c.product_name) && (
+            <p className="text-xs text-bgray-500 truncate">{[c.tracks?.name && `Order: ${c.tracks.name}`, c.product_name && `Product: ${c.product_name}${c.product_ref ? ` (${c.product_ref})` : ""}`].filter(Boolean).join(" · ")}</p>
+          )}
         </div>
         {c.approval && <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${APPROVAL[c.approval].cls}`}>{APPROVAL[c.approval].label}</span>}
         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${st.cls}`}>{st.short}</span>
@@ -130,6 +158,18 @@ function CaseCard({ c, onChanged, showClient }) {
               <button onClick={async () => { if (window.confirm(`Delete ${c.case_number} and its messages?`)) { await supabase.from("client_cases").delete().eq("id", c.id); onChanged(); } }} className="px-2.5 py-1 rounded-lg bg-red-50 text-red-600 border border-red-200">Delete</button>
             </span>
           </div>
+          {edit ? (
+            <div className="border border-bgray-200 rounded-xl p-3 bg-bgray-50/60 space-y-3">
+              <div><label className={labelCls}>Subject</label><input className={inputCls} value={edit.subject} onChange={e => setEdit({ ...edit, subject: e.target.value })} /></div>
+              <CaseLinkFields value={edit} onChange={v => setEdit({ ...edit, ...v })} orders={links.orders} products={links.products} />
+              <div className="flex gap-2">
+                <button onClick={saveEdit} className="px-4 py-1.5 bg-primary text-white text-sm font-semibold rounded-lg">Save</button>
+                <button onClick={() => setEdit(null)} className="px-3 py-1.5 text-sm rounded-lg border border-bgray-300">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={startEdit} className="text-xs font-medium text-primary hover:underline">✏️ Edit subject, order or product</button>
+          )}
           <CaseThread staff messages={msgs} approval={c.approval} closed={c.status === "closed"} onSend={send} />
         </div>
       )}
@@ -163,7 +203,10 @@ export default function CasesBoard({ clientId = null }) {
   return (
     <div className={clientId ? "p-6 space-y-4" : "space-y-4"}>
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <p className="text-sm text-bgray-500">{waiting ? <b className="text-red-600">{waiting} waiting for our reply</b> : "Nothing waiting for a reply."} Every question, comment and interaction stays in the client's history.</p>
+        <div>
+          {clientId && <h3 className="text-base font-bold text-darkblack-700 dark:text-white">Consultas y preguntas del cliente</h3>}
+          <p className="text-sm text-bgray-500">{waiting ? <b className="text-red-600">{waiting} waiting for our reply</b> : "Nothing waiting for a reply."} Every question, comment and interaction stays in the client's history, with date and author.</p>
+        </div>
         {!adding && <button onClick={() => setAdding(true)} className="px-4 py-2 bg-primary text-white text-sm font-semibold rounded-lg">+ Log interaction</button>}
       </div>
       {error && <div className="px-3 py-2 rounded-lg text-sm bg-red-50 text-red-600 border border-red-200">{error}</div>}

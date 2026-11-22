@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
+import QuickComment from "../components/QuickComment";
 
 function StatCard({ label, value, icon, color, to }) {
   const content = (
@@ -88,6 +89,8 @@ export default function DashboardPage() {
           Aquí tienes un resumen de tus operaciones activas
         </p>
       </div>
+
+      {can("consultas") && <QuickComment />}
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
