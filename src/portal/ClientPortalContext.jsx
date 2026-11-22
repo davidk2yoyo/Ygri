@@ -66,7 +66,8 @@ export function ClientPortalProvider({ children }) {
     setMe(null);
   };
 
-  const can = useCallback((key) => !!me?.permissions?.[key], [me]);
+  // admin = everything, even for modules added after the user's permissions were last computed
+  const can = useCallback((key) => me?.role === "admin" || !!me?.permissions?.[key], [me]);
 
   return (
     <ClientPortalContext.Provider value={{ session, loading, login, logout, me, can }}>
