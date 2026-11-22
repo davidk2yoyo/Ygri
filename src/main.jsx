@@ -26,6 +26,7 @@ import PackingListEditorPage from "./pages/PackingListEditorPage";
 import PurchaseOrdersPage from "./pages/PurchaseOrdersPage";
 import ClientOrdersPage from "./pages/ClientOrdersPage";
 import ClientDocumentsPage from "./pages/ClientDocumentsPage";
+import WarrantiesPage from "./pages/WarrantiesPage";
 import SubirPedidoPage from "./portal/sections/SubirPedidoPage";
 import PedidoDetailPage from "./portal/sections/PedidoDetailPage";
 import PurchaseOrderNewPage from "./pages/PurchaseOrderNewPage";
@@ -43,6 +44,7 @@ import ClientLoginPage from "./portal/ClientLoginPage";
 import ClientLayout from "./portal/ClientLayout";
 import PortalDashboardPage from "./portal/sections/DashboardPage";
 import MisOrdenesPage from "./portal/sections/MisOrdenesPage";
+import GarantiasPage from "./portal/sections/GarantiasPage";
 import MisEnviosPage from "./portal/sections/MisEnviosPage";
 import AsistenteImportacionPage from "./portal/sections/AsistenteImportacionPage";
 import ConsultarCotizacionesPage from "./portal/sections/ConsultarCotizacionesPage";
@@ -86,6 +88,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="/quotations/:quotationId/packing-list" element={<PackingListEditorPage />} />
           <Route path="/client-orders" element={<ClientOrdersPage />} />
           <Route path="/client-documents" element={<ClientDocumentsPage />} />
+          <Route path="/warranties" element={<WarrantiesPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="/purchase-orders/new" element={<PurchaseOrderNewPage />} />
           <Route path="/purchase-orders/:id" element={<PurchaseOrderDetailPage />} />
@@ -126,6 +129,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="pedidos/:id" element={<PedidoDetailPage />} />
           <Route path="documentos" element={<DocumentosPage />} />
           <Route path="reportes"  element={<MisReportesPage />} />
+          <Route path="garantias" element={<GarantiasPage />} />
           <Route path="asistente" element={<AsistenteImportacionPage />} />
           <Route path="cotizaciones-ia" element={<ConsultarCotizacionesPage />} />
         </Route>

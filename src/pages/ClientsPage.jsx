@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
 import ClientDocumentsTab from "../components/ClientDocumentsTab";
 import ClientQuotationsAITab from "../components/ClientQuotationsAITab";
+import WarrantyRulesPanel from "../components/warranty/WarrantyRulesPanel";
 import PortalUsersPanel from "../components/PortalUsersPanel";
 import AIClientScanner from "../components/AIClientScanner";
 import CountrySelect from "../components/CountrySelect";
@@ -224,6 +225,18 @@ function ClientDrawer({ client, onClose, onSaved }) {
           )}
           {!isNew && (
             <button
+              onClick={() => setActiveTab("warranty")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "warranty"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Warranties
+            </button>
+          )}
+          {!isNew && (
+            <button
               onClick={() => setActiveTab("quotations-ai")}
               className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
                 activeTab === "quotations-ai"
@@ -323,6 +336,8 @@ function ClientDrawer({ client, onClose, onSaved }) {
             </div>
           ) : activeTab === "portal" ? (
             <PortalUsersPanel client={client} />
+          ) : activeTab === "warranty" ? (
+            <WarrantyRulesPanel client={client} />
           ) : activeTab === "quotations-ai" ? (
             <ClientQuotationsAITab clientId={client.id} />
           ) : (
