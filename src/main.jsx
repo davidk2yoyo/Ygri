@@ -47,6 +47,7 @@ import PortalDashboardPage from "./portal/sections/DashboardPage";
 import MisOrdenesPage from "./portal/sections/MisOrdenesPage";
 import GarantiasPage from "./portal/sections/GarantiasPage";
 import ConsultasPage from "./portal/sections/ConsultasPage";
+import ProveedoresPage from "./portal/sections/ProveedoresPage";
 import MisEnviosPage from "./portal/sections/MisEnviosPage";
 import AsistenteImportacionPage from "./portal/sections/AsistenteImportacionPage";
 import ConsultarCotizacionesPage from "./portal/sections/ConsultarCotizacionesPage";
@@ -134,6 +135,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           <Route path="reportes"  element={<MisReportesPage />} />
           <Route path="garantias" element={<GarantiasPage />} />
           <Route path="consultas" element={<ConsultasPage />} />
+          <Route path="proveedores" element={<ProveedoresPage />} />
           <Route path="asistente" element={<AsistenteImportacionPage />} />
           <Route path="cotizaciones-ia" element={<ConsultarCotizacionesPage />} />
         </Route>

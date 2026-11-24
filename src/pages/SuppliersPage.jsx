@@ -4,6 +4,7 @@ import { supabase } from "../supabaseClient";
 import SupplierDocumentsTab from "../components/SupplierDocumentsTab";
 import SupplierProductsTab from "../components/SupplierProductsTab";
 import SupplierPriceTiersTab from "../components/SupplierPriceTiersTab";
+import SupplierProfileTab from "../components/SupplierProfileTab";
 import AIClientScanner from "../components/AIClientScanner";
 import CountrySelect from "../components/CountrySelect";
 
@@ -186,6 +187,18 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
               Volume Pricing
             </button>
           )}
+          {!isNew && (
+            <button
+              onClick={() => setActiveTab("profile")}
+              className={`px-4 py-3 text-sm font-medium border-b-2 transition ${
+                activeTab === "profile"
+                  ? "border-primary text-primary"
+                  : "border-transparent text-bgray-500 dark:text-bgray-400 hover:text-bgray-700 dark:hover:text-bgray-300"
+              }`}
+            >
+              Profile (hoja de vida)
+            </button>
+          )}
         </div>
 
         {/* Content */}
@@ -261,6 +274,8 @@ function SupplierDrawer({ supplier, onClose, onSaved }) {
             <SupplierDocumentsTab supplierId={supplier.id} />
           ) : activeTab === "products" ? (
             <SupplierProductsTab supplierId={supplier.id} />
+          ) : activeTab === "profile" ? (
+            <SupplierProfileTab supplierId={supplier.id} />
           ) : (
             <SupplierPriceTiersTab supplierId={supplier.id} />
           )}

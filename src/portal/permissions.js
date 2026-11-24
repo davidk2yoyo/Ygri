@@ -11,6 +11,7 @@ export const PERMISSIONS = [
   { key: "documentos",      label: "Documentos",                hint: "Carpetas y archivos compartidos" },
   { key: "reportes",        label: "Reportes de inspección",    hint: "Informes de inspección" },
   { key: "consultas",       label: "Consultas",                 hint: "Preguntas técnicas, fichas técnicas, aprobación de diseños y comentarios" },
+  { key: "proveedores",     label: "Proveedores",               hint: "Hoja de vida de los proveedores que Ygri decida mostrarte" },
   { key: "garantias",       label: "Garantías",                 hint: "Reclamar productos con problemas y ver su estado" },
   { key: "asistente",       label: "Asistente de Importación",  hint: "Calculadora de costos de importación" },
   { key: "cotizaciones_ia", label: "Consultar Cotizaciones",    hint: "Asistente de IA (requiere ver precios)" },
