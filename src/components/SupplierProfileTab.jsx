@@ -26,10 +26,19 @@ function SectionEditor({ supplierId, def, row, onSaved }) {
     setMsg("Saved"); onSaved();
   }
 
+  const visible = !!row?.visible;
+  async function setVisible(v) {
+    setMsg("");
+    const { error } = await supabase.from("supplier_profile_sections").upsert({
+      supplier_id: supplierId, section: def.key, body: body.trim() || null, data, files, visible: v, updated_at: new Date().toISOString(),
+    });
+    if (error) setMsg(error.message); else onSaved();
+  }
+
   const filled = sectionFilled(row);
   const overall = def.key === "calificacion" ? overallRating(data) : null;
   return (
-    <div className="border border-bgray-200 dark:border-darkblack-400 rounded-xl bg-white dark:bg-darkblack-600 overflow-hidden">
+    <div className={`border rounded-xl bg-white dark:bg-darkblack-600 overflow-hidden ${visible ? "border-green-300" : "border-bgray-200 dark:border-darkblack-400"}`}>
       <button onClick={() => setOpen(!open)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-bgray-50 dark:hover:bg-darkblack-500">
         <span className="text-lg">{def.icon}</span>
         <span className="flex-1 text-sm font-semibold text-darkblack-700 dark:text-white">{def.label}</span>
@@ -37,6 +46,11 @@ function SectionEditor({ supplierId, def, row, onSaved }) {
         <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${filled ? "bg-green-100 text-green-700" : "bg-bgray-100 text-bgray-500"}`}>{filled ? "Filled" : "Empty"}</span>
         <span className="text-bgray-400">{open ? "▾" : "▸"}</span>
       </button>
+      <label className="flex items-center gap-2 px-4 py-2 text-xs border-t border-bgray-100 dark:border-darkblack-400 cursor-pointer select-none bg-bgray-50/60 dark:bg-darkblack-500">
+        <input type="checkbox" checked={visible} onChange={e => setVisible(e.target.checked)} />
+        <span className={visible ? "font-semibold text-green-700" : "text-bgray-500"}>{visible ? "👁 Visible to this supplier's clients" : "Hidden from clients"}</span>
+        {def.key === "lista_precios" && <span className="text-bgray-400">· only users who can see prices</span>}
+      </label>
       {open && (
         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-bgray-100 dark:border-darkblack-400">
           <p className="text-xs text-bgray-500">{def.hint}</p>
@@ -110,8 +124,8 @@ function Sharing({ supplierId, rows }) {
   return (
     <div className="space-y-3">
       <div>
-        <h4 className="text-sm font-bold text-darkblack-700 dark:text-white">Visible to clients</h4>
-        <p className="text-xs text-bgray-500">Choose which sections each client sees in their portal (Proveedores). A client sees nothing until you tick a section. “Lista de precios” is only shown to portal users who can see prices.</p>
+        <h4 className="text-sm font-bold text-darkblack-700 dark:text-white">Also show to a specific client (optional)</h4>
+        <p className="text-xs text-bgray-500">For a client that has not ordered from this supplier yet (so it is not covered by the switches above), or to show it extra sections. “Lista de precios” is only shown to portal users who can see prices.</p>
       </div>
       {err && <div className="px-3 py-2 rounded-lg text-sm bg-red-50 text-red-600 border border-red-200">{err}</div>}
       {shares.map(s => (
@@ -148,6 +162,17 @@ function Sharing({ supplierId, rows }) {
 export default function SupplierProfileTab({ supplierId }) {
   const [rows, setRows] = useState(null);
   const [error, setError] = useState("");
+  const [audience, setAudience] = useState(null);
+  useEffect(() => {
+    (async () => {
+      const { data: ids, error: e } = await supabase.rpc("supplier_client_ids", { p_supplier_id: supplierId });
+      if (e) { setAudience(null); return; }
+      const list = [...new Set((ids || []).map(r => r.client_id))];
+      if (!list.length) { setAudience([]); return; }
+      const { data: cl } = await supabase.from("clients").select("company_name").in("id", list).order("company_name");
+      setAudience((cl || []).map(c => c.company_name));
+    })();
+  }, [supplierId]);
   const load = useCallback(async () => {
     const { data, error: e } = await supabase.from("supplier_profile_sections").select("*").eq("supplier_id", supplierId);
     if (e) { setError(e.message.includes("does not exist") ? "Apply the migration 2026-11-25_supabase-supplier-profiles.sql in Supabase first." : e.message); setRows([]); return; }
@@ -162,7 +187,14 @@ export default function SupplierProfileTab({ supplierId }) {
       <div className="space-y-2.5">
         <div>
           <h4 className="text-sm font-bold text-darkblack-700 dark:text-white">Supplier profile (hoja de vida)</h4>
-          <p className="text-xs text-bgray-500">Fill in what you want to be able to show. Nothing is visible to a client until you share it below.</p>
+          <p className="text-xs text-bgray-500">Fill in the data, then tick “Visible” on each section you want clients to see. Everything stays hidden until you tick it.</p>
+          {audience && (
+            <p className="text-xs mt-1.5 text-bgray-600 dark:text-bgray-300">
+              Visible sections are shown to the clients that work with this supplier: {audience.length
+                ? audience.map(n => <span key={n} className="inline-block ml-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">{n}</span>)
+                : <b>none yet (no order or purchase order with this supplier)</b>}
+            </p>
+          )}
         </div>
         {PROFILE_SECTIONS.map(d => <SectionEditor key={d.key} supplierId={supplierId} def={d} row={rows.find(r => r.section === d.key)} onSaved={load} />)}
       </div>
