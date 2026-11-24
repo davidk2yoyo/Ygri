@@ -1,11 +1,61 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { AttachPicker, Attachments } from "./cases/CaseThread";
-import { PROFILE_SECTIONS, RATING_CRITERIA, INVOICING, overallRating, stars, sectionFilled } from "../lib/supplierProfile";
+import { PROFILE_SECTIONS, SECTION_FIELDS, RATING_CRITERIA, overallRating, stars, sectionFilled } from "../lib/supplierProfile";
 
 // Staff: a supplier's profile ("hoja de vida") and which sections each client may see.
 const inputCls = "w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400";
 const labelCls = "block text-[11px] font-semibold text-bgray-500 mb-1 uppercase tracking-wide";
+
+function FieldInput({ f, data, setData }) {
+  const v = data[f.key];
+  const set = (val) => setData({ ...data, [f.key]: val });
+  const wrap = (child, span) => <div className={span || (f.wide || f.type === "textarea" ? "sm:col-span-2 lg:col-span-3" : "")}><label className={labelCls}>{f.label}</label>{child}</div>;
+  if (f.type === "stars") return (
+    <>{RATING_CRITERIA.map(c => (
+      <div key={c.key}><label className={labelCls}>{c.label}</label>
+        <select className={inputCls} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value ? Number(e.target.value) : "" })}>
+          <option value="">—</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} {"★".repeat(n)}</option>)}
+        </select></div>
+    ))}</>
+  );
+  if (f.type === "textarea") return wrap(<textarea rows={3} className={inputCls} value={v || ""} onChange={e => set(e.target.value)} />);
+  if (f.type === "yesno") return wrap(<select className={inputCls} value={v || ""} onChange={e => set(e.target.value)}><option value="">—</option><option value="yes">Sí</option><option value="no">No</option></select>);
+  if (f.type === "select") return wrap(<select className={inputCls} value={v || ""} onChange={e => set(e.target.value)}><option value="">—</option>{f.options.map(o => <option key={o} value={o}>{f.optionLabels?.[o] || o}</option>)}</select>);
+  if (f.type === "checks") {
+    const cur = Array.isArray(v) ? v : [];
+    return wrap(
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {f.options.map(o => (
+          <label key={o} className="flex items-center gap-1.5 text-sm text-darkblack-700 dark:text-white">
+            <input type="checkbox" checked={cur.includes(o)} onChange={e => set(e.target.checked ? [...cur, o] : cur.filter(x => x !== o))} />{o}
+          </label>
+        ))}
+      </div>, "sm:col-span-2 lg:col-span-3");
+  }
+  if (f.type === "table") {
+    const rowsV = Array.isArray(v) ? v : [];
+    const upd = (i, k, val) => set(rowsV.map((r, n) => n === i ? { ...r, [k]: val } : r));
+    return wrap(
+      <div className="space-y-1.5">
+        {rowsV.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="text-left text-bgray-500">{f.columns.map(c => <th key={c.key} className="px-1 py-1 font-semibold">{c.label}</th>)}<th /></tr></thead>
+              <tbody>{rowsV.map((r, i) => (
+                <tr key={i}>
+                  {f.columns.map(c => <td key={c.key} className="px-1 py-0.5"><input type={c.type === "date" ? "date" : "text"} className={`${inputCls} !py-1`} value={r[c.key] || ""} onChange={e => upd(i, c.key, e.target.value)} /></td>)}
+                  <td className="px-1"><button type="button" onClick={() => set(rowsV.filter((_, n) => n !== i))} className="text-red-500 hover:text-red-700" title="Remove row">✕</button></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+        )}
+        <button type="button" onClick={() => set([...rowsV, {}])} className="text-xs font-medium text-primary hover:underline">+ Add row</button>
+      </div>, "sm:col-span-2 lg:col-span-3");
+  }
+  return wrap(<input type={f.type === "number" ? "number" : f.type === "date" ? "date" : "text"} className={inputCls} value={v ?? ""} onChange={e => set(e.target.value)} />);
+}
 
 function SectionEditor({ supplierId, def, row, onSaved }) {
   const [open, setOpen] = useState(false);
@@ -54,24 +104,16 @@ function SectionEditor({ supplierId, def, row, onSaved }) {
       {open && (
         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-bgray-100 dark:border-darkblack-400">
           <p className="text-xs text-bgray-500">{def.hint}</p>
-          {def.key === "calificacion" && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {RATING_CRITERIA.map(c => (
-                <div key={c.key}><label className={labelCls}>{c.label}</label>
-                  <select className={inputCls} value={data[c.key] || ""} onChange={e => setData({ ...data, [c.key]: e.target.value ? Number(e.target.value) : "" })}>
-                    <option value="">—</option>{[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} {"★".repeat(n)}</option>)}
-                  </select></div>
-              ))}
-              {overall != null && <p className="col-span-2 md:col-span-4 text-sm text-amber-600">Overall: <b>{overall.toFixed(1)}</b> / 5 {stars(overall)}</p>}
+          {(SECTION_FIELDS[def.key] || []).map(g => (
+            <div key={g.title} className="rounded-lg border border-bgray-100 dark:border-darkblack-400 p-3">
+              <p className="text-xs font-bold text-darkblack-700 dark:text-white mb-2">{g.title}</p>
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {g.fields.map(f => <FieldInput key={f.key} f={f} data={data} setData={setData} />)}
+              </div>
             </div>
-          )}
-          {def.key === "factura" && (
-            <div className="max-w-sm"><label className={labelCls}>Invoicing</label>
-              <select className={inputCls} value={data.invoicing || ""} onChange={e => setData({ ...data, invoicing: e.target.value })}>
-                <option value="">Not specified</option>{Object.entries(INVOICING).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-              </select></div>
-          )}
-          <div><label className={labelCls}>Details</label><textarea rows={5} className={inputCls} value={body} onChange={e => setBody(e.target.value)} /></div>
+          ))}
+          {overall != null && <p className="text-sm text-amber-600">Overall: <b>{overall.toFixed(1)}</b> / 5 {stars(overall)}</p>}
+          <div><label className={labelCls}>Additional notes (shown to the client)</label><textarea rows={4} className={inputCls} value={body} onChange={e => setBody(e.target.value)} /></div>
           <div>
             <label className={labelCls}>Files (certificates, photos, price lists…)</label>
             <Attachments items={files} />

@@ -2,28 +2,15 @@ import React, { useEffect, useState } from "react";
 import { supabase } from "../../supabaseClient";
 import { useClientPortal } from "../ClientPortalContext";
 import { Attachments } from "../../components/cases/CaseThread";
-import { PROFILE_SECTIONS, SECTION_BY_KEY, RATING_CRITERIA, INVOICING, overallRating, stars } from "../../lib/supplierProfile";
+import SupplierProfileView from "../../components/SupplierProfileView";
+import { PROFILE_SECTIONS, SECTION_BY_KEY, overallRating, stars } from "../../lib/supplierProfile";
 
 function Section({ def, row }) {
-  const data = row.data || {};
-  const overall = def.key === "calificacion" ? overallRating(data) : null;
   return (
     <div className="border border-gray-200 rounded-xl p-4 bg-white">
-      <h3 className="text-sm font-bold text-gray-900 mb-2">{def.icon} {def.label}</h3>
-      {overall != null && (
-        <div className="mb-3">
-          <p className="text-lg text-amber-500">{stars(overall)} <span className="text-sm text-gray-700 font-semibold">{overall.toFixed(1)} / 5</span></p>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-1 mt-2 max-w-md">
-            {RATING_CRITERIA.filter(c => data[c.key]).map(c => (
-              <p key={c.key} className="text-xs text-gray-600 flex justify-between"><span>{c.label}</span><span className="text-amber-500">{"★".repeat(data[c.key])}{"☆".repeat(5 - data[c.key])}</span></p>
-            ))}
-          </div>
-        </div>
-      )}
-      {def.key === "factura" && data.invoicing && (
-        <p className="inline-block text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 mb-2">{INVOICING[data.invoicing]}</p>
-      )}
-      {row.body && <p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{row.body}</p>}
+      <h3 className="text-sm font-bold text-gray-900 mb-3">{def.icon} {def.label}</h3>
+      <SupplierProfileView sectionKey={def.key} data={row.data} />
+      {row.body && <div className="mt-4"><p className="text-xs text-gray-500">Notas</p><p className="text-sm text-gray-700 whitespace-pre-wrap break-words">{row.body}</p></div>}
       <Attachments items={row.files || []} />
     </div>
   );
