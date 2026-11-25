@@ -79,6 +79,7 @@ function SectionEditor({ supplierId, def, row, onSaved }) {
   const visible = !!row?.visible;
   async function setVisible(v) {
     setMsg("");
+    if (v && !sectionFilled({ body: body.trim(), data, files }) && !sectionFilled(row)) { setMsg("This section is empty — fill it in and press “Save section” first."); return; }
     const { error } = await supabase.from("supplier_profile_sections").upsert({
       supplier_id: supplierId, section: def.key, body: body.trim() || null, data, files, visible: v, updated_at: new Date().toISOString(),
     });
@@ -101,6 +102,7 @@ function SectionEditor({ supplierId, def, row, onSaved }) {
         <span className={visible ? "font-semibold text-green-700" : "text-bgray-500"}>{visible ? "👁 Visible to this supplier's clients" : "Hidden from clients"}</span>
         {def.key === "lista_precios" && <span className="text-bgray-400">· only users who can see prices</span>}
       </label>
+      {msg && msg !== "Saved" && !open && <p className="px-4 py-2 text-xs text-red-600 bg-red-50 border-t border-red-100">{msg}</p>}
       {open && (
         <div className="px-4 pb-4 pt-1 space-y-3 border-t border-bgray-100 dark:border-darkblack-400">
           <p className="text-xs text-bgray-500">{def.hint}</p>
