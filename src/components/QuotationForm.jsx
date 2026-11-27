@@ -72,6 +72,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showAIImporter, setShowAIImporter] = useState(false);
   const [showQuoteImporter, setShowQuoteImporter] = useState(false);
   const [showSplit, setShowSplit] = useState(false);
+  const [togglingVisible, setTogglingVisible] = useState(false);
   const [splitFromNumber, setSplitFromNumber] = useState("");
   const [savedQuotation, setSavedQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -629,6 +630,27 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   };
 
   // ---------- Save quotation ----------
+  // Publish / hide this document for the client portal (the document nobody could publish before: split ones start hidden).
+  const toggleClientVisibility = async () => {
+    if (!savedQuotation) return;
+    const next = savedQuotation.show_to_client === false;   // currently hidden -> publish
+    if (next && !window.confirm(`Publish ${quoteNumber} to the client? They will see it, with its total, payments and balance, in their portal.`)) return;
+    setTogglingVisible(true);
+    try {
+      const { error: e } = await supabase.from("quotations").update({ show_to_client: next }).eq("id", savedQuotation.id);
+      if (e) throw e;
+      setSavedQuotation(prev => ({ ...prev, show_to_client: next }));
+      onSaved?.(savedQuotation.total_amount, currency);
+      if (next && trackId) {
+        const { data: t } = await supabase.from("tracks").select("show_to_client").eq("id", trackId).maybeSingle();
+        if (t && t.show_to_client === false) sileo.warning({ title: "The project itself is hidden from the client", description: "They won't see this document until you show the project too." });
+        else sileo.success({ title: `${quoteNumber} is now visible to the client` });
+      } else sileo.success({ title: `${quoteNumber} hidden from the client` });
+    } catch (e) {
+      sileo.error({ title: "Could not change visibility", description: e.message });
+    } finally { setTogglingVisible(false); }
+  };
+
   const handleSave = async () => {
     if (items.length === 0) { setError("Add at least one item."); return; }
     setBusy(true);
@@ -913,6 +935,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-xs text-bgray-500">{projectName} · {clientName}</p>
             {splitFromNumber && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">Split from {splitFromNumber}</span>}
+            {savedQuotation && (
+              <button onClick={toggleClientVisibility} disabled={togglingVisible}
+                title={savedQuotation.show_to_client === false ? "Hidden from the client: click to publish it to their portal" : "Visible to the client: click to hide it"}
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border transition disabled:opacity-60 ${savedQuotation.show_to_client === false
+                  ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100" : "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"}`}>
+                {savedQuotation.show_to_client === false ? "Hidden from client · click to publish" : "Visible to client"}
+              </button>
+            )}
             <input
               type="text"
               value={purpose}

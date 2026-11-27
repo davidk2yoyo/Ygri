@@ -467,13 +467,13 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     if (!trackId) return;
     let { data, error: qErr } = await supabase
       .from("quotations")
-      .select("id, quote_number, document_type, total_amount, currency, purpose, created_at, split_from_id")
+      .select("id, quote_number, document_type, total_amount, currency, purpose, created_at, show_to_client, split_from_id")
       .eq("track_id", trackId)
       .order("created_at", { ascending: true });
     if (qErr) {
       // migration 2026-11-28 (split link) not applied yet
       ({ data } = await supabase.from("quotations")
-        .select("id, quote_number, document_type, total_amount, currency, purpose, created_at")
+        .select("id, quote_number, document_type, total_amount, currency, purpose, created_at, show_to_client")
         .eq("track_id", trackId).order("created_at", { ascending: true }));
     }
     const list = data || [];
@@ -801,6 +801,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                         }`} />
                         <span>{docLabel} {q.quote_number}</span>
                         {q.purpose && <span className="text-bgray-400 dark:text-bgray-500">· {q.purpose}</span>}
+                        {q.show_to_client === false && <span className="text-[10px] font-semibold text-amber-600">· hidden</span>}
                       </button>
                     );
                   })}
