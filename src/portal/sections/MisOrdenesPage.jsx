@@ -6,6 +6,7 @@ import { SupplierProductionCard } from "../../components/ProductionBoard";
 import PackingListPDF from "../../components/PackingListPDF";
 import { exportPackingListExcel } from "../../lib/packingListExcel";
 import { exportQuotationExcel, fetchPortalQuotation, readyNumbersFromPOs } from "../../lib/quotationExcel";
+import { exportCustomsInvoiceExcel } from "../../lib/customsInvoiceExcel";
 
 // track_stages.status is one of these four — NOT "pending" (that key never matched,
 // so a not-yet-started stage leaked the raw DB string straight into the UI).
@@ -100,6 +101,21 @@ function OrderCard({ order, profile }) {
     } catch (e) { window.alert("No pudimos generar el Excel: " + (e.message || e)); }
     finally { setQuoteBusy(null); }
   };
+  // Customs commercial invoice: no photos, supplier / refs / colour / brand / marking / packing per line.
+  // Supplier and the other details come from the client's own order lines (never our internal supplier names).
+  const downloadCustoms = async (q) => {
+    setQuoteBusy(`${q.id}:customs`);
+    try {
+      const detail = await fetchPortalQuotation(supabase, session.session_id, q.id);
+      const items = detail.items.map(it => ({ ...it, client_order_line_id: it.id }));
+      const orderLines = Object.fromEntries(detail.items.filter(it => it.order_line).map(it => [it.id, it.order_line]));
+      await exportCustomsInvoiceExcel({
+        quotation: detail.quotation, items, supplierNames: {}, orderLines,
+        clientName: session.client_name, clientDetails: profile, projectName: order.track_name,
+      });
+    } catch (e) { window.alert("No pudimos generar la factura comercial: " + (e.message || e)); }
+    finally { setQuoteBusy(null); }
+  };
   const tabs = [
     ["progress", "Progreso"],
     ["production", `Producción (${order.purchase_orders.length})`],
@@ -186,6 +202,13 @@ function OrderCard({ order, profile }) {
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-60">
                           {quoteBusy === `${q.id}:all` ? "Generando…" : "⬇ Excel completo"}
                         </button>
+                        {(q.document_type === "proforma" || q.document_type === "invoice") && (
+                          <button onClick={() => downloadCustoms(q)} disabled={!!quoteBusy}
+                            title="Excel sin fotos para aduana: proveedor, referencias, descripción, color, marca, marcación, empaque, cantidad, precio y total"
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-60">
+                            {quoteBusy === `${q.id}:customs` ? "Generando…" : "⬇ Factura comercial (aduana)"}
+                          </button>
+                        )}
                         {readyValue > 0 && (
                           <button onClick={() => downloadQuoteExcel(q, true)} disabled={!!quoteBusy}
                             title="Solo los productos que ya están listos en producción, con su balance"
