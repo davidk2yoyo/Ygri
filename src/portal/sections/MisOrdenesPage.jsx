@@ -225,7 +225,7 @@ function OrderCard({ order, profile }) {
                         </div>
                         <div>
                           <p className="text-sm font-bold text-gray-900">{pl.pl_number}</p>
-                          <p className="text-xs text-gray-500">Cotización {pl.quote_number}</p>
+                          <p className="text-xs text-gray-500">{DOC_LABEL[(order.quotations.find(x => x.quote_number === pl.quote_number) || {}).document_type] || "Cotización"} {pl.quote_number}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

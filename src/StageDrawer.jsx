@@ -811,6 +811,7 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                   clientName={clientName}
                   projectName={projectName}
                   quotationId={selectedQuotationId === "unset" ? undefined : selectedQuotationId}
+                  onSplit={(q) => { loadQuotations(); setSelectedQuotationId(q.id); }}
                   onSaved={(amount, currency) => {
                     setQuotationAmount(amount);
                     setQuotationCurrency(currency);

@@ -31,6 +31,8 @@ function systemEventText(metadata = {}) {
       return `📝 ${metadata.quote_number || "Quotation"} created${metadata.currency && metadata.total != null ? ` — ${metadata.currency} ${Number(metadata.total).toLocaleString("en-US", { minimumFractionDigits: 2 })}` : ""}`;
     case "quotation_promoted":
       return `⬆️ ${metadata.quote_number || "Document"} promoted: ${metadata.from || "—"} → ${metadata.to || "—"}`;
+    case "quotation_split":
+      return `✂️ ${metadata.from || "Document"} split: ${metadata.items || 0} line(s) moved to ${metadata.quote_number || "a new document"}`;
     case "ai_task_created":
       return `🤖 HerubaAI created task: ${metadata.title || "—"}${metadata.due_date ? ` · due ${metadata.due_date}` : ""}`;
     case "ai_project_created":

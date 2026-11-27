@@ -7,6 +7,7 @@ import { resolveOrCreateCatalogItem } from "../lib/catalogItems";
 import QuotationPDF from "./QuotationPDF";
 import AIQuotationImporter from "./AIQuotationImporter";
 import QuotationItemImporter from "./QuotationItemImporter";
+import SplitInvoiceModal from "./SplitInvoiceModal";
 import QuotationPaymentsSection from "./QuotationPaymentsSection";
 import AIClientScanner from "./AIClientScanner";
 import ConversationTab from "./conversation/ConversationTab";
@@ -41,7 +42,7 @@ const emptyItem = () => ({
   saveToCatalog: true,
 });
 
-export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved, quotationId }) {
+export default function QuotationForm({ trackId, clientName, projectName, onClose, onSaved, onSplit, quotationId }) {
   const navigate = useNavigate();
   const [documentType, setDocumentType] = useState("quotation");
   const [type, setType] = useState("product");
@@ -70,6 +71,8 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [showPDF, setShowPDF] = useState(false);
   const [showAIImporter, setShowAIImporter] = useState(false);
   const [showQuoteImporter, setShowQuoteImporter] = useState(false);
+  const [showSplit, setShowSplit] = useState(false);
+  const [splitFromNumber, setSplitFromNumber] = useState("");
   const [savedQuotation, setSavedQuotation] = useState(null);
   const [loading, setLoading] = useState(true);
   const [quoteNumber, setQuoteNumber] = useState("");
@@ -137,6 +140,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       if (quotData) {
         setSavedQuotation(quotData);
         setQuoteNumber(quotData.quote_number || "");
+        if (quotData.split_from_id) {
+          supabase.from("quotations").select("quote_number").eq("id", quotData.split_from_id).single().then(({ data }) => setSplitFromNumber(data?.quote_number || ""));
+        } else setSplitFromNumber("");
         setPurpose(quotData.purpose || "");
         setDocumentType(quotData.document_type || "quotation");
         setType(quotData.type || "product");
@@ -906,6 +912,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           </h3>
           <div className="flex items-center gap-2 mt-0.5">
             <p className="text-xs text-bgray-500">{projectName} · {clientName}</p>
+            {splitFromNumber && <span className="text-[11px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">Split from {splitFromNumber}</span>}
             <input
               type="text"
               value={purpose}
@@ -1204,6 +1211,18 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
               </svg>
               From Another Quote
             </button>
+            {savedQuotation && (documentType === "proforma" || documentType === "invoice") && (
+              <button
+                onClick={() => setShowSplit(true)}
+                title="Move some lines or quantities to a new invoice in this project (hidden from the client until you publish it)"
+                className="flex items-center gap-1.5 text-sm border border-bgray-200 dark:border-darkblack-400 text-bgray-600 dark:text-bgray-300 hover:border-primary hover:text-primary font-semibold rounded-lg px-4 py-2 transition"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h2m8-16h2a2 2 0 012 2v12a2 2 0 01-2 2h-2M12 3v18" />
+                </svg>
+                Split
+              </button>
+            )}
             <button
               onClick={addItem}
               className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 font-semibold transition"
@@ -2106,6 +2125,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       {savedQuotation && (documentType === "proforma" || documentType === "invoice") && (
         <QuotationPaymentsSection
           quotationId={savedQuotation.id}
+          trackId={savedQuotation.track_id || trackId}
           currency={currency}
           grandTotal={grandTotal}
           payments={payments}
@@ -2167,6 +2187,17 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           currentQuotationId={savedQuotation?.id || quotationId}
           onImport={handleQuoteImport}
           onClose={() => setShowQuoteImporter(false)}
+        />
+      )}
+
+      {showSplit && savedQuotation && (
+        <SplitInvoiceModal
+          quotationId={savedQuotation.id}
+          onClose={() => setShowSplit(false)}
+          onDone={(r) => {
+            setShowSplit(false);
+            if (onSplit) onSplit(r.created); else loadInitialData();
+          }}
         />
       )}
 
