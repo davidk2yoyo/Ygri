@@ -11,6 +11,7 @@ import SplitInvoiceModal from "./SplitInvoiceModal";
 import QuotationPaymentsSection from "./QuotationPaymentsSection";
 import AIClientScanner from "./AIClientScanner";
 import ConversationTab from "./conversation/ConversationTab";
+import CatalogPickerModal from "./CatalogPickerModal";
 
 const INCOTERMS = ["EXW", "FCA", "FAS", "FOB", "CFR", "CIF", "CPT", "CIP", "DAP", "DPU", "DDP"];
 const CURRENCIES = ["USD", "COP", "EUR", "CNY", "HKD"];
@@ -61,6 +62,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const [items, setItems] = useState([emptyItem()]);
   const [suppliers, setSuppliers] = useState([]);
   const [catalogItems, setCatalogItems] = useState([]);
+  const [catalogModalIdx, setCatalogModalIdx] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [showSupplierModal, setShowSupplierModal] = useState(false);
@@ -1417,7 +1419,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   <div className="grid grid-cols-2 gap-2">
                     <div className="relative">
                       <label className="block text-xs text-bgray-500 mb-1">Item #</label>
-                      <div className="relative">
+                      <div className="relative flex gap-1">
                         <input
                           type="text"
                           value={item.item_number}
@@ -1428,8 +1430,18 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                           onFocus={() => setShowCatalogDropdown(idx)}
                           onBlur={() => setTimeout(() => setShowCatalogDropdown(null), 150)}
                           placeholder="SKU / Ref or search..."
-                          className="w-full px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
+                          className="flex-1 min-w-0 px-3 py-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-sm bg-white dark:bg-darkblack-600 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-primary placeholder-bgray-400"
                         />
+                        <button
+                          type="button"
+                          onClick={() => setCatalogModalIdx(idx)}
+                          title="Abrir catálogo"
+                          className="shrink-0 px-2 border border-bgray-300 dark:border-darkblack-400 rounded-lg text-bgray-500 hover:text-primary hover:border-primary transition"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                          </svg>
+                        </button>
                         {showCatalogDropdown === idx && (
                           <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-darkblack-500 border border-bgray-200 dark:border-darkblack-400 rounded-xl shadow-xl max-h-48 overflow-y-auto">
                             {catalogItems
@@ -2311,6 +2323,14 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           </div>
         </div>
       )}
+
+      <CatalogPickerModal
+        open={catalogModalIdx !== null}
+        onClose={() => setCatalogModalIdx(null)}
+        catalogItems={catalogItems}
+        suppliers={suppliers}
+        onSelect={catItem => selectCatalogItem(catalogModalIdx, catItem)}
+      />
     </div>
   );
 }
