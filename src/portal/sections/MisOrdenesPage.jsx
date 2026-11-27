@@ -7,6 +7,7 @@ import PackingListPDF from "../../components/PackingListPDF";
 import { exportPackingListExcel } from "../../lib/packingListExcel";
 import { exportQuotationExcel, fetchPortalQuotation, readyNumbersFromPOs } from "../../lib/quotationExcel";
 import { exportCustomsInvoiceExcel } from "../../lib/customsInvoiceExcel";
+import { STAGE_NAME_ES } from "../lib/stageNames";
 
 // track_stages.status is one of these four — NOT "pending" (that key never matched,
 // so a not-yet-started stage leaked the raw DB string straight into the UI).
@@ -28,18 +29,8 @@ const STAGE_BADGE = {
 // constant) string-matches against these exact English names to group its
 // columns, so they can't be renamed in the database without breaking that.
 // This translates them for display here only.
-const STAGE_NAME_ES = {
-  "Lead or Inquiry": "Consulta inicial",
-  "Quotation": "Cotización",
-  "Service delivery": "Entrega del servicio",
-  "Payment": "Pago",
-  "Samples approval": "Aprobación de muestras",
-  "Deposit payment": "Pago de anticipo",
-  "Production": "Producción",
-  "Goods inspection": "Inspección de mercancía",
-  "Balance payment": "Pago final",
-  "Shipment": "Envío",
-};
+const DOC_TONE = { quotation: "bg-amber-50 text-amber-600", proforma: "bg-blue-50 text-blue-600", invoice: "bg-emerald-50 text-emerald-600" };
+const DOC_PILL = { quotation: "bg-amber-100 text-amber-700", proforma: "bg-blue-100 text-blue-700", invoice: "bg-emerald-100 text-emerald-700" };
 const DOC_LABEL = { quotation: "Cotización", proforma: "Proforma", invoice: "Factura comercial" };
 const TRACK_STATUS = {
   active: "bg-blue-100 text-blue-700", completed: "bg-green-100 text-green-700",
@@ -291,63 +282,85 @@ function OrderCard({ order, profile }) {
                   const extraPaid = Math.max(paid - depositDue, 0);
                   const readyBalance = Math.max(readyValue * (1 - depositPct) - extraPaid, 0);
                   return (
-                    <div key={q.id} className="border border-gray-100 rounded-lg overflow-hidden">
-                      <div className="flex items-center justify-between gap-3 px-4 py-3 flex-wrap">
-                        <div>
-                          <p className="text-sm font-semibold text-gray-900">{q.quote_number}
-                            <span className="ml-2 text-xs font-medium text-gray-500">{DOC_LABEL[q.document_type] || "Cotización"}</span>
-                            {q.split_from && <span className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Parte de {q.split_from}</span>}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}
-                            {depositPct > 0 && <span className="text-gray-400"> · Anticipo {q.deposit_pct}%</span>}
-                          </p>
+                    <div key={q.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+                      <div className="p-5">
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${DOC_TONE[q.document_type] || DOC_TONE.quotation}`}>
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></svg>
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-base font-bold text-slate-900">{q.quote_number}</p>
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${DOC_PILL[q.document_type] || DOC_PILL.quotation}`}>{DOC_LABEL[q.document_type] || "Cotización"}</span>
+                                {q.split_from && <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Parte de {q.split_from}</span>}
+                              </div>
+                              <p className="text-xs text-slate-500 mt-1">
+                                {[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}
+                                {depositPct > 0 && <span className="text-slate-400"> · Anticipo {q.deposit_pct}%</span>}
+                                {q.purpose && <span className="text-slate-400"> · {q.purpose}</span>}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-xl font-bold tracking-tight text-slate-900">{money(total, q.currency)}</p>
+                            <a href={`/q/${q.quote_number}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver documento →</a>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-4">
-                          <span className="text-sm font-bold text-gray-900">{money(total, q.currency)}</span>
-                          <a href={`/q/${q.quote_number}`} target="_blank" rel="noreferrer" className="text-xs font-medium text-blue-600 hover:text-blue-700">Ver</a>
+
+                        <div className="mt-4">
+                          <div className="flex items-center justify-between text-xs mb-1.5">
+                            <span className="text-slate-500">Pagado <b className="text-slate-700">{total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0}%</b></span>
+                            <span className="text-slate-400">{money(paid, q.currency)} de {money(total, q.currency)}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${total > 0 ? Math.min(100, (paid / total) * 100) : 0}%` }} />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                          <div className="rounded-xl bg-emerald-50/70 px-4 py-3">
+                            <p className="text-[11px] font-medium text-emerald-700/70">Pagado</p>
+                            <p className="text-sm font-bold text-emerald-800 mt-0.5">{money(paid, q.currency)}</p>
+                          </div>
+                          <div className="rounded-xl bg-slate-50 px-4 py-3">
+                            <p className="text-[11px] font-medium text-slate-500">Balance total</p>
+                            <p className="text-sm font-bold text-slate-900 mt-0.5">{money(balanceTotal, q.currency)}</p>
+                          </div>
+                          <div className="rounded-xl bg-amber-50/70 px-4 py-3">
+                            <p className="text-[11px] font-medium text-amber-700/80">Balance de lo ya listo en producción</p>
+                            <p className="text-sm font-bold text-amber-800 mt-0.5">{readyValue > 0 ? money(readyBalance, q.currency) : "—"}</p>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap px-4 pb-3">
+
+                      <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center gap-2 flex-wrap">
+                        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-400 mr-1">Descargar</span>
                         <button onClick={() => downloadQuoteExcel(q, false)} disabled={!!quoteBusy}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-50 text-green-700 hover:bg-green-100 transition disabled:opacity-60">
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-slate-200 text-slate-700 hover:border-emerald-300 hover:text-emerald-700 transition disabled:opacity-60">
                           {quoteBusy === `${q.id}:all` ? "Generando…" : "⬇ Excel completo"}
                         </button>
                         {(q.document_type === "proforma" || q.document_type === "invoice") && (
                           <button onClick={() => downloadCustoms(q, false)} disabled={!!quoteBusy}
                             title="Excel sin fotos para aduana: proveedor, referencias, descripción, color, marca, marcación, empaque, cantidad, precio y total"
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-60">
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-100 transition disabled:opacity-60">
                             {quoteBusy === `${q.id}:customs` ? "Generando…" : "⬇ Factura comercial (aduana)"}
                           </button>
                         )}
                         {(q.document_type === "proforma" || q.document_type === "invoice") && readyValue > 0 && (
                           <button onClick={() => downloadCustoms(q, true)} disabled={!!quoteBusy}
                             title="Factura comercial solo con los productos que ya están listos en producción"
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
                             {quoteBusy === `${q.id}:customs-ready` ? "Generando…" : "⬇ Factura comercial · lo ya listo"}
                           </button>
                         )}
                         {readyValue > 0 && (
                           <button onClick={() => downloadQuoteExcel(q, true)} disabled={!!quoteBusy}
                             title="Solo los productos que ya están listos en producción, con su balance"
-                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
                             {quoteBusy === `${q.id}:ready` ? "Generando…" : "⬇ Excel de lo ya listo"}
                           </button>
                         )}
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-gray-100 border-t border-gray-100 text-xs">
-                        <div className="bg-white px-4 py-2.5">
-                          <p className="text-gray-400">Pagado</p>
-                          <p className="font-semibold text-green-700">{money(paid, q.currency)}</p>
-                        </div>
-                        <div className="bg-white px-4 py-2.5">
-                          <p className="text-gray-400">Balance total</p>
-                          <p className="font-semibold text-gray-900">{money(balanceTotal, q.currency)}</p>
-                        </div>
-                        <div className="bg-white px-4 py-2.5 col-span-2 sm:col-span-2">
-                          <p className="text-gray-400">Balance de lo ya listo en producción</p>
-                          <p className="font-semibold text-amber-700">{readyValue > 0 ? money(readyBalance, q.currency) : "—"}</p>
-                        </div>
                       </div>
                     </div>
                   );

@@ -114,3 +114,8 @@
 .focus-primary:focus {
   @apply outline-none ring-2 ring-green-500 ring-offset-2 ring-offset-white dark:ring-offset-gray-800;
 }
+
+/* Client portal: pages fade/slide in softly */
+@keyframes portalIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.portal-main > div { animation: portalIn .28s ease both; }
+@media (prefers-reduced-motion: reduce) { .portal-main > div { animation: none; } }

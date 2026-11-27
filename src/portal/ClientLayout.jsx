@@ -130,6 +130,14 @@ const NAV = [
   },
 ];
 
+// Sidebar sections (order is fixed; items inside keep the NAV order above).
+const GROUPS = [
+  { label: "Principal", to: ["/clientes", "/clientes/ordenes", "/clientes/envios", "/clientes/pedidos"] },
+  { label: "Atención", to: ["/clientes/consultas", "/clientes/garantias", "/clientes/proveedores"] },
+  { label: "Archivo", to: ["/clientes/documentos", "/clientes/reportes"] },
+  { label: "Herramientas", to: ["/clientes/asistente", "/clientes/cotizaciones-ia"] },
+];
+
 function NavItem({ item, onClick, badge }) {
   return (
     <NavLink
@@ -137,17 +145,67 @@ function NavItem({ item, onClick, badge }) {
       end={item.end}
       onClick={onClick}
       className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+        `group relative flex items-center gap-3 pl-4 pr-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
           isActive
-            ? "bg-blue-600 text-white shadow-sm"
-            : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+            ? "bg-white/10 text-white shadow-inner shadow-white/5"
+            : "text-blue-100/70 hover:bg-white/5 hover:text-white"
         }`
       }
     >
-      {item.icon}
-      <span className="flex-1">{item.label}</span>
-      {badge > 0 && <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">{badge}</span>}
+      {({ isActive }) => (
+        <>
+          <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 rounded-r-full bg-blue-400 transition-all ${isActive ? "h-6 opacity-100" : "h-0 opacity-0"}`} />
+          <span className={`flex-shrink-0 transition-colors ${isActive ? "text-blue-300" : "text-blue-200/50 group-hover:text-blue-200"}`}>{item.icon}</span>
+          <span className="flex-1 truncate">{item.label}</span>
+          {badge > 0 && <span className="min-w-[1.25rem] h-5 px-1.5 rounded-full bg-rose-500 text-white text-[11px] font-bold flex items-center justify-center shadow-sm shadow-rose-900/40">{badge}</span>}
+        </>
+      )}
     </NavLink>
+  );
+}
+
+function SidebarContent({ nav, badges, onNavigate, userLabel, initials, subtitle, onLogout, clientName }) {
+  return (
+    <div className="flex flex-col h-full bg-gradient-to-b from-blue-950 via-[#0f1b45] to-slate-950 text-white">
+      <div className="px-5 pt-6 pb-5 border-b border-white/10">
+        <img src={interasiaLogo} alt="Interasia" className="h-10 object-contain" />
+        <p className="text-[10px] text-blue-300/80 mt-2.5 leading-tight font-semibold tracking-[0.18em] uppercase">Portal de Clientes</p>
+      </div>
+
+      <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+        {GROUPS.map(g => {
+          const items = nav.filter(n => g.to.includes(n.to));
+          if (!items.length) return null;
+          return (
+            <div key={g.label}>
+              <p className="px-4 mb-1.5 text-[10px] font-semibold tracking-[0.16em] uppercase text-blue-300/40">{g.label}</p>
+              <div className="space-y-0.5">
+                {items.map(item => <NavItem key={item.to} item={item} badge={badges[item.to] || 0} onClick={onNavigate} />)}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className="p-3 border-t border-white/10">
+        <div className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5">
+          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 shadow-md shadow-indigo-950/50">
+            {initials}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white truncate">{userLabel}</p>
+            <p className="text-[11px] text-blue-200/60 truncate">{subtitle}</p>
+          </div>
+          <button onClick={onLogout} title="Cerrar sesión"
+            className="p-2 rounded-lg text-blue-200/60 hover:bg-rose-500/20 hover:text-rose-300 transition flex-shrink-0">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -171,9 +229,13 @@ export default function ClientLayout() {
       .then(({ data, error }) => setUnreadCases(error ? 0 : (data || 0)));
   }, [session?.session_id, location.pathname]);
 
+  // close the mobile drawer when the page changes
+  useEffect(() => { setMobileOpen(false); }, [location.pathname]);
+
   // Only the modules this user may use; the page behind a hidden entry redirects home.
   const nav = NAV.filter(n => !n.perm || can(n.perm));
   const blocked = NAV.find(n => n.perm && !can(n.perm) && location.pathname.startsWith(n.to));
+  const badges = { "/clientes/pedidos": unread, "/clientes/documentos": unreadDocs, "/clientes/consultas": unreadCases };
 
   function handleLogout() {
     logout();
@@ -184,54 +246,20 @@ export default function ClientLayout() {
   const initials = userLabel
     ? userLabel.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase()
     : "?";
+  const subtitle = `${me?.name ? `${session?.client_name} · ` : ""}${ROLE_LABEL[me?.role] || "Cliente"}`;
+  const sidebarProps = { nav, badges, userLabel, initials, subtitle, onLogout: handleLogout, clientName: session?.client_name };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-slate-50 flex">
       {/* ── Sidebar desktop ── */}
-      <aside className="hidden md:flex flex-col w-64 bg-white border-r border-gray-200 min-h-screen fixed left-0 top-0 bottom-0 z-10">
-        {/* Logo */}
-        <div className="px-5 py-5 bg-blue-950 flex flex-col items-start">
-          <img src={interasiaLogo} alt="Interasia" className="h-10 object-contain" />
-          <p className="text-xs text-blue-300 mt-1.5 leading-tight font-medium tracking-wide">Portal de Clientes</p>
-        </div>
-
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {nav.map(item => (
-            <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : item.to === "/clientes/consultas" ? unreadCases : 0} />
-          ))}
-        </nav>
-
-        {/* User */}
-        <div className="px-3 py-4 border-t border-gray-100">
-          <div className="flex items-center gap-3 px-3 py-2 mb-2">
-            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold flex-shrink-0">
-              {initials}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold text-gray-900 truncate">{userLabel}</p>
-              <p className="text-xs text-gray-400 truncate">{me?.name ? `${session?.client_name} · ` : ""}{ROLE_LABEL[me?.role] || "Cliente"}</p>
-            </div>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Cerrar sesión
-          </button>
-        </div>
+      <aside className="hidden md:block w-64 fixed left-0 top-0 bottom-0 z-10 shadow-xl shadow-slate-900/10">
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* ── Mobile header ── */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-white border-b border-gray-200 flex items-center justify-between px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-2.5">
-          <img src={interasiaLogo} alt="Interasia" className="h-8 object-contain" />
-        </div>
-        <button onClick={() => setMobileOpen(v => !v)} className="p-2 rounded-xl text-gray-500 hover:bg-gray-100">
+      <div className="md:hidden fixed top-0 left-0 right-0 z-20 bg-blue-950 flex items-center justify-between px-4 py-3 shadow-md">
+        <img src={interasiaLogo} alt="Interasia" className="h-8 object-contain" />
+        <button onClick={() => setMobileOpen(true)} className="p-2 rounded-xl text-blue-100 hover:bg-white/10" aria-label="Abrir menú">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
@@ -241,33 +269,18 @@ export default function ClientLayout() {
       {/* ── Mobile drawer ── */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-30 flex">
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <div className="relative w-72 bg-white flex flex-col h-full shadow-2xl">
-            <div className="px-5 py-4 bg-blue-950">
-              <img src={interasiaLogo} alt="Interasia" className="h-9 object-contain mb-1.5" />
-              <p className="text-xs font-semibold text-blue-200">{session?.client_name}</p>
-            </div>
-            <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-              {nav.map(item => (
-                <NavItem key={item.to} item={item} badge={item.to === "/clientes/pedidos" ? unread : item.to === "/clientes/documentos" ? unreadDocs : item.to === "/clientes/consultas" ? unreadCases : 0} onClick={() => setMobileOpen(false)} />
-              ))}
-            </nav>
-            <div className="px-3 py-4 border-t border-gray-100">
-              <button onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-gray-500 hover:bg-red-50 hover:text-red-600 transition">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                </svg>
-                Cerrar sesión
-              </button>
-            </div>
+          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <div className="relative w-72 h-full shadow-2xl">
+            <SidebarContent {...sidebarProps} onNavigate={() => setMobileOpen(false)} />
+            <button onClick={() => setMobileOpen(false)} className="absolute top-4 right-3 p-1.5 rounded-lg text-blue-200/70 hover:bg-white/10 hover:text-white" aria-label="Cerrar menú">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
           </div>
         </div>
       )}
 
       {/* ── Main content ── */}
-      <main className="flex-1 md:ml-64 pt-14 md:pt-0 min-h-screen">
+      <main className="portal-main flex-1 md:ml-64 pt-14 md:pt-0 min-h-screen min-w-0 [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:tracking-tight [&_h1]:text-slate-900">
         {blocked ? <Navigate to="/clientes" replace /> : <Outlet />}
       </main>
     </div>
