@@ -256,13 +256,19 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
   const commissionAmount = totalAmount * (parseFloat(commissionPct) || 0) / 100;
   const grandTotal = totalAmount + commissionAmount;
 
+  // Each item can be in its own supplier currency with its own exchange
+  // rate (per-item supplier_exchange_rate) — the quotation-level
+  // supplierExchangeRate is only a fallback default for items that haven't
+  // set their own, not a single rate forced on every foreign-currency item.
+  const itemExchangeRate = (it) => parseFloat(it.supplier_exchange_rate) || parseFloat(supplierExchangeRate) || 0;
+
   const totalCostAmount = (() => {
     if (type !== "product") return 0;
-    const rate = parseFloat(supplierExchangeRate) || 0;
     return items.reduce((sum, it) => {
       const supplierPriceRaw = parseFloat(it.supplier_price) || 0;
       if (!supplierPriceRaw) return sum;
       const isFx = it.supplier_currency && it.supplier_currency !== currency;
+      const rate = itemExchangeRate(it);
       const supplierPriceInDocCurrency = isFx && rate > 0 ? supplierPriceRaw / rate : supplierPriceRaw;
       return sum + (supplierPriceInDocCurrency * (parseInt(it.quantity) || 1));
     }, 0);
@@ -273,19 +279,23 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
   const costBySupplier = (() => {
     if (type !== "product") return [];
-    const rate = parseFloat(supplierExchangeRate) || 0;
     const map = {};
     items.forEach(it => {
-      if (!it.supplier_id) return;
       const supplierPriceRaw = parseFloat(it.supplier_price) || 0;
       if (!supplierPriceRaw) return;
       const isFx = it.supplier_currency && it.supplier_currency !== currency;
+      const rate = itemExchangeRate(it);
       const supplierPriceInDocCurrency = isFx && rate > 0 ? supplierPriceRaw / rate : supplierPriceRaw;
       const amount = supplierPriceInDocCurrency * (parseInt(it.quantity) || 1);
-      map[it.supplier_id] = (map[it.supplier_id] || 0) + amount;
+      const key = it.supplier_id || "__none__";
+      map[key] = (map[key] || 0) + amount;
     });
     return Object.entries(map)
-      .map(([supplierId, amount]) => ({ supplierId, name: suppliers.find(s => s.id === supplierId)?.name || "Unknown supplier", amount }))
+      .map(([supplierId, amount]) => ({
+        supplierId,
+        name: supplierId === "__none__" ? "Sin proveedor" : (suppliers.find(s => s.id === supplierId)?.name || "Unknown supplier"),
+        amount,
+      }))
       .sort((a, b) => b.amount - a.amount);
   })();
   const marginColor = totalMarginPct >= 20 ? "text-green-600" : totalMarginPct >= 10 ? "text-amber-600" : "text-red-500";
@@ -516,7 +526,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
 
     // The catalog only stores number/description/price/photo. Pull supplier,
     // costs, MOQ and photo from the most recent quotation of this same item.
-    const itemSelect = "picture_url, supplier_id, supplier_price, supplier_currency, moq, price";
+    const itemSelect = "picture_url, supplier_id, supplier_price, supplier_currency, supplier_exchange_rate, moq, price";
     let { data } = await supabase
       .from("quotation_items")
       .select(itemSelect)
@@ -542,6 +552,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       supplier_id: it.supplier_id || last.supplier_id || null,
       supplier_price: it.supplier_price || (last.supplier_price?.toString() ?? ""),
       supplier_currency: it.supplier_currency || (last.supplier_currency || ""),
+      supplier_exchange_rate: it.supplier_exchange_rate || (last.supplier_exchange_rate?.toString() ?? ""),
       moq: it.moq || (last.moq?.toString() ?? ""),
       price: it.price || (last.price?.toString() ?? ""),
     } : it));
@@ -764,7 +775,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
           supplier_price: type === "product" ? (parseFloat(it.supplier_price) || null) : null,
           supplier_currency: type === "product" ? (it.supplier_currency || null) : null,
           supplier_exchange_rate: type === "product" && it.supplier_currency && it.supplier_currency !== currency
-            ? (parseFloat(supplierExchangeRate) || null)
+            ? (itemExchangeRate(it) || null)
             : null,
           moq: documentType === "quotation" ? (parseInt(it.moq) || null) : null,
           all_inclusive: !!it.all_inclusive,
@@ -1165,7 +1176,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
       {type === "product" && (
         <div className="max-w-sm">
           <label className="block text-xs font-semibold text-bgray-600 dark:text-bgray-300 mb-1.5 uppercase tracking-wide">
-            Supplier Exchange Rate
+            Default Supplier Exchange Rate
           </label>
           <div className="flex items-center gap-2">
             <span className="text-sm text-bgray-500 dark:text-bgray-400 whitespace-nowrap">1 {currency} =</span>
@@ -1181,11 +1192,9 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
             />
             <span className="text-xs text-bgray-400 dark:text-bgray-500">supplier currency units</span>
           </div>
-          {supplierExchangeRate && parseFloat(supplierExchangeRate) > 0 && (
-            <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
-              Used to convert supplier costs to {currency} for margin calculation
-            </p>
-          )}
+          <p className="text-xs text-bgray-400 dark:text-bgray-500 mt-1">
+            Used only when an item in a foreign currency doesn't have its own exchange rate set (each item's "Supplier Cost" section below has its own rate field, for quotations that mix suppliers in different currencies).
+          </p>
         </div>
       )}
 
@@ -1277,7 +1286,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                 const unit = basePrice + optExtra;
                 const sc = item.supplier_currency || "";
                 const fx = sc && sc !== currency;
-                const rate = parseFloat(supplierExchangeRate) || 0;
+                const rate = itemExchangeRate(item);
                 const costRaw = parseFloat(item.supplier_price) || 0;
                 const cost = fx && rate > 0 ? costRaw / rate : costRaw;
                 const mPct = unit > 0 && cost > 0 && (!fx || rate > 0) ? ((unit - cost) / unit) * 100 : null;
@@ -1783,7 +1792,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   {type === "product" && (() => {
                     const supplierCurr = item.supplier_currency || "";
                     const isFx = supplierCurr && supplierCurr !== currency;
-                    const rate = parseFloat(supplierExchangeRate) || 0;
+                    const rate = itemExchangeRate(item);
                     const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
                     const supplierPriceInDocCurrency = isFx && rate > 0
                       ? supplierPriceRaw / rate
@@ -1807,21 +1816,42 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                             Internal
                           </span>
                         </label>
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={item.supplier_price}
-                          onChange={e => updateItem(idx, "supplier_price", e.target.value)}
-                          onWheel={e => e.target.blur()}
-                          placeholder="0.00"
-                          className="w-full px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
-                        />
+                        <div className="flex gap-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={item.supplier_price}
+                            onChange={e => updateItem(idx, "supplier_price", e.target.value)}
+                            onWheel={e => e.target.blur()}
+                            placeholder="0.00"
+                            className="flex-1 min-w-0 px-3 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
+                          />
+                          {isFx && (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.0001"
+                              value={item.supplier_exchange_rate}
+                              onChange={e => updateItem(idx, "supplier_exchange_rate", e.target.value)}
+                              onWheel={e => e.target.blur()}
+                              placeholder={`1 ${currency} = ?`}
+                              title={`Exchange rate for this item's ${supplierCurr} cost — 1 ${currency} = X ${supplierCurr}`}
+                              className="w-28 shrink-0 px-2 py-2 border border-amber-200 dark:border-amber-700/50 rounded-lg text-sm bg-amber-50 dark:bg-amber-900/10 text-darkblack-700 dark:text-white focus:ring-2 focus:ring-amber-400 placeholder-bgray-400"
+                            />
+                          )}
+                        </div>
                         {/* Converted cost display */}
-                        {isFx && supplierPriceRaw > 0 && rate > 0 && (
-                          <p className="text-xs text-bgray-400 mt-1">
-                            = {currency} {supplierPriceInDocCurrency.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                          </p>
+                        {isFx && supplierPriceRaw > 0 && (
+                          rate > 0 ? (
+                            <p className="text-xs text-bgray-400 mt-1">
+                              = {currency} {supplierPriceInDocCurrency.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-red-500 mt-1">
+                              Falta el tipo de cambio — este costo NO se está convirtiendo a {currency}
+                            </p>
+                          )
                         )}
                       </div>
                     );
@@ -1831,7 +1861,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                   {(() => {
                     const supplierCurr = item.supplier_currency || "";
                     const isFx = type === "product" && supplierCurr && supplierCurr !== currency;
-                    const rate = parseFloat(supplierExchangeRate) || 0;
+                    const rate = itemExchangeRate(item);
                     const supplierPriceRaw = parseFloat(item.supplier_price) || 0;
                     const supplierPriceInDocCurrency = isFx && rate > 0
                       ? supplierPriceRaw / rate
@@ -2125,7 +2155,7 @@ export default function QuotationForm({ trackId, clientName, projectName, onClos
                     <span className="text-sm font-semibold text-darkblack-700 dark:text-white">
                       {currency} {s.amount.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                     </span>
-                    {savedQuotation && (
+                    {savedQuotation && s.supplierId !== "__none__" && (
                       <button
                         onClick={() => goToSupplierPayment(s.supplierId)}
                         disabled={payingSupplierId === s.supplierId}
