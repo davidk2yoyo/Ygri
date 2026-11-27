@@ -103,8 +103,8 @@ function OrderCard({ order, profile }) {
   };
   // Customs commercial invoice: no photos, supplier / refs / colour / brand / marking / packing per line.
   // Supplier and the other details come from the client's own order lines (never our internal supplier names).
-  const downloadCustoms = async (q) => {
-    setQuoteBusy(`${q.id}:customs`);
+  const downloadCustoms = async (q, readyOnly) => {
+    setQuoteBusy(`${q.id}:${readyOnly ? "customs-ready" : "customs"}`);
     try {
       const detail = await fetchPortalQuotation(supabase, session.session_id, q.id);
       const items = detail.items.map(it => ({ ...it, client_order_line_id: it.id }));
@@ -112,6 +112,7 @@ function OrderCard({ order, profile }) {
       await exportCustomsInvoiceExcel({
         quotation: detail.quotation, items, supplierNames: {}, orderLines,
         clientName: session.client_name, clientDetails: profile, projectName: order.track_name,
+        readyNumbers: readyNumbersFromPOs(order.purchase_orders), readyOnly,
       });
     } catch (e) { window.alert("No pudimos generar la factura comercial: " + (e.message || e)); }
     finally { setQuoteBusy(null); }
@@ -203,10 +204,17 @@ function OrderCard({ order, profile }) {
                           {quoteBusy === `${q.id}:all` ? "Generando…" : "⬇ Excel completo"}
                         </button>
                         {(q.document_type === "proforma" || q.document_type === "invoice") && (
-                          <button onClick={() => downloadCustoms(q)} disabled={!!quoteBusy}
+                          <button onClick={() => downloadCustoms(q, false)} disabled={!!quoteBusy}
                             title="Excel sin fotos para aduana: proveedor, referencias, descripción, color, marca, marcación, empaque, cantidad, precio y total"
                             className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition disabled:opacity-60">
                             {quoteBusy === `${q.id}:customs` ? "Generando…" : "⬇ Factura comercial (aduana)"}
+                          </button>
+                        )}
+                        {(q.document_type === "proforma" || q.document_type === "invoice") && readyValue > 0 && (
+                          <button onClick={() => downloadCustoms(q, true)} disabled={!!quoteBusy}
+                            title="Factura comercial solo con los productos que ya están listos en producción"
+                            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 hover:bg-amber-100 transition disabled:opacity-60">
+                            {quoteBusy === `${q.id}:customs-ready` ? "Generando…" : "⬇ Factura comercial · lo ya listo"}
                           </button>
                         )}
                         {readyValue > 0 && (

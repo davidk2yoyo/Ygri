@@ -66,23 +66,36 @@ export async function fetchCustomsExtras(supabase, items) {
   };
 }
 
-export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = [], supplierNames, orderLines, clientName, clientDetails, projectName, commissionPct, showCommission, logo = null }) {
+export async function buildCustomsInvoiceWorkbook(ExcelJS, {
+  quotation, items = [], supplierNames, orderLines, clientName, clientDetails, projectName, commissionPct, showCommission, logo = null,
+  readyNumbers = null,   // Set of item_numbers already finished in production (null = unknown)
+  readyOnly = false,     // only those items, totals for just those (same as the quotation Excel)
+}) {
   const currency = quotation?.currency || "USD";
   const pct = parseFloat(commissionPct ?? quotation?.commission_pct) || 0;
   const showComm = (showCommission ?? quotation?.show_commission ?? false) && pct > 0;
   // A commission that is not shown to the client is folded into the unit prices so the lines still add up to the invoice total.
   const uplift = pct > 0 && !showComm ? 1 + pct / 100 : 1;
 
-  const rows = items.map(it => customsRowFor(it, { supplierNames, orderLines })).map(r => ({ ...r, unit: Math.round(r.unit * uplift * 1e6) / 1e6 }));
+  const isReady = (it) => !!(readyNumbers && it.item_number && readyNumbers.has(it.item_number));
+  const showStatus = !!readyNumbers && !readyOnly;
+  const picked = readyOnly ? items.filter(isReady) : items;
+  if (readyOnly && picked.length === 0) throw new Error("Todavía no hay productos listos en producción.");
+  const rows = picked.map(it => ({ ...customsRowFor(it, { supplierNames, orderLines }), ready: isReady(it) }))
+    .map(r => ({ ...r, unit: Math.round(r.unit * uplift * 1e6) / 1e6 }));
   const groups = groupBySupplier(rows);
 
   const cols = [
-    { label: "PROVEEDOR", width: 20 }, { label: "REF PROVEEDOR", width: 16 }, { label: "REF CLIENTE", width: 16 },
-    { label: "DESCRIPCIÓN", width: 46 }, { label: "COLOR", width: 16 }, { label: "MARCA", width: 18 },
-    { label: "MARCACIÓN", width: 13 }, { label: "EMPAQUE", width: 18 }, { label: "CANTIDAD", width: 12 },
-    { label: `PRECIO UNIT (${currency})`, width: 16 }, { label: `TOTAL (${currency})`, width: 17 },
+    { key: "supplier", label: "PROVEEDOR", width: 20 }, { key: "supplierRef", label: "REF PROVEEDOR", width: 16 }, { key: "clientRef", label: "REF CLIENTE", width: 16 },
+    { key: "description", label: "DESCRIPCIÓN", width: 46 }, { key: "color", label: "COLOR", width: 16 }, { key: "brand", label: "MARCA", width: 18 },
+    { key: "marking", label: "MARCACIÓN", width: 13 }, { key: "packaging", label: "EMPAQUE", width: 18 },
+    ...(showStatus ? [{ key: "status", label: "PRODUCCIÓN", width: 15 }] : []),
+    { key: "qty", label: "CANTIDAD", width: 12 },
+    { key: "unit", label: `PRECIO UNIT (${currency})`, width: 16 }, { key: "total", label: `TOTAL (${currency})`, width: 17 },
   ];
-  const N = cols.length, QTY = 9, UNIT = 10, TOT = 11;
+  const N = cols.length;
+  const col = (key) => cols.findIndex(c => c.key === key) + 1;
+  const QTY = col("qty"), UNIT = col("unit"), TOT = col("total"), DESC = col("description");
   const money = `"${currency} "#,##0.00`;          // totals: cents
   const moneyUnit = `"${currency} "#,##0.00##`;   // unit price keeps up to 4 decimals
 
@@ -106,11 +119,11 @@ export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = 
   } else {
     const c = merge(1, 1, 3); c.value = "INTERASIA SAS"; c.font = { name: FONT, bold: true, size: 18, color: { argb: NAVY } };
   }
-  const title = merge(1, 4, N); title.value = "FACTURA COMERCIAL / COMMERCIAL INVOICE";
+  const title = merge(1, DESC, N); title.value = "FACTURA COMERCIAL / COMMERCIAL INVOICE";
   title.font = { name: FONT, bold: true, size: 20, color: { argb: NAVY } }; title.alignment = { horizontal: "right", vertical: "middle" };
   ws.getRow(1).height = 36;
   [[2, COMPANY.name, true], [3, COMPANY.address, false], [4, `Phone: ${COMPANY.phone}   ·   Mobile: ${COMPANY.mobile}`, false], [5, COMPANY.website, false]].forEach(([r, text, bold]) => {
-    const c = merge(r, 4, N); c.value = text;
+    const c = merge(r, DESC, N); c.value = text;
     c.font = { name: FONT, size: bold ? 10 : 9, bold, color: { argb: bold ? NAVY : GREY } }; c.alignment = { horizontal: "right", vertical: "middle" };
     ws.getRow(r).height = 18;
   });
@@ -139,6 +152,7 @@ export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = 
     ["Incoterm", [quotation?.incoterm, quotation?.incoterm_location].filter(Boolean).join(" · ") || "—"],
     ["Currency", currency],
     ...((projectName || quotation?.project_name) ? [["Project", projectName || quotation.project_name]] : []),
+    ...(readyOnly ? [["Scope", "Only items ready in production"]] : []),
   ];
   const top = 9;
   const blockRows = Math.max(consignee.length, docData.length);
@@ -146,13 +160,13 @@ export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = 
     const r = top + i;
     const left = consignee[i];
     if (left) {
-      const c = merge(r, 1, 4); c.value = left[0];
+      const c = merge(r, 1, DESC); c.value = left[0];
       c.font = left[1] === "label" ? { name: FONT, bold: true, size: 9, color: { argb: GREY } } : left[1] === "name" ? { name: FONT, bold: true, size: 12, color: { argb: NAVY } } : { name: FONT, size: 10 };
     }
     const right = docData[i];
     if (right) {
-      const l = merge(r, 8, 9); l.value = right[0]; l.font = { name: FONT, bold: true, size: 10, color: { argb: GREY } }; fill(l, LIGHT);
-      const v = merge(r, 10, N); v.value = right[1]; v.font = { name: FONT, size: 10, bold: right[0] === "Invoice No." }; fill(v, LIGHT);
+      const l = merge(r, QTY - 1, QTY); l.value = right[0]; l.font = { name: FONT, bold: true, size: 10, color: { argb: GREY } }; fill(l, LIGHT);
+      const v = merge(r, QTY + 1, N); v.value = right[1]; v.font = { name: FONT, size: 10, bold: right[0] === "Invoice No." }; fill(v, LIGHT);
     }
     ws.getRow(r).height = 18;
   }
@@ -176,16 +190,18 @@ export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = 
     const start = r;
     g.rows.forEach(x => {
       const row = ws.getRow(r);
-      [x.supplier, x.supplierRef, x.clientRef, x.description, x.color, x.brand, x.marking, x.packaging].forEach((v, i) => { row.getCell(i + 1).value = i === 0 ? null : (v || null); });
-      row.getCell(QTY).value = x.qty; row.getCell(QTY).numFmt = "#,##0";
-      row.getCell(UNIT).value = x.unit; row.getCell(UNIT).numFmt = moneyUnit;
-      row.getCell(TOT).value = { formula: `${ws.getCell(r, QTY).address}*${ws.getCell(r, UNIT).address}`, result: x.qty * x.unit }; row.getCell(TOT).numFmt = money;
-      for (let c = 1; c <= N; c++) {
-        const cell = row.getCell(c);
-        cell.font = { name: FONT, size: 10 };
+      cols.forEach((c, i) => {
+        const cell = row.getCell(i + 1);
+        if (c.key === "supplier") cell.value = null;
+        else if (c.key === "status") cell.value = x.ready ? "Listo" : "En producción";
+        else if (c.key === "qty") { cell.value = x.qty; cell.numFmt = "#,##0"; }
+        else if (c.key === "unit") { cell.value = x.unit; cell.numFmt = moneyUnit; }
+        else if (c.key === "total") { cell.value = { formula: `${ws.getCell(r, QTY).address}*${ws.getCell(r, UNIT).address}`, result: x.qty * x.unit }; cell.numFmt = money; }
+        else cell.value = x[c.key] || null;
+        cell.font = { name: FONT, size: 10, ...(c.key === "status" ? { bold: true, color: { argb: x.ready ? "FF16A34A" : "FF92400E" } } : {}) };
         cell.border = { top: thin, bottom: thin, left: thin, right: thin };
-        cell.alignment = { vertical: "middle", wrapText: c === 4, horizontal: c >= QTY ? "right" : c === 7 ? "center" : "left" };
-      }
+        cell.alignment = { vertical: "middle", wrapText: c.key === "description", horizontal: ["qty", "unit", "total"].includes(c.key) ? "right" : ["marking", "status"].includes(c.key) ? "center" : "left" };
+      });
       row.height = Math.max(22, Math.ceil((x.description || "").length / 48) * 15 + 6);
       r++;
     });
@@ -225,7 +241,7 @@ export async function buildCustomsInvoiceWorkbook(ExcelJS, { quotation, items = 
     ws.getCell(tr, QTY).value = { formula: qtyFormula, result: totalQty };
   }
 
-  const filename = `Factura_comercial_${safeName(quotation?.quote_number || "draft")}_${safeName(clientName || "client")}.xlsx`;
+  const filename = `Factura_comercial${readyOnly ? "_lo_listo" : ""}_${safeName(quotation?.quote_number || "draft")}_${safeName(clientName || "client")}.xlsx`;
   return { wb, filename, rows: rows.length, total: r2(lineSum) + commission };
 }
 

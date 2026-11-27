@@ -347,13 +347,15 @@ export default function QuotationPDF({
   };
 
   // Customs commercial invoice: no photos, one row per product with supplier / refs / colour / brand / marking / packing
-  const downloadCustoms = async () => {
-    setExcelBusy("customs");
+  const downloadCustoms = async (readyOnly) => {
+    setExcelBusy(readyOnly ? "customs-ready" : "customs");
     try {
       const extras = await fetchCustomsExtras(supabase, items);
+      const prod = quotation?.track_id ? await fetchStaffQuotationExtras(supabase, { quotation, items }) : { readyNumbers: null };
       await exportCustomsInvoiceExcel({
         quotation, items: extras.items, supplierNames: extras.supplierNames, orderLines: extras.orderLines,
         clientName, clientDetails, projectName, commissionPct, showCommission,
+        readyNumbers: prod.readyNumbers, readyOnly,
       });
     } catch (e) { window.alert("Could not generate the customs invoice: " + (e.message || e)); }
     finally { setExcelBusy(null); }
@@ -424,12 +426,22 @@ export default function QuotationPDF({
       )}
       {!readOnly && quotation?.document_type !== "quotation" && (
         <button
-          onClick={downloadCustoms}
+          onClick={() => downloadCustoms(false)}
           disabled={!!excelBusy}
-          title="Excel without photos for customs: supplier, refs, description, colour, brand, marking, packing, quantity, unit price and total"
+          title="Excel without photos for customs: supplier, refs, description, colour, brand, marking, packing, quantity, unit price and total (marks what is ready in production)"
           className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
         >
           {excelBusy === "customs" ? "Generating…" : "Customs invoice (Excel)"}
+        </button>
+      )}
+      {!readOnly && quotation?.track_id && quotation?.document_type !== "quotation" && (
+        <button
+          onClick={() => downloadCustoms(true)}
+          disabled={!!excelBusy}
+          title="Customs invoice with only the items already finished in production, totals for those"
+          className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
+        >
+          {excelBusy === "customs-ready" ? "Generating…" : "Customs invoice · ready items only"}
         </button>
       )}
       {!readOnly && (
