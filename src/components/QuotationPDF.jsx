@@ -5,6 +5,7 @@ import jsPDF from "jspdf";
 import { supabase } from "../supabaseClient";
 import { BANK_DETAILS } from "../lib/companyInfo";
 import { exportQuotationExcel, fetchStaffQuotationExtras } from "../lib/quotationExcel";
+import { exportCustomsInvoiceExcel, fetchCustomsExtras } from "../lib/customsInvoiceExcel";
 
 const formatDateLong = (iso) => {
   if (!iso) return "";
@@ -345,6 +346,19 @@ export default function QuotationPDF({
     finally { setExcelBusy(null); }
   };
 
+  // Customs commercial invoice: no photos, one row per product with supplier / refs / colour / brand / marking / packing
+  const downloadCustoms = async () => {
+    setExcelBusy("customs");
+    try {
+      const extras = await fetchCustomsExtras(supabase, items);
+      await exportCustomsInvoiceExcel({
+        quotation, items: extras.items, supplierNames: extras.supplierNames, orderLines: extras.orderLines,
+        clientName, clientDetails, projectName, commissionPct, showCommission,
+      });
+    } catch (e) { window.alert("Could not generate the customs invoice: " + (e.message || e)); }
+    finally { setExcelBusy(null); }
+  };
+
   const handlePrint = () => {
     const el = printRef.current;
     if (!el) return;
@@ -406,6 +420,16 @@ export default function QuotationPDF({
           className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
         >
           {excelBusy === "ready" ? "Generating…" : "Excel · ready items only"}
+        </button>
+      )}
+      {!readOnly && quotation?.document_type !== "quotation" && (
+        <button
+          onClick={downloadCustoms}
+          disabled={!!excelBusy}
+          title="Excel without photos for customs: supplier, refs, description, colour, brand, marking, packing, quantity, unit price and total"
+          className="px-4 py-2 bg-white text-darkblack-700 rounded-lg text-sm font-semibold hover:bg-bgray-100 transition shadow flex items-center gap-1.5 disabled:opacity-60"
+        >
+          {excelBusy === "customs" ? "Generating…" : "Customs invoice (Excel)"}
         </button>
       )}
       {!readOnly && (
