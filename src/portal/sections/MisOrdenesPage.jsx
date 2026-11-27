@@ -52,23 +52,70 @@ const fmtDate = (d) => d ? new Date(d).toLocaleDateString("es-CO", { day: "2-dig
 
 function StageTimeline({ stages }) {
   if (!stages?.length) return <p className="text-xs text-gray-400">Sin etapas definidas</p>;
+  const done = stages.filter(s => s.status === "done").length;
   return (
-    <ol className="space-y-2">
-      {stages.map(s => (
-        <li key={s.id} className="flex items-center gap-3">
-          <span className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${STAGE_COLOR[s.status] || STAGE_COLOR.not_started} ${s.status === "in_progress" ? "animate-pulse" : ""}`}>
-            {s.status === "done" && (
-              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>
-            )}
-          </span>
-          <span className={`text-sm flex-1 ${s.status === "not_started" ? "text-gray-400" : "text-gray-800 font-medium"}`}>{STAGE_NAME_ES[s.name] || s.name}</span>
-          {s.due_date && s.status !== "done" && <span className="text-xs text-gray-400">{fmtDate(s.due_date)}</span>}
-          <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full flex-shrink-0 ${STAGE_BADGE[s.status] || STAGE_BADGE.not_started}`}>
-            {STAGE_LABEL[s.status] || s.status}
-          </span>
-        </li>
-      ))}
-    </ol>
+    <div>
+      <p className="text-xs text-gray-500 mb-4"><span className="font-semibold text-gray-800">{done} de {stages.length}</span> etapas completadas</p>
+      <ol>
+        {stages.map((s, i) => {
+          const last = i === stages.length - 1;
+          const isDone = s.status === "done", isCur = s.status === "in_progress", isBlocked = s.status === "blocked";
+          return (
+            <li key={s.id} className="relative flex gap-4">
+              {!last && <span className={`absolute left-[15px] top-9 -bottom-1 w-0.5 rounded-full ${isDone ? "bg-green-400" : "bg-gray-200"}`} />}
+              <span className={`relative z-10 flex-shrink-0 mt-1 w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold
+                ${isDone ? "bg-green-500 text-white shadow-sm shadow-green-200" : isCur ? "bg-white border-2 border-blue-500" : isBlocked ? "bg-red-500 text-white" : "bg-white border-2 border-gray-200 text-gray-300"}`}>
+                {isDone && <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></svg>}
+                {isCur && <span className="w-3 h-3 rounded-full bg-blue-500 animate-pulse" />}
+                {isBlocked && "!"}
+                {!isDone && !isCur && !isBlocked && i + 1}
+              </span>
+              <div className={`flex-1 min-w-0 flex items-center gap-3 flex-wrap rounded-xl px-3.5 py-2.5 mb-2 ${isCur ? "bg-blue-50 ring-1 ring-blue-100" : ""}`}>
+                <span className={`text-sm flex-1 min-w-[8rem] ${isDone ? "text-gray-700" : isCur ? "text-blue-900 font-semibold" : isBlocked ? "text-red-700 font-medium" : "text-gray-400"}`}>
+                  {STAGE_NAME_ES[s.name] || s.name}
+                </span>
+                {s.due_date && !isDone && <span className="text-xs text-gray-400">{isCur ? "Entrega est. " : ""}{fmtDate(s.due_date)}</span>}
+                <span className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full flex-shrink-0 ${STAGE_BADGE[s.status] || STAGE_BADGE.not_started}`}>
+                  {STAGE_LABEL[s.status] || s.status}
+                </span>
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// Circular progress for the order header.
+function ProgressRing({ pct, tone = "green", size = 60 }) {
+  const r = 24, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, pct || 0));
+  const stroke = tone === "gray" ? "#9ca3af" : "#22c55e";
+  return (
+    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
+      <svg viewBox="0 0 60 60" className="w-full h-full -rotate-90">
+        <circle cx="30" cy="30" r={r} fill="none" stroke="#eef0f3" strokeWidth="6" />
+        <circle cx="30" cy="30" r={r} fill="none" stroke={stroke} strokeWidth="6" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={c * (1 - v / 100)} style={{ transition: "stroke-dashoffset .6s ease" }} />
+      </svg>
+      <span className="absolute inset-0 flex items-center justify-center text-[13px] font-bold text-gray-800">{Math.round(v)}%</span>
+    </div>
+  );
+}
+
+const ICONS = {
+  factory: ["M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z", "M17 18h1", "M12 18h1", "M7 18h1"],
+  file: ["M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z", "M14 2v6h6", "M16 13H8", "M16 17H8"],
+  box: ["M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z", "M12 22V12", "m3.3 7 8.7 5 8.7-5"],
+  truck: ["M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2", "M15 18H9", "M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14", "M9 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z", "M19 18a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"],
+};
+function Chip({ icon, children }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-50 border border-gray-100 text-xs text-gray-600">
+      <svg className="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24">
+        {ICONS[icon].map((d, i) => <path key={i} d={d} />)}
+      </svg>
+      {children}
+    </span>
   );
 }
 
@@ -121,45 +168,62 @@ function OrderCard({ order, profile }) {
     finally { setQuoteBusy(null); }
   };
   const tabs = [
-    ["progress", "Progreso"],
-    ["production", `Producción (${order.purchase_orders.length})`],
-    ...(can("prices") ? [["quotes", `Cotizaciones y facturas (${order.quotations.length})`]] : []),
-    ["packing", `Packing List (${order.packing_lists.length})`],
-    ["shipments", `Envíos y muestras (${order.shipments.length})`],
-    ["docs", `Documentos (${order.documents.length})`],
+    ["progress", "Progreso", null],
+    ["production", "Producción", order.purchase_orders.length],
+    ...(can("prices") ? [["quotes", "Cotizaciones y facturas", order.quotations.length]] : []),
+    ["packing", "Packing List", order.packing_lists.length],
+    ["shipments", "Envíos y muestras", order.shipments.length],
+    ["docs", "Documentos", order.documents.length],
   ];
   const current = order.stages.find(s => s.status === "in_progress");
+  const poItems = order.purchase_orders.flatMap(po => po.items || []);
+  const poReady = poItems.filter(i => i.ready_at).length;
+  const cancelled = order.status === "cancelled";
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button onClick={() => setOpen(o => !o)} className="w-full text-left p-5 hover:bg-gray-50 transition">
-        <div className="flex items-start justify-between gap-3 flex-wrap">
-          <div className="min-w-0">
-            <p className="font-semibold text-gray-900">{order.track_name}</p>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {current ? `Etapa actual: ${STAGE_NAME_ES[current.name] || current.name}` : TRACK_STATUS_LABEL[order.status] || order.status} · desde {fmtDate(order.created_at)}
+    <div className={`bg-white rounded-2xl border overflow-hidden transition-shadow ${open ? "shadow-md border-gray-200" : "shadow-sm border-gray-200 hover:shadow-md"} ${cancelled ? "opacity-70" : ""}`}>
+      <button onClick={() => setOpen(o => !o)} className="w-full text-left px-5 py-4 hover:bg-gray-50/60 transition">
+        <div className="flex items-center gap-4">
+          <ProgressRing pct={order.progress_pct} tone={cancelled ? "gray" : "green"} />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-base font-bold text-gray-900 truncate">{order.track_name}</p>
+              <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${TRACK_STATUS[order.status] || "bg-gray-100 text-gray-600"}`}>
+                {TRACK_STATUS_LABEL[order.status] || order.status}
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 mt-1 flex items-center gap-1.5 flex-wrap">
+              {current && !cancelled && (
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />{STAGE_NAME_ES[current.name] || current.name}
+                </span>
+              )}
+              <span>Desde {fmtDate(order.created_at)}</span>
             </p>
           </div>
-          <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${TRACK_STATUS[order.status] || "bg-gray-100 text-gray-600"}`}>
-            {TRACK_STATUS_LABEL[order.status] || order.status}
-          </span>
+          <svg className={`w-5 h-5 text-gray-400 flex-shrink-0 transition-transform ${open ? "rotate-180" : ""}`} fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6" /></svg>
         </div>
-        <div className="mt-3 flex items-center gap-3">
-          <div className="flex-1 h-2 rounded-full bg-gray-100 overflow-hidden">
-            <div className="h-full bg-green-500 rounded-full" style={{ width: `${order.progress_pct || 0}%` }} />
+        {!open && !cancelled && (poItems.length > 0 || order.quotations.length > 0 || order.shipments.length > 0) && (
+          <div className="flex flex-wrap gap-2 mt-3 pl-[76px]">
+            {poItems.length > 0 && <Chip icon="factory">{poReady}/{poItems.length} productos listos</Chip>}
+            {order.quotations.length > 0 && <Chip icon="file">{order.quotations.length} {order.quotations.length === 1 ? "documento" : "documentos"}</Chip>}
+            {order.packing_lists.length > 0 && <Chip icon="box">{order.packing_lists.length} packing list</Chip>}
+            {order.shipments.length > 0 && <Chip icon="truck">{order.shipments.length} {order.shipments.length === 1 ? "envío" : "envíos"}</Chip>}
           </div>
-          <span className="text-xs font-semibold text-gray-600 w-10 text-right">{Math.round(order.progress_pct || 0)}%</span>
-        </div>
+        )}
       </button>
 
       {open && (
-        <div className="border-t border-gray-100 p-5">
-          <div className="flex gap-1 flex-wrap mb-4">
-            {tabs.map(([k, label]) => (
-              <button key={k} onClick={() => setTab(k)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${tab === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-                {label}
-              </button>
-            ))}
+        <div className="border-t border-gray-100 px-5 py-5">
+          <div className="mb-5 overflow-x-auto -mx-1 px-1">
+            <div className="inline-flex gap-1 p-1 bg-gray-100 rounded-xl min-w-max">
+              {tabs.map(([k, label, count]) => (
+                <button key={k} onClick={() => setTab(k)}
+                  className={`px-3.5 py-1.5 rounded-lg text-[13px] font-medium whitespace-nowrap transition ${tab === k ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}>
+                  {label}
+                  {count != null && <span className={`ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full ${tab === k ? "bg-gray-900 text-white" : "bg-gray-200 text-gray-600"}`}>{count}</span>}
+                </button>
+              ))}
+            </div>
           </div>
 
           {tab === "progress" && <StageTimeline stages={order.stages} />}
@@ -492,7 +556,7 @@ export default function MisOrdenesPage() {
           <p className="text-xs mt-1">Tu asesor las publicará a medida que avance el proceso</p>
         </div>
       )}
-      <div className="space-y-3">{orders.map(o => <OrderCard key={o.track_id} order={o} profile={profile} />)}</div>
+      <div className="space-y-4">{orders.map(o => <OrderCard key={o.track_id} order={o} profile={profile} />)}</div>
     </div>
   );
 }
