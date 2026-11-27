@@ -681,6 +681,31 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
     }
   };
 
+  // Jump straight to this (future) stage, marking every stage in between as done
+  const handleJumpToStage = async () => {
+    const targetName = stageDetail?.stage?.name;
+    if (!window.confirm(`Esto marcará como completas todas las etapas anteriores hasta "${targetName}". ¿Continuar?`)) {
+      return;
+    }
+    try {
+      setBusy(true);
+      await supabase.rpc("jump_to_stage", {
+        p_target_track_stage_id: stageId
+      });
+      if (trackId && targetName) {
+        createProjectActivity(trackId, "stage_completed", { stage: `Saltó a ${targetName}` }, { trackStageId: stageId });
+      }
+      sileo.success({ title: "Etapa actualizada", description: `Ahora en: ${targetName}` });
+      onUpdate?.();
+      onClose?.();
+    } catch (e) {
+      sileo.error({ title: "No se pudo saltar de etapa", description: e.message });
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!stageId) return null;
 
   const outerCls = inline
@@ -991,6 +1016,15 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
                       className="w-full py-2 bg-green-600 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-green-700 transition"
                     >
                       {busy ? "Completing..." : "Complete & Advance to Next Stage"}
+                    </button>
+                  )}
+                  {stageDetail.stage?.status === "not_started" && (
+                    <button
+                      onClick={handleJumpToStage}
+                      disabled={busy}
+                      className="w-full py-2 bg-blue-600 text-white rounded-lg font-medium disabled:opacity-50 hover:bg-blue-700 transition"
+                    >
+                      {busy ? "Actualizando..." : `⏩ Saltar hasta aquí`}
                     </button>
                   )}
                 </div>
