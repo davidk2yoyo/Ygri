@@ -42,8 +42,17 @@ export async function fetchStaffQuotationExtras(supabase, { quotation, items }) 
     const poIds = (pos || []).map(p => p.id);
     readyNumbers = new Set();
     if (poIds.length) {
-      const { data: poi } = await supabase.from("purchase_order_items").select("item_number, ready_at").in("purchase_order_id", poIds).not("ready_at", "is", null);
-      (poi || []).forEach(r => { if (r.item_number) readyNumbers.add(r.item_number); });
+      const { data: poi } = await supabase.from("purchase_order_items").select("id, item_number, ready_at").in("purchase_order_id", poIds).not("ready_at", "is", null);
+      // after a split, count only the items that belong to this document (needs the 2026-11-30 migration; else whole project)
+      let mine = null;
+      if (quotation?.id) {
+        const { data: docs, error } = await supabase.rpc("production_item_documents", { p_track_id: quotation.track_id, p_only_visible: false });
+        if (!error && docs) {
+          const docIds = new Set(docs.map(d => d.quotation_id));
+          if (docIds.size > 1) mine = new Set(docs.filter(d => d.quotation_id === quotation.id).map(d => d.po_item_id));
+        }
+      }
+      (poi || []).forEach(r => { if (r.item_number && (!mine || mine.has(r.id))) readyNumbers.add(r.item_number); });
     }
   }
   return { items: list, readyNumbers };
@@ -57,9 +66,15 @@ export async function fetchPortalQuotation(supabase, sessionId, quotationId) {
   return data;
 }
 
-export const readyNumbersFromPOs = (purchaseOrders = []) => {
+// quoteNumber: when the order was split into several proformas/invoices, count only the production items
+// that belong to THAT document (items carry `docs` from the portal RPC). null = whole order, as before.
+export const readyNumbersFromPOs = (purchaseOrders = [], quoteNumber = null) => {
   const s = new Set();
-  purchaseOrders.forEach(po => (po.items || []).forEach(i => { if (i.ready_at && i.item_number) s.add(i.item_number); }));
+  purchaseOrders.forEach(po => (po.items || []).forEach(i => {
+    if (!i.ready_at || !i.item_number) return;
+    if (quoteNumber && Array.isArray(i.docs) && !i.docs.some(d => d.quote_number === quoteNumber)) return;
+    s.add(i.item_number);
+  }));
   return s;
 };
 

@@ -465,11 +465,17 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
   // Load all quotations for this track
   const loadQuotations = useCallback(async () => {
     if (!trackId) return;
-    const { data } = await supabase
+    let { data, error: qErr } = await supabase
       .from("quotations")
-      .select("id, quote_number, document_type, total_amount, currency, purpose, created_at")
+      .select("id, quote_number, document_type, total_amount, currency, purpose, created_at, split_from_id")
       .eq("track_id", trackId)
       .order("created_at", { ascending: true });
+    if (qErr) {
+      // migration 2026-11-28 (split link) not applied yet
+      ({ data } = await supabase.from("quotations")
+        .select("id, quote_number, document_type, total_amount, currency, purpose, created_at")
+        .eq("track_id", trackId).order("created_at", { ascending: true }));
+    }
     const list = data || [];
     setQuotations(list);
     // Active = highest doc type (invoice > proforma > quotation), fallback to most recent
@@ -478,7 +484,18 @@ export default function StageDrawer({ stageId, onClose, onUpdate, projectName, c
       (priority[b.document_type] || 0) - (priority[a.document_type] || 0)
     )[0];
     if (active) {
-      setQuotationAmount(active.total_amount);
+      // after a split the order is spread over several documents: show the whole order, not just the first one
+      const group = new Set([active.id]);
+      let grew = true;
+      while (grew) {
+        grew = false;
+        list.forEach(q => {
+          const linked = (q.split_from_id && group.has(q.split_from_id)) || list.some(o => group.has(o.id) && o.split_from_id === q.id);
+          if (linked && !group.has(q.id) && q.document_type === active.document_type) { group.add(q.id); grew = true; }
+        });
+      }
+      const parts = list.filter(q => group.has(q.id) && (q.currency || "USD") === (active.currency || "USD"));
+      setQuotationAmount(parts.reduce((sum, q) => sum + Number(q.total_amount || 0), 0));
       setQuotationCurrency(active.currency || "USD");
     }
     // Auto-select most recent on first load only (when no selection has been made yet)

@@ -78,6 +78,9 @@ function OrderCard({ order, profile }) {
   const [tab, setTab] = useState("progress");
   const [pdfPacking, setPdfPacking] = useState(null); // the packing list currently shown as PDF, or null
   const [excelBusy, setExcelBusy] = useState(null);
+  const [prodDoc, setProdDoc] = useState("all");  // production tab: which proforma/invoice to show
+  // proformas/invoices published for the client: when there are 2+, the order was split
+  const splitDocs = order.quotations.filter(q => q.document_type === "proforma" || q.document_type === "invoice");
   const downloadExcel = async (pl) => {
     setExcelBusy(pl.id);
     try {
@@ -96,7 +99,7 @@ function OrderCard({ order, profile }) {
       await exportQuotationExcel({
         quotation: detail.quotation, items: detail.items, payments: detail.payments,
         clientName: session.client_name, clientDetails: profile, projectName: order.track_name,
-        readyNumbers: readyNumbersFromPOs(order.purchase_orders), readyOnly,
+        readyNumbers: readyNumbersFromPOs(order.purchase_orders, splitDocs.length > 1 ? detail.quotation.quote_number : null), readyOnly,
       });
     } catch (e) { window.alert("No pudimos generar el Excel: " + (e.message || e)); }
     finally { setQuoteBusy(null); }
@@ -112,7 +115,7 @@ function OrderCard({ order, profile }) {
       await exportCustomsInvoiceExcel({
         quotation: detail.quotation, items, supplierNames: {}, orderLines,
         clientName: session.client_name, clientDetails: profile, projectName: order.track_name,
-        readyNumbers: readyNumbersFromPOs(order.purchase_orders), readyOnly,
+        readyNumbers: readyNumbersFromPOs(order.purchase_orders, splitDocs.length > 1 ? detail.quotation.quote_number : null), readyOnly,
       });
     } catch (e) { window.alert("No pudimos generar la factura comercial: " + (e.message || e)); }
     finally { setQuoteBusy(null); }
@@ -163,11 +166,53 @@ function OrderCard({ order, profile }) {
 
           {tab === "production" && (order.purchase_orders.length === 0
             ? <p className="text-sm text-gray-400">Aún no hay órdenes de compra en producción.</p>
-            : <div className="space-y-3">{order.purchase_orders.map(po => <SupplierProductionCard key={po.id} po={po} readOnly />)}</div>)}
+            : (() => {
+                const hasDocs = splitDocs.length > 1 && order.purchase_orders.some(po => po.items.some(i => (i.docs || []).length));
+                const items = (po) => po.items.filter(i => prodDoc === "all" || (i.docs || []).some(d => d.quote_number === prodDoc));
+                const shown = order.purchase_orders.map(po => ({ ...po, items: items(po) })).filter(po => prodDoc === "all" || po.items.length > 0);
+                return (
+                  <div className="space-y-3">
+                    {hasDocs && (
+                      <div className="flex flex-wrap gap-2">
+                        {[["all", "Todo"], ...splitDocs.map(q => [q.quote_number, `${DOC_LABEL[q.document_type] || "Documento"} ${q.quote_number}${q.purpose ? ` · ${q.purpose}` : ""}`])].map(([k, label]) => (
+                          <button key={k} onClick={() => setProdDoc(k)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${prodDoc === k ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{label}</button>
+                        ))}
+                      </div>
+                    )}
+                    {shown.map(po => <SupplierProductionCard key={po.id} po={po} readOnly />)}
+                  </div>
+                );
+              })())}
 
           {tab === "quotes" && (order.quotations.length === 0
             ? <p className="text-sm text-gray-400">Aún no hay cotizaciones publicadas.</p>
             : <div className="space-y-3">
+                {splitDocs.length > 1 && splitDocs.some(q => q.split_from) && (() => {
+                  const cur = splitDocs[0]?.currency;
+                  const sameCur = splitDocs.filter(q => q.currency === cur);
+                  const sum = (f) => sameCur.reduce((s, q) => s + Number(q[f] || 0), 0);
+                  return (
+                    <div className="border border-blue-100 bg-blue-50/50 rounded-xl p-4">
+                      <p className="text-sm font-semibold text-gray-900">Este pedido está dividido en {splitDocs.length} documentos</p>
+                      <p className="text-xs text-gray-500 mb-3">Cada uno tiene su propio total, pagos y balance.</p>
+                      <div className="divide-y divide-blue-100 text-sm">
+                        {splitDocs.map(q => (
+                          <div key={q.id} className="flex items-center justify-between gap-3 py-1.5">
+                            <span className="text-gray-800 min-w-0 truncate"><b>{q.quote_number}</b> <span className="text-gray-500">{q.purpose || ""}</span></span>
+                            <span className="text-gray-700 whitespace-nowrap">{money(q.total_amount, q.currency)} <span className="text-xs text-gray-400">· balance {money(Math.max(Number(q.total_amount || 0) - Number(q.paid_total || 0), 0), q.currency)}</span></span>
+                          </div>
+                        ))}
+                        {sameCur.length === splitDocs.length && (
+                          <div className="flex items-center justify-between gap-3 pt-2 font-semibold text-gray-900">
+                            <span>Total del pedido</span>
+                            <span>{money(sum("total_amount"), cur)} <span className="text-xs font-normal text-gray-500">· pagado {money(sum("paid_total"), cur)}</span></span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {order.quotations.map(q => {
                   const total = Number(q.total_amount || 0);
                   const paid = Number(q.paid_total || 0);
@@ -187,6 +232,7 @@ function OrderCard({ order, profile }) {
                         <div>
                           <p className="text-sm font-semibold text-gray-900">{q.quote_number}
                             <span className="ml-2 text-xs font-medium text-gray-500">{DOC_LABEL[q.document_type] || "Cotización"}</span>
+                            {q.split_from && <span className="ml-2 text-[11px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">Parte de {q.split_from}</span>}
                           </p>
                           <p className="text-xs text-gray-500">
                             {[q.incoterm, q.delivery_time].filter(Boolean).join(" · ") || fmtDate(q.created_at)}

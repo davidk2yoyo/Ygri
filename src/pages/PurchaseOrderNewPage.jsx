@@ -1,3 +1,4 @@
+import { insertPurchaseOrderItems } from "../lib/productionSync";
 import React, { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "../supabaseClient";
@@ -142,9 +143,9 @@ export default function PurchaseOrderNewPage() {
           quantity: it.quantity,
           price: parseFloat(it.supplier_price) || 0,
           sort_order: idx,
+          client_order_line_id: it.client_order_line_id || null,
         }));
-        const { error: itemsErr } = await supabase.from("purchase_order_items").insert(poItems);
-        if (itemsErr) throw itemsErr;
+        await insertPurchaseOrderItems(supabase, poItems);
 
         createdPOs.push(po);
       }

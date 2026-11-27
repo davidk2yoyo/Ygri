@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { supabase } from "../supabaseClient";
 import { SupplierProductionCard } from "./ProductionBoard";
 import { findProductionGaps, applyProductionSync } from "../lib/productionSync";
+import { loadProductionDocs, filterProduction, documentCounts } from "../lib/productionDocs";
 
 // "Production" tab of a project: one card per supplier purchase order, with a
 // ready checklist staff can edit directly (no need to open each PO). This is
@@ -13,6 +14,8 @@ export default function ProjectProductionSection({ trackId }) {
   const [error, setError] = useState("");
   const [gaps, setGaps] = useState(null);      // quotation products that are not in any purchase order yet
   const [syncing, setSyncing] = useState(false);
+  const [docInfo, setDocInfo] = useState(null);   // { docs, byItem } when the project has 2+ proformas/invoices
+  const [docFilter, setDocFilter] = useState("all");
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
@@ -31,6 +34,7 @@ export default function ProjectProductionSection({ trackId }) {
       })));
       setQuotationId(quotes?.[0]?.id || null);
       try { setGaps(await findProductionGaps(supabase, trackId)); } catch { setGaps(null); }
+      try { setDocInfo(await loadProductionDocs(supabase, trackId)); } catch { setDocInfo(null); }
     } catch (e) {
       setError(e.message || "Couldn't load production data.");
     } finally {
@@ -85,6 +89,15 @@ export default function ProjectProductionSection({ trackId }) {
 
   if (loading) return <div className="p-6 text-sm text-bgray-500">Loading…</div>;
 
+  const shown = docInfo ? filterProduction(purchaseOrders, docInfo.byItem, docFilter) : purchaseOrders;
+  const stats = docInfo ? documentCounts(purchaseOrders, docInfo.byItem, docInfo.docs) : null;
+  const chip = (key, label, sub) => (
+    <button key={key} onClick={() => setDocFilter(key)}
+      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${docFilter === key ? "bg-primary text-white border-primary" : "bg-white dark:bg-darkblack-600 text-bgray-600 dark:text-bgray-300 border-bgray-200 dark:border-darkblack-400 hover:border-primary"}`}>
+      {label}{sub && <span className={`ml-1.5 font-normal ${docFilter === key ? "text-white/80" : "text-bgray-400"}`}>{sub}</span>}
+    </button>
+  );
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
@@ -110,13 +123,24 @@ export default function ProjectProductionSection({ trackId }) {
         </div>
       )}
 
+      {docInfo && (
+        <div className="mb-4">
+          <p className="text-xs text-bgray-500 dark:text-bgray-400 mb-1.5">This project has {docInfo.docs.length} proformas/invoices (after a split). Show production for:</p>
+          <div className="flex flex-wrap gap-2">
+            {chip("all", "All")}
+            {docInfo.docs.map(d => chip(d.id, d.quote_number, `${stats.counts[d.id].ready}/${stats.counts[d.id].total} ready${d.purpose ? ` · ${d.purpose.slice(0, 22)}` : ""}${d.show_to_client ? "" : " · hidden"}`))}
+            {stats.none > 0 && chip("none", "No proforma", `${stats.none}`)}
+          </div>
+        </div>
+      )}
+
       {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">{error}</div>}
 
-      {purchaseOrders.length === 0 ? (
-        <p className="text-sm text-bgray-400">No purchase orders yet for this project.</p>
+      {shown.length === 0 ? (
+        <p className="text-sm text-bgray-400">{purchaseOrders.length === 0 ? "No purchase orders yet for this project." : "Nothing in production for this selection."}</p>
       ) : (
         <div className="space-y-3">
-          {purchaseOrders.map(po => (
+          {shown.map(po => (
             <SupplierProductionCard key={po.id} po={po} readOnly={false}
               onItemChange={patchItem} onPhotoAdd={addPhoto} onPhotoDelete={deletePhoto} openHref={`/purchase-orders/${po.id}`} />
           ))}

@@ -129,6 +129,11 @@ export function SupplierProductionCard({ po, readOnly = true, onItemChange, onPh
                 <p className="text-sm text-gray-700 dark:text-bgray-200 truncate">
                   {it.item_number && <span className="font-mono text-xs text-gray-400 mr-1.5">{it.item_number}</span>}
                   {it.description || "—"}
+                  {(it.docs || []).map(d => (
+                    <span key={d.quote_number} className="ml-1.5 align-middle text-[10px] font-mono px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                      {d.quote_number}{it.docs.length > 1 ? ` · ${d.qty.toLocaleString("en-US")}` : ""}
+                    </span>
+                  ))}
                 </p>
                 {!readOnly && (
                   <input value={it.notes || ""} onChange={e => onItemChange(it, { notes: e.target.value })} placeholder="Comentario (solo para tu equipo)…"
